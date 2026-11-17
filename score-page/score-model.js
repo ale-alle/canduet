@@ -44,7 +44,8 @@
   const TRIPLET_DURS = [320, 160, 80];
   const DURS = BASE_DURS.concat(BASE_DURS.slice(0, 5).map((d) => d * 1.5), TRIPLET_DURS);
   const isTriplet = (d) => TRIPLET_DURS.includes(d);
-  const CLEFS = ["treble", "bass"];
+  // treble, bass, or piano: a grand staff (treble above bass), each with its own rhythm
+  const CLEFS = ["treble", "bass", "piano"];
   const INSTRUMENTS = ["piano", "guitar", "bass"];
   const TIME_DENS = [1, 2, 4, 8, 16];
   const ID_RE = /^[A-Za-z0-9_.:-]+$/;
@@ -63,8 +64,8 @@
       meta: { clef: "treble", instrument: "piano", title: "" },
       metaTs: {},     // field -> [ts, by]
       measures: {},   // id -> {id, pos, time, key, ts, by, fieldTs}
-      notes: {},      // id -> {id, m, t, d, p, tie, st, ts, by}   (st: staccato)
-      slurs: {},      // id -> {id, a: [measure, tick], b: [measure, tick], h, ts, by, fieldTs}
+      notes: {},      // id -> {id, m, t, d, p, tie, st, s, ts, by}   (st: staccato; s: staff, 1 = bass staff of a grand staff)
+      slurs: {},      // id -> {id, a: [measure, tick, staff?], b, h, side, o, ts, by, fieldTs}
       removed: {},    // id -> [ts, by]
     };
   }
@@ -127,9 +128,11 @@
 
   function validNote(n) {
     if (!plainObj(n)) return false;
-    const keys = Object.keys(n).sort().join(",");
-    if (keys !== "d,m,p,t,tie" && keys !== "d,m,p,st,t,tie") return false;
+    const keys = Object.keys(n);
+    for (const k of ["d", "m", "p", "t", "tie"]) if (!keys.includes(k)) return false;
+    if (keys.some((k) => !["d", "m", "p", "t", "tie", "st", "s"].includes(k))) return false;
     if (has(n, "st") && n.st !== true) return false;   // staccato: present and true, or absent
+    if (has(n, "s") && n.s !== 1) return false;        // staff: 1 (lower staff), or absent
     if (!isId(n.m) || !DURS.includes(n.d) || !isInt(n.t, 0, 16 * 1920) || n.t % 20 !== 0) return false;
     if (typeof n.tie !== "boolean") return false;
     if (!Array.isArray(n.p) || n.p.length < 1 || n.p.length > LIMITS.pitches || !n.p.every(validPitch)) return false;
@@ -151,9 +154,17 @@
     reset: [],
   };
 
-  // a slur end: [measure id, tick]; h: how far the arc bulges, -30..30 (0 = the usual height)
-  const validAnchor = (a) => Array.isArray(a) && a.length === 2 && isId(a[0]) && isInt(a[1], 0, 16 * 1920) && a[1] % 20 === 0;
-  const validBulge = (h) => isInt(h, -30, 30);
+  // A slur end: [measure id, tick] or [measure id, tick, 1] on the lower staff of a grand staff.
+  // h: how far the middle of the arc is moved, -40..40 (4 px steps). side: -1 above the notes,
+  // 1 below, 0 chosen by the notes. o: points of the arc moved up or down, [[measure, tick, dy]]
+  // with dy in 2 px steps.
+  const validAnchor = (a) => Array.isArray(a) && (a.length === 2 || (a.length === 3 && a[2] === 1)) &&
+    isId(a[0]) && isInt(a[1], 0, 16 * 1920) && a[1] % 20 === 0;
+  const validBulge = (h) => isInt(h, -40, 40);
+  const validSide = (x) => x === -1 || x === 0 || x === 1;
+  const validOffsets = (o) => Array.isArray(o) && o.length <= 64 &&
+    o.every((x) => Array.isArray(x) && x.length === 3 && isId(x[0]) && isInt(x[1], 0, 16 * 1920) && isInt(x[2], -80, 80));
+  const SLUR_FIELDS = ["a", "b", "h", "side", "o"];
 
   // null when the operation is fine, otherwise a short reason
   function validateOp(op) {
@@ -196,8 +207,12 @@
         break;
       case "addSlur": {
         const sl = op.slur;
-        if (!plainObj(sl) || Object.keys(sl).sort().join(",") !== "a,b,h") return "slur";
+        if (!plainObj(sl)) return "slur";
+        const keys = Object.keys(sl);
+        if (!["a", "b", "h"].every((k) => keys.includes(k)) || keys.some((k) => !SLUR_FIELDS.includes(k))) return "slur";
         if (!validAnchor(sl.a) || !validAnchor(sl.b) || !validBulge(sl.h)) return "slur";
+        if (has(sl, "side") && !validSide(sl.side)) return "slur";
+        if (has(sl, "o") && !validOffsets(sl.o)) return "slur";
         break;
       }
       case "setSlur": {
@@ -206,6 +221,8 @@
         for (const [k, v] of Object.entries(ch)) {
           if (k === "a" || k === "b") { if (!validAnchor(v)) return "slur"; }
           else if (k === "h") { if (!validBulge(v)) return "slur"; }
+          else if (k === "side") { if (!validSide(v)) return "slur"; }
+          else if (k === "o") { if (!validOffsets(v)) return "slur"; }
           else return "changes";
         }
         break;
@@ -299,7 +316,7 @@
         if (!old && Object.keys(state.notes).length >= LIMITS.notes) return false;
         if (state.removed[op.note.m]) return false;  // its measure is gone
         const n = op.note;
-        state.notes[op.id] = { id: op.id, m: n.m, t: n.t, d: n.d, p: n.p.map((x) => x.slice()), tie: n.tie, st: !!n.st, ts: op.ts, by: op.by };
+        state.notes[op.id] = { id: op.id, m: n.m, t: n.t, d: n.d, p: n.p.map((x) => x.slice()), tie: n.tie, st: !!n.st, s: n.s === 1 ? 1 : 0, ts: op.ts, by: op.by };
         return true;
       }
       case "addSlur": {
@@ -307,9 +324,11 @@
         if (beforeReset(state, op.ts, op.by)) return false;
         if (Object.keys(state.slurs).length >= LIMITS.slurs) return false;
         const sl = op.slur;
+        const ft = {};
+        for (const k of SLUR_FIELDS) ft[k] = [op.ts, op.by];
         state.slurs[op.id] = {
-          id: op.id, a: sl.a.slice(), b: sl.b.slice(), h: sl.h, ts: op.ts, by: op.by,
-          fieldTs: { a: [op.ts, op.by], b: [op.ts, op.by], h: [op.ts, op.by] },
+          id: op.id, a: sl.a.slice(), b: sl.b.slice(), h: sl.h, side: sl.side || 0,
+          o: (sl.o || []).map((x) => x.slice()), ts: op.ts, by: op.by, fieldTs: ft,
         };
         return true;
       }
@@ -320,7 +339,7 @@
         for (const [k, v] of Object.entries(op.changes)) {
           const [ts, by] = sl.fieldTs[k];
           if (later(op.ts, op.by, ts, by)) {
-            sl[k] = Array.isArray(v) ? v.slice() : v;
+            sl[k] = Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : v;
             sl.fieldTs[k] = [op.ts, op.by];
             changed = true;
           }
@@ -382,7 +401,7 @@
       removeMeasure: (id) => base("removeMeasure", id),
       setNote: (id, note) => ({ ...base("setNote", id || newId("n")), note }),
       removeNote: (id) => base("removeNote", id),
-      addSlur: (a, b, h) => ({ ...base("addSlur", newId("s")), slur: { a, b, h } }),
+      addSlur: (a, b, h, extra) => ({ ...base("addSlur", newId("s")), slur: { a, b, h, ...(extra || {}) } }),
       setSlur: (id, changes) => ({ ...base("setSlur", id), changes }),
       removeSlur: (id) => base("removeSlur", id),
       reset: () => base("reset", newId("r")),
@@ -463,13 +482,73 @@
     return { pieces, left: total - Math.max(0, here) };
   }
 
-  // The score as it's shown: measures in order with the time and key that apply, the notes that
-  // win (sorted), the rests between them, and where each measure starts in quarter notes.
+  // One staff of one bar as it's shown: the notes that win (newest first; a note that doesn't fit or
+  // overlaps a newer one is hidden), triplet groups, and the rests between.
+  function buildStaff(notes, len, time, si) {
+    const cand = notes.slice().sort((a, b) => (later(a.ts, a.by, b.ts, b.by, a.id, b.id) ? -1 : 1));
+    const kept = [];
+    let hidden = 0;
+    for (const n of cand) {
+      const fits = n.t + n.d <= len && !kept.some((k) => n.t < k.t + k.d && k.t < n.t + n.d);
+      if (fits) kept.push(n); else hidden++;
+    }
+    kept.sort((a, b) => a.t - b.t);
+
+    // triplet groups: each triplet note belongs to the group of three around it (a triplet 8th
+    // to a quarter's worth, a triplet quarter to a half's), placed on that length
+    const tuplets = [];
+    for (const n of kept) {
+      if (!isTriplet(n.d)) continue;
+      if (tuplets.some((g) => n.t >= g.start && n.t < g.start + g.len)) continue;
+      const glen = n.d * 3;
+      const start = tripletStart(n.t, n.d);
+      if (start === null || start + glen > len || tuplets.some((g) => start < g.start + g.len && g.start < start + glen)) continue;
+      tuplets.push({ start, len: glen });
+    }
+    tuplets.sort((a, b) => a.start - b.start);
+    const groupOf = (t) => tuplets.findIndex((g) => t >= g.start && t < g.start + g.len);
+
+    const items = [];
+    const gap = (a, b) => {
+      // rests for [a, b): triplet rests inside groups, ordinary rests between them
+      let p = a;
+      while (p < b) {
+        const gi = groupOf(p);
+        if (gi >= 0) {
+          const g = tuplets[gi];
+          const e = Math.min(b, g.start + g.len);
+          for (const r of fillTripletRests(p, e, g.start, g.len)) items.push({ rest: true, t: r.t, d: r.d, tup: gi, s: si });
+          p = e;
+        } else {
+          const next = tuplets.find((g) => g.start > p);
+          const e = Math.min(b, next ? next.start : b);
+          for (const r of fillRests(p, e, time)) items.push({ rest: true, t: r.t, d: r.d, s: si });
+          p = e;
+        }
+      }
+    };
+    let p = 0;
+    for (const n of kept) {
+      gap(p, n.t);
+      const gi = groupOf(n.t);
+      const item = { rest: false, t: n.t, d: n.d, p: n.p, tie: n.tie, st: n.st, id: n.id, by: n.by, s: si };
+      if (gi >= 0 && isTriplet(n.d)) item.tup = gi;
+      items.push(item);
+      p = n.t + n.d;
+    }
+    if (kept.length === 0) items.push({ rest: true, t: 0, d: len, whole: true, s: si });
+    else gap(p, len);
+    return { items, tuplets, hidden };
+  }
+
+  // The score as it's shown: measures in order with the time and key that apply, each staff's notes
+  // and rests (m.staves; m.items is the first staff), and where each measure starts in quarter notes.
   function view(state) {
     const measures = Object.values(state.measures).sort((a, b) =>
       (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : 0) || (a.id < b.id ? -1 : 1));
     const byMeasure = {};
     for (const n of Object.values(state.notes)) (byMeasure[n.m] = byMeasure[n.m] || []).push(n);
+    const staffCount = state.meta.clef === "piano" ? 2 : 1;
 
     let time = [4, 4], key = 0, beat = 0;
     const out = [];
@@ -481,63 +560,13 @@
       if (m.key !== null) key = m.key;
       const len = measureTicks(time);
 
-      // newest writes first; keep a note only if it fits and doesn't overlap a newer one
-      const cand = (byMeasure[m.id] || []).slice().sort((a, b) => (later(a.ts, a.by, b.ts, b.by, a.id, b.id) ? -1 : 1));
-      const kept = [];
-      let hidden = 0;
-      for (const n of cand) {
-        const fits = n.t + n.d <= len && !kept.some((k) => n.t < k.t + k.d && k.t < n.t + n.d);
-        if (fits) kept.push(n); else hidden++;
+      const staves = [];
+      for (let si = 0; si < staffCount; si++) {
+        const mine = (byMeasure[m.id] || []).filter((n) => staffCount === 1 || (n.s || 0) === si);
+        staves.push(buildStaff(mine, len, time, si));
       }
-      kept.sort((a, b) => a.t - b.t);
-
-      // triplet groups: each triplet note belongs to the group of three around it (a triplet 8th
-      // to a quarter's worth, a triplet quarter to a half's), placed on that length
-      const tuplets = [];
-      for (const n of kept) {
-        if (!isTriplet(n.d)) continue;
-        if (tuplets.some((g) => n.t >= g.start && n.t < g.start + g.len)) continue;
-        const glen = n.d * 3;
-        const start = tripletStart(n.t, n.d);
-        if (start === null || start + glen > len || tuplets.some((g) => start < g.start + g.len && g.start < start + glen)) continue;
-        tuplets.push({ start, len: glen });
-      }
-      tuplets.sort((a, b) => a.start - b.start);
-      const groupOf = (t) => tuplets.findIndex((g) => t >= g.start && t < g.start + g.len);
-
-      const items = [];
-      const gap = (a, b) => {
-        // rests for [a, b): triplet rests inside groups, ordinary rests between them
-        let p = a;
-        while (p < b) {
-          const gi = groupOf(p);
-          if (gi >= 0) {
-            const g = tuplets[gi];
-            const e = Math.min(b, g.start + g.len);
-            for (const r of fillTripletRests(p, e, g.start, g.len)) items.push({ rest: true, t: r.t, d: r.d, tup: gi });
-            p = e;
-          } else {
-            const next = tuplets.find((g) => g.start > p);
-            const e = Math.min(b, next ? next.start : b);
-            for (const r of fillRests(p, e, time)) items.push({ rest: true, t: r.t, d: r.d });
-            p = e;
-          }
-        }
-      };
-      let p = 0;
-      for (const n of kept) {
-        gap(p, n.t);
-        const gi = groupOf(n.t);
-        const item = { rest: false, t: n.t, d: n.d, p: n.p, tie: n.tie, st: n.st, id: n.id, by: n.by };
-        if (gi >= 0 && isTriplet(n.d)) item.tup = gi;
-        items.push(item);
-        p = n.t + n.d;
-      }
-      const wholeRest = kept.length === 0;
-      if (wholeRest) items.push({ rest: true, t: 0, d: len, whole: true });
-      else gap(p, len);
-
-      out.push({ id: m.id, index: i, time: time.slice(), key, timeChanged, keyChanged, len, beat, items, hidden, tuplets });
+      out.push({ id: m.id, index: i, time: time.slice(), key, timeChanged, keyChanged, len, beat, staves,
+                 items: staves[0].items, tuplets: staves[0].tuplets, hidden: staves.reduce((x, st) => x + st.hidden, 0) });
       beat += len / PPQ;
     }
     // slurs whose two bars both exist, start before end
@@ -546,10 +575,12 @@
     const slurs = [];
     for (const sl of Object.values(state.slurs)) {
       if (!(sl.a[0] in index) || !(sl.b[0] in index)) continue;
-      let a = { mi: index[sl.a[0]], t: sl.a[1] }, b = { mi: index[sl.b[0]], t: sl.b[1] };
+      const staffOf = (x) => (staffCount === 2 && x[2] === 1 ? 1 : 0);
+      let a = { mi: index[sl.a[0]], t: sl.a[1], s: staffOf(sl.a) }, b = { mi: index[sl.b[0]], t: sl.b[1], s: staffOf(sl.b) };
       if (b.mi < a.mi || (b.mi === a.mi && b.t < a.t)) [a, b] = [b, a];
       if (a.t >= out[a.mi].len || b.t >= out[b.mi].len) continue;   // the bar got shorter
-      slurs.push({ id: sl.id, a, b, h: sl.h, by: sl.by });
+      const o = sl.o.filter((x) => x[0] in index).map((x) => ({ mi: index[x[0]], t: x[1], dy: x[2] }));
+      slurs.push({ id: sl.id, a, b, h: sl.h, side: sl.side, o, by: sl.by });
     }
     slurs.sort((x, y) => (x.id < y.id ? -1 : 1));
     return { meta: { ...state.meta }, measures: out, totalBeats: beat, slurs };
@@ -561,7 +592,7 @@
     const events = [];
     const open = {};  // midi -> event still tied
     for (const m of v.measures) {
-      for (const it of m.items) {
+      for (const it of [].concat(...(m.staves || [{ items: m.items }]).map((st) => st.items))) {
         if (it.rest) continue;
         const beat = m.beat + it.t / PPQ;
         const len = it.d / PPQ;
@@ -569,15 +600,15 @@
           const midi = midiOf(p);
           const prev = open[midi];
           if (prev && Math.abs(prev.beat + prev.len - beat) < 1e-6) prev.len += len;
-          else events.push((open[midi] = { beat, len, midi, st: !!it.st }));
+          else events.push((open[midi] = { beat, len, midi, st: !!it.st, s: it.s || 0 }));
           if (!it.tie) delete open[midi];
         }
       }
     }
     // under a slur: legato
     const at = (x) => v.measures[x.mi].beat + x.t / PPQ;
-    const ranges = (v.slurs || []).map((sl) => [at(sl.a) - 1e-6, at(sl.b) + 1e-6]);
-    for (const e of events) e.legato = ranges.some(([a, b]) => e.beat >= a && e.beat <= b);
+    const ranges = (v.slurs || []).map((sl) => [at(sl.a) - 1e-6, at(sl.b) + 1e-6, sl.a.s || 0]);
+    for (const e of events) e.legato = ranges.some(([a, b, si]) => si === e.s && e.beat >= a && e.beat <= b);
     return events.sort((a, b) => a.beat - b.beat || a.midi - b.midi);
   }
 
@@ -612,11 +643,12 @@
     for (const n of Object.values(state.notes)) {
       const note = { m: n.m, t: n.t, d: n.d, p: n.p, tie: n.tie };
       if (n.st) note.st = true;
+      if (n.s === 1) note.s = 1;
       ops.push(op("setNote", n.id, n.by, n.ts, { note }));
     }
     for (const sl of Object.values(state.slurs)) {
-      ops.push(op("addSlur", sl.id, sl.by, sl.ts, { slur: { a: sl.a, b: sl.b, h: sl.h } }));
-      for (const k of ["a", "b", "h"]) {
+      ops.push(op("addSlur", sl.id, sl.by, sl.ts, { slur: { a: sl.a, b: sl.b, h: sl.h, side: sl.side, o: sl.o } }));
+      for (const k of SLUR_FIELDS) {
         const [ts, by] = sl.fieldTs[k];
         if (ts !== sl.ts || by !== sl.by) ops.push(op("setSlur", sl.id, by, ts, { changes: { [k]: sl[k] } }));
       }
@@ -637,11 +669,11 @@
     }
     for (const id of Object.keys(state.notes).sort()) {
       const n = state.notes[id];
-      parts.push(id + n.ts + n.by + JSON.stringify([n.m, n.t, n.d, n.p, n.tie, n.st]));
+      parts.push(id + n.ts + n.by + JSON.stringify([n.m, n.t, n.d, n.p, n.tie, n.st, n.s]));
     }
     for (const id of Object.keys(state.slurs).sort()) {
       const sl = state.slurs[id];
-      parts.push(id + JSON.stringify([sl.a, sl.b, sl.h]));
+      parts.push(id + JSON.stringify([sl.a, sl.b, sl.h, sl.side, sl.o]));
     }
     const s = parts.join("|");
     let h1 = 0x811c9dc5, h2 = 0x01000193;
@@ -666,10 +698,18 @@
         .sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : 0) || (a.id < b.id ? -1 : 1))
         .map((m) => ({
           time: m.time, key: m.key,
-          notes: v.measures.find((x) => x.id === m.id).items.filter((i) => !i.rest)
-            .map((i) => (i.st ? { t: i.t, d: i.d, p: i.p, tie: i.tie, st: true } : { t: i.t, d: i.d, p: i.p, tie: i.tie })),
+          notes: [].concat(...v.measures.find((x) => x.id === m.id).staves.map((st) => st.items)).filter((i) => !i.rest)
+            .map((i) => {
+              const fn = { t: i.t, d: i.d, p: i.p, tie: i.tie };
+              if (i.st) fn.st = true;
+              if (i.s === 1) fn.s = 1;
+              return fn;
+            }),
         })),
-      slurs: v.slurs.map((sl) => ({ a: [sl.a.mi, sl.a.t], b: [sl.b.mi, sl.b.t], h: sl.h })),
+      slurs: v.slurs.map((sl) => ({
+        a: sl.a.s ? [sl.a.mi, sl.a.t, 1] : [sl.a.mi, sl.a.t], b: sl.b.s ? [sl.b.mi, sl.b.t, 1] : [sl.b.mi, sl.b.t],
+        h: sl.h, side: sl.side, o: sl.o.map((x) => [x.mi, x.t, x.dy]),
+      })),
     };
   }
 
@@ -699,6 +739,7 @@
         if (++count > LIMITS.notes) return null;
         const note = plainObj(fn) ? { m: add.id, t: fn.t, d: fn.d, p: fn.p, tie: !!fn.tie } : null;
         if (note && fn.st === true) note.st = true;
+        if (note && fn.s === 1) note.s = 1;
         if (!validNote(note)) return null;
         ops.push(session.setNote(null, note));
       }
@@ -706,8 +747,12 @@
     if (Array.isArray(file.slurs)) {
       for (const fs of file.slurs.slice(0, LIMITS.slurs)) {
         if (!plainObj(fs) || !Array.isArray(fs.a) || !Array.isArray(fs.b)) return null;
-        const a = [ids[fs.a[0]], fs.a[1]], b = [ids[fs.b[0]], fs.b[1]];
-        const op = session.addSlur(a, b, fs.h);
+        const a = [ids[fs.a[0]], fs.a[1]].concat(fs.a[2] === 1 ? [1] : []);
+        const b = [ids[fs.b[0]], fs.b[1]].concat(fs.b[2] === 1 ? [1] : []);
+        const extra = {};
+        if (validSide(fs.side)) extra.side = fs.side;
+        if (Array.isArray(fs.o)) extra.o = fs.o.filter((x) => Array.isArray(x) && x.length === 3).map((x) => [ids[x[0]], x[1], x[2]]);
+        const op = session.addSlur(a, b, fs.h, extra);
         if (validateOp(op) !== null) return null;
         ops.push(op);
       }

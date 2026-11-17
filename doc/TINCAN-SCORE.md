@@ -12,16 +12,27 @@ One staff of music that everyone in the lesson writes in together, played on eac
     - **A–G** write at the blue cursor; **Shift+A–G** adds to the last chord.
     - **3 4 5 6 7** pick 16th, 8th, quarter, half, whole; **.** dots the note; **0** writes a rest.
     - **↑ ↓** move the selected note a semitone (**Ctrl**: an octave). **← →** step through the notes.
-    - **+** ties the note to the next one. **Delete** removes it. **Ctrl+Z / Ctrl+Y** undo and redo.
+    - **+** ties the note to the next one. **Ctrl+Z / Ctrl+Y** undo and redo.
+    - **Backspace** deletes the note here (the selected one, or the last one before the cursor) and steps back to the note before it, so pressing it again deletes notes one at a time going backwards.
+    - **Delete** deletes the selection, or the note at the cursor; the cursor stays where it is.
+    - **Ctrl+C / Ctrl+X / Ctrl+V** (or Copy and Paste): copy or cut the selected notes, and paste them at the cursor with the same rhythm and spacing, across bar lines (tied where needed). Notes from one staff paste onto the cursor's staff; from both staves, each stays on its own.
   - **Write from keys** (**N**): notes and chords you play on the MIDI keyboard go in at the cursor. Keys pressed within 60 ms count as one chord.
   - **Rest** mode makes clicks and letters write silence. Gaps between notes always show as rests.
+- **Staff** (Treble, Bass, or **Piano (both)**):
+  - Piano is a grand staff: treble above bass, joined by a brace and bar lines. Each staff has its own rhythm (a whole note in the left hand under quarters in the right).
+  - Click a staff to write on it. With nothing selected, **↑ ↓** move the cursor between the staves. Letters pick the octave nearest the last note on the cursor's staff.
+  - Back to one staff: everything shows on it, and notes that overlap are hidden, not lost. Choosing Piano again brings them back.
+  - The sound picker is gone for now (owner, 2026-11-17): the score plays with a piano sound.
 - **Bars:**
-  - Clef (treble/bass) for the whole score. Time signature and key from the selected bar onwards.
+  - Time signature and key from the selected bar onwards.
   - **+ Bar** adds a bar after the selected one; **− Bar** removes the selected bar. Writing past the last bar adds one.
-- **Sound** (Piano, Guitar, Bass):
-  - Each computer plays its own (owner decision). Nothing goes to the others.
-  - Guitar and bass are written an octave above how they sound, as usual. Bass also switches to the bass clef.
-- **Tempo:**
+- **Sound:** a piano, played by each computer for itself (owner decision). Nothing goes to the others.
+- **Recording** (**● Rec** or **R**; R, Space or ■ Stop ends it):
+  - Recording starts at the selected bar, after a count-in of **1 or 2 bars** of clicks (your choice by the button). Play your MIDI keyboard in time.
+  - Each key's press and release are moved to the nearest **8th or 16th** (your choice, "shortest note"). Keys pressed together become a chord, as long as its longest note. A note lasts at most until the next one starts.
+  - Notes longer than what's left of a bar are tied into the next. In a piano score, notes below middle C go on the bass staff.
+  - The bars you recorded over are replaced. One Ctrl+Z takes the whole recording back.
+  - Timing: the app stamps each key with its beat on the audio thread, on the same clock as the metronome. So the notes don't depend on how fast the window updates.- **Tempo:**
   - The box shows the metronome's tempo, and changing it changes the metronome.
   - **Anyone in the lesson can change the tempo, and everyone's metronome follows.** This works from the Metronome tab too.
 - **Play** (**Space**):
@@ -36,12 +47,14 @@ One staff of music that everyone in the lesson writes in together, played on eac
 | **Select** | V or Esc | Click notes (Shift adds or removes), or drag a box. Click a slur to select it. Delete removes the selection. ↑ ↓ move every selected note. Shift+S sets staccato on all of them. |
 | **Eraser** | X | Click or drag over noteheads to remove them (one note of a chord at a time). Click a slur to remove it. One drag is one Undo. |
 | **Tie** | T | Drag from a note to the very next note of the same pitch, in the same bar or the next. Clicking a tied note unties it. |
-| **Slur** | S | Drag from one note to another. Then, in Select or Slur: drag an end handle to another note, drag the middle handle to make the arc higher or flatter, or drag the slur itself to slide it along the notes. |
+| **Slur** | S | Drag from one note to another. Then, in Select or Slur, the selected slur shows a handle over every note: drag any of them up or down; drag an end to another note (and up or down); drag the middle handle to raise or flatten the arc, or pull it right through to the other side of the notes; or drag the slur itself to slide it along. |
 
 - **Staccato** (Shift+S, or the button by the accidentals): toggles staccato on the selected notes. The dot sits on the notehead side, and the note plays half as long.
 - **Slurs:**
   - A slur belongs to two notes, not to a place on the page. So it stays with its notes when the page reflows or someone else's window is a different size.
-  - It goes on the notehead side (below when both ends have stems up), rises to clear the notes under it, and splits in two across a line break.
+  - It goes above the notes when they sit in the top half of the staff, below otherwise, until someone pulls it to the other side. **The notes under a slur turn their stems away from it** (owner's rule), so the slur always meets noteheads.
+  - Pulling the middle handle through the notes moves the slur to that side: its notes' stems turn, and its points start fresh there.
+  - It passes over every note under it, high enough to clear them, and each point can be moved up or down on its own. It splits in two across a line break.
   - Slurred notes play legato (full length). Other notes play slightly detached, so the difference is heard.
   - Slurs are shared, saved in the file, and undone like everything else.
 
@@ -71,7 +84,7 @@ One staff of music that everyone in the lesson writes in together, played on eac
 - **Spacing:** each line of music grows to fit its highest and lowest notes.
 - **Test sheet:** `score.html#demo=2` in a browser draws 12 bars covering all of the above, in either clef.
 
-**Not in Phase A:** tab, chord symbols and diagrams (Phase B), recording to the click (C), scoring (D), two staves, two voices on one staff, tuplets other than triplets, grace notes, lyrics, dynamics, articulations other than staccato, and saving to an assignment or the school library.
+**Not in Phase A:** tab, chord symbols and diagrams (Phase B), scoring (D), two voices on one staff, tuplets other than triplets, grace notes, lyrics, dynamics, articulations other than staccato, and saving to an assignment or the school library.
 
 ## How it's built
 | Part | Where |

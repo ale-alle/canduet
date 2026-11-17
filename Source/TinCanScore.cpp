@@ -152,6 +152,9 @@ void ScoreWindow::handleMessage(const var & m)
     else if (type == "play") {
         play(m);
     }
+    else if (type == "record") {
+        record(m);
+    }
     else if (type == "stop") {
         stopPlaying();
     }
@@ -210,11 +213,49 @@ void ScoreWindow::play(const var & m)
     wasPlaying = true;
 }
 
+// Recording (T-080): the metronome starts again with a count-in of 1 or 2 bars, and the player runs
+// on its clock playing nothing, so each MIDI note gets its score beat on the audio thread
+// (beatAt). The page turns those into notes when recording stops.
+void ScoreWindow::record(const var & m)
+{
+    auto & player = processor.getScorePlayer();
+    if (!player.load()) {
+        AlertWindow::showMessageBoxAsync(MessageBoxIconType::WarningIcon, TRANS("Score"), player.getError());
+        return;
+    }
+    const int bars = jlimit(1, 2, (int) m.getProperty("countIn", var(1)));
+    const int bpb = (int) m.getProperty("bpb", var(0));
+    if (auto * v = processor.getValueTreeState().getRawParameterValue(SonobusAudioProcessor::paramMetCountIn))
+        if (savedCountIn < 0) savedCountIn = roundToInt(v->load());
+    setIntParam(SonobusAudioProcessor::paramMetCountIn, bars);
+    if (bpb >= 1 && bpb <= 12) setIntParam(SonobusAudioProcessor::paramMetBeatsPerBar, bpb);
+
+    // the count-in only plays when the metronome starts, so a running one is stopped first
+    const bool wasOn = isMetronomeOn();
+    if (wasOn) setMetronomeOn(false);
+    else turnedMetronomeOn = true;
+    Component::SafePointer<ScoreWindow> safe(this);
+    Timer::callAfterDelay(wasOn ? 120 : 1, [safe]() {
+        if (!safe) return;
+        safe->setMetronomeOn(true);
+        safe->processor.getScorePlayer().play({}, 1.0e7, 0, true);
+    });
+    wasPlaying = true;
+}
+
+void ScoreWindow::setIntParam(const String & id, int value)
+{
+    if (auto * p = processor.getValueTreeState().getParameter(id))
+        p->setValueNotifyingHost(p->convertTo0to1((float) value));
+}
+
 void ScoreWindow::stopPlaying()
 {
     processor.getScorePlayer().stop();
     if (turnedMetronomeOn) setMetronomeOn(false);
     turnedMetronomeOn = false;
+    if (savedCountIn >= 0) setIntParam(SonobusAudioProcessor::paramMetCountIn, savedCountIn);
+    savedCountIn = -1;
 }
 
 void ScoreWindow::setMetronomeOn(bool on)
@@ -253,6 +294,8 @@ void ScoreWindow::timerCallback()
             // finished by itself
             if (turnedMetronomeOn) setMetronomeOn(false);
             turnedMetronomeOn = false;
+            if (savedCountIn >= 0) setIntParam(SonobusAudioProcessor::paramMetCountIn, savedCountIn);
+            savedCountIn = -1;
             wasPlaying = false;
         }
     }
@@ -289,6 +332,7 @@ void ScoreWindow::notesArrived(const std::vector<NoteEvent> & events)
         if (ev.source != NoteSource::Midi) continue;
         Array<var> e;
         e.add((int) ev.type); e.add((int) ev.channel); e.add((int) ev.note); e.add((int) ev.value); e.add((int) ev.source);
+        if (ev.beat > -1.0e8) e.add(ev.beat);   // score beat, while playing or recording
         list.add(var(e));
         if (list.size() >= 256) break;
     }
@@ -320,6 +364,8 @@ void ScoreWindow::receive(const String &, const String &) {}
 void ScoreWindow::handleMessage(const var &) {}
 void ScoreWindow::post(const var &) {}
 void ScoreWindow::play(const var &) {}
+void ScoreWindow::record(const var &) {}
+void ScoreWindow::setIntParam(const String &, int) {}
 void ScoreWindow::stopPlaying() {}
 void ScoreWindow::setMetronomeOn(bool) {}
 bool ScoreWindow::isMetronomeOn() const { return false; }

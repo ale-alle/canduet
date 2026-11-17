@@ -37,6 +37,9 @@ struct NoteEvent
     uint8_t note = 0;     // 0-127
     uint8_t value = 0;
     NoteSource source = NoteSource::Midi;
+    // where in the shared score it happened, in beats, while the score plays or records (T-080);
+    // -1e9 otherwise. Set on the audio thread, so recording keeps the exact timing.
+    double beat = -1.0e9;
 };
 
 // raw MIDI bytes → NoteEvent; false for messages the visualizer ignores

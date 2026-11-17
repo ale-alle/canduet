@@ -279,7 +279,7 @@ test("staccato and slurs: stored, shared, saved, and heard", () => {
   S.applyOp(b, moveEnd); S.applyOp(a, higher); S.applyOp(a, moveEnd); S.applyOp(b, higher);
   assert.equal(S.digest(a), S.digest(b));
   const v = S.view(a);
-  assert.deepEqual(v.slurs.map((x) => [x.a, x.b, x.h]), [[{ mi: 0, t: 480 }, { mi: 1, t: 0 }, 6]]);
+  assert.deepEqual(v.slurs.map((x) => [x.a, x.b, x.h]), [[{ mi: 0, t: 480, s: 0 }, { mi: 1, t: 0, s: 0 }, 6]]);
   const ev = S.playEvents(v);
   assert.deepEqual(ev.map((e) => [e.beat, !!e.legato, !!e.st]), [[0, false, false], [1, true, false], [2, true, false], [3, true, false], [4, true, true]]);
   assert.equal(S.soundingLength(ev[0]) < 1, true);        // plain: a little detached
@@ -294,7 +294,7 @@ test("staccato and slurs: stored, shared, saved, and heard", () => {
   assert.equal(file.slurs.length, 1);
   const d = S.emptyState();
   for (const op of S.opsFromFile(S.createSession(d, "Zoe"), file)) S.applyOp(d, op);
-  assert.deepEqual(S.view(d).slurs.map((x) => [x.a, x.b, x.h]), [[{ mi: 0, t: 480 }, { mi: 1, t: 0 }, 6]]);
+  assert.deepEqual(S.view(d).slurs.map((x) => [x.a, x.b, x.h]), [[{ mi: 0, t: 480, s: 0 }, { mi: 1, t: 0, s: 0 }, 6]]);
   assert.equal(S.view(d).measures[1].items[0].st, true);
   apply([a, b], ann.removeSlur(sl.id));
   assert.equal(S.view(b).slurs.length, 0);

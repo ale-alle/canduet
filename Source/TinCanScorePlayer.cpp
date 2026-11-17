@@ -95,6 +95,18 @@ void ScorePlayer::prepare(double rate, int maxBlock)
     }
 }
 
+double ScorePlayer::beatAt(int sampleOffset, double metronomeBeat, double tempo, bool metronomeRunning) const
+{
+    // audio thread only, like process(): these are its own variables
+    if (!active) return -1.0e9;
+    const double bps = (tempo > 0 ? tempo : 100.0) / (60.0 * sampleRate);
+    if (follow) {
+        if (!anchored || !metronomeRunning) return -1.0e9;
+        return metronomeBeat - anchor + sampleOffset * bps;
+    }
+    return ownBeat + sampleOffset * bps;
+}
+
 void ScorePlayer::renderTo(float * L, float * R, int from, int count)
 {
     while (count > 0) {

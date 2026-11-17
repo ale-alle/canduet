@@ -50,7 +50,9 @@ private:
     void handleMessage(const var & message);
     void post(const var & message);
     void play(const var & message);
+    void record(const var & message);
     void stopPlaying();
+    void setIntParam(const String & id, int value);
     void setMetronomeOn(bool on);
     bool isMetronomeOn() const;
     double getTempo() const;
@@ -61,6 +63,7 @@ private:
     Browser * browser = nullptr;   // owned by the window
     bool ready = false;
     bool turnedMetronomeOn = false;   // switch it off again when playback stops
+    int savedCountIn = -1;            // the metronome's count-in before recording changed it
     bool wasPlaying = false;
     double lastTempo = -1.0;
     StringArray lastPeers;

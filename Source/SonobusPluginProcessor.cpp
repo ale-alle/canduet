@@ -7488,8 +7488,13 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 
     if (mNoteTapEnabled.load(std::memory_order_relaxed) && !midiMessages.isEmpty()) {
         TinCan::NoteEvent nev;
+        // the metronome's beat count at the start of this block (it's advanced later in the block)
+        const double metBeatNow = mMetronome->getCurrBeatPos();
+        const double tempoNow = mMetTempo.get();
+        const bool metOn = mMetEnabled.get();
         for (const auto meta : midiMessages) {
             if (TinCan::decodeMidi(meta.data, meta.numBytes, TinCan::NoteSource::Midi, nev)) {
+                nev.beat = mScorePlayer->beatAt(meta.samplePosition, metBeatNow, tempoNow, metOn);  // T-080 recording
                 mNoteQueue.push(nev);  // dropped if the UI fell far behind
             }
         }

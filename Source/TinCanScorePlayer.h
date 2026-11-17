@@ -47,6 +47,10 @@ public:
     void process(AudioBuffer<float> & out, int numChannels, int numSamples, double tempo,
                  bool metronomeRunning, double metronomeBeat, double countInRemaining, int beatsPerBar);
 
+    // the score beat at a sample of the coming block (for stamping MIDI notes while recording);
+    // -1e9 when nothing is playing or the start isn't known yet
+    double beatAt(int sampleOffset, double metronomeBeat, double tempo, bool metronomeRunning) const;
+
 private:
     void renderTo(float * L, float * R, int from, int count);
 

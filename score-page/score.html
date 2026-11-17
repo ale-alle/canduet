@@ -37,6 +37,8 @@
   #tempo { width: 62px; padding: 2px 6px; text-align: right; }
   #play { min-width: 76px; font-weight: 600; }
   #play[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  #rec { min-width: 74px; font-weight: 600; color: #ff6b6b; }
+  #rec[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
   #status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; padding-left: 8px;
             flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
   #sheet { flex: 1; min-height: 0; overflow: auto; background: var(--bg); padding: 16px; }
@@ -118,14 +120,16 @@
   </div>
   <span class="sep"></span>
   <div class="group">
-    <button id="del" class="small" title="Delete the selected notes or slur (Delete)">Delete</button>
+    <button id="copy" class="small" title="Copy the selected notes (Ctrl+C; Ctrl+X cuts)">Copy</button>
+    <button id="paste" class="small" title="Paste at the cursor (Ctrl+V)">Paste</button>
+    <button id="del" class="small" title="Delete the selection, or the note at the cursor (Delete). Backspace deletes going backwards">Delete</button>
     <button id="undo" class="small" title="Undo your last change (Ctrl+Z)">Undo</button>
     <button id="redo" class="small" title="Redo (Ctrl+Y)">Redo</button>
   </div>
   <span class="sep"></span>
   <div class="group">
     <label class="sr" for="clef">Clef</label>
-    <select id="clef" title="Clef"><option value="treble">Treble 𝄞</option><option value="bass">Bass 𝄢</option></select>
+    <select id="clef" title="Staff: treble, bass, or piano (both)"><option value="treble">Treble</option><option value="bass">Bass</option><option value="piano">Piano (both)</option></select>
     <label class="sr" for="time">Time signature</label>
     <select id="time" title="Time signature from the selected bar on"></select>
     <label class="sr" for="key">Key</label>
@@ -136,8 +140,6 @@
   <span class="sep"></span>
   <div class="group">
     <button id="midi" class="small" aria-pressed="false" title="Write notes by playing your MIDI keyboard (N)">Write from keys</button>
-    <label class="sr" for="instrument">Sound</label>
-    <select id="instrument" title="Sound (each computer plays its own)"><option value="piano">Piano</option><option value="guitar">Guitar</option><option value="bass">Bass</option></select>
   </div>
   <span class="sep"></span>
   <div class="group">
@@ -145,6 +147,14 @@
     <input id="tempo" type="number" min="20" max="300" step="1" value="100">
     <button id="click" class="small" aria-pressed="true" title="Metronome click while playing, with its count-in">Click</button>
     <button id="play" aria-pressed="false" title="Play from the selected bar (Space)">▶ Play</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group" role="group" aria-label="Record">
+    <button id="rec" aria-pressed="false" title="Record from your MIDI keyboard from the selected bar, after a count-in (R)">● Rec</button>
+    <label class="sr" for="countIn">Count-in</label>
+    <select id="countIn" title="Count-in before recording"><option value="1">1 bar in</option><option value="2">2 bars in</option></select>
+    <label class="sr" for="quant">Shortest note</label>
+    <select id="quant" title="Shortest note recorded: what's played is moved to the nearest 8th or 16th"><option value="240">8ths</option><option value="120" selected>16ths</option></select>
   </div>
   <button id="helpBtn" class="small" aria-expanded="false" title="Keys and tips">?</button>
   <span id="status" role="status" aria-live="polite"></span>
@@ -159,6 +169,11 @@
     <dt>T</dt><dd>Tie: drag from a note to the next one of the same pitch; click a tied note to untie it</dd>
     <dt>S</dt><dd>Slur: drag from one note to another. Select it to drag its ends, its middle (height) or the whole slur</dd>
     <dt>Shift+S</dt><dd>Staccato on the selected notes</dd>
+    <dt>Ctrl+C, X, V</dt><dd>Copy, cut, paste at the cursor</dd>
+    <dt>Backspace</dt><dd>Delete the note here and go back one, so you can delete going backwards</dd>
+    <dt>Delete</dt><dd>Delete the selection or the note at the cursor; the cursor stays</dd>
+    <dt>↑ ↓ (nothing selected)</dt><dd>Piano: move the cursor to the other staff</dd>
+    <dt>R</dt><dd>Record from your MIDI keyboard, after a count-in; R or Space stops</dd>
     <dt>Click a note</dt><dd>Select it</dd>
     <dt>A–G</dt><dd>Write that note at the cursor</dd>
     <dt>Shift+A–G</dt><dd>Add it to the last chord</dd>
