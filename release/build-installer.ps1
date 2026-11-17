@@ -50,6 +50,10 @@ $lesson = New-Item -ItemType Directory (Join-Path $stage "lesson")
 $page = Join-Path $repo "video-page"
 Copy-Item (Join-Path $page "lesson.html") $lesson
 Copy-Item (Join-Path $page "fonts"), (Join-Path $page "cans") $lesson -Recurse
+# the shared score's sounds (T-080): the build puts them in sounds\ next to the exe
+$sounds = Join-Path $built "sounds"
+if (-not (Test-Path (Join-Path $sounds "GeneralUser-GS.sf2"))) { throw "sounds\GeneralUser-GS.sf2 is missing next to the built exe (rebuild SonoBus_Standalone)" }
+Copy-Item $sounds $stage -Recurse
 
 $out = Join-Path $release $(if ($Staging) { "instoutput-staging" } else { "instoutput" })
 New-Item -ItemType Directory -Force $out | Out-Null

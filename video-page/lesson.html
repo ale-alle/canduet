@@ -370,6 +370,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     <span class="gap"></span>
     <button class="ib" type="button" id="toolsBtn" data-act="tools" data-tip="Tuner, metronome, instrument (T)" aria-pressed="false"><span class="disc"><i data-i="music"></i></span><span class="lbl">Tools</span></button>
     <button class="ib" type="button" id="boardBtn" data-act="board" data-tip="Shared board for music and notes (B)" aria-pressed="false"><span class="disc"><i data-i="board"></i></span><span class="lbl">Board</span></button>
+    <button class="ib" type="button" id="scoreBtn" data-act="score" data-tip="Shared score: write music together, play it at the metronome's tempo (S)" aria-pressed="false"><span class="disc"><i data-i="score"></i></span><span class="lbl">Score</span></button>
     <button class="ib" type="button" id="chatBtn" data-act="chat" data-tip="Chat (C)" aria-pressed="false"><span class="disc"><i data-i="chat"></i><span class="badge" id="chatBadge" hidden></span></span><span class="lbl">Chat</span></button>
     <button class="ib" type="button" id="recBtn" data-pop="rec" data-tip="Record this lesson (asks first)" aria-expanded="false"><span class="disc"><i data-i="record"></i></span><span class="lbl">Record</span></button>
     <span class="recpill" role="status"><span id="recT"></span>
@@ -473,6 +474,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     window: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
     music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
     board: '<rect x="3" y="3" width="18" height="14" rx="2"/><path d="m7 13 3-4 3 3 2-2 2 3M8 21l4-4 4 4"/>',
+    score: '<path d="M3 6h18M3 10h18M3 14h18M3 18h18" opacity=".55"/><ellipse cx="9" cy="17" rx="2.6" ry="2"/><path d="M11.6 17V5l5 2"/>',
     chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     record: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/>',
     settings: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/>',
@@ -872,6 +874,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     body.dataset.rec = rec.phase;
     $("#toolsBtn").setAttribute("aria-pressed", String(!!docks.tools));
     $("#boardBtn").setAttribute("aria-pressed", String(!!docks.board));
+    $("#scoreBtn").setAttribute("aria-pressed", String(!!docks.score));
     if (body.classList.contains("tools-on") !== !!docks.tools) { body.classList.toggle("tools-on", !!docks.tools); sendDock(); requestAnimationFrame(drawString); }
   }
   setInterval(renderLesson, 1000);
@@ -966,6 +969,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     switch (t.dataset.act) {
       case "tools": closePops(); send({ t: "tools" }); if (demo) { docks.tools = !docks.tools; renderLesson(); } break;
       case "board": closePops(); send({ t: "board" }); break;
+      case "score": closePops(); send({ t: "score" }); break;
       case "chat": toggleChat(body.dataset.right !== "chat"); break;
       case "closepop": closePops(); break;
       case "recask": closePops(); send({ t: "rec", a: "ask" }); break;
@@ -989,7 +993,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "range" && e.target.type !== "checkbox" || e.ctrlKey || e.altKey || e.metaKey) return;
     const k = e.key.toLowerCase();
     if (practice && k === "c") return;
-    const map = { m: "#micBtn", v: "#camBtn", t: "#toolsBtn", b: "#boardBtn", c: "#chatBtn" };
+    const map = { m: "#micBtn", v: "#camBtn", t: "#toolsBtn", b: "#boardBtn", s: "#scoreBtn", c: "#chatBtn" };
     if (map[k]) { e.preventDefault(); $(map[k]).click(); }
     if (k === "h" && rec.phase === "recording") { e.preventDefault(); openPop($("#markBtn")); }
   });

@@ -1,0 +1,163 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPLv3-or-later WITH Appstore-exception
+     Copyright (C) 2026 Tin Can Studios
+
+     CanDuet shared score (T-080). Shown in the app's Score window (WebView2). Everyone in the lesson
+     edits the same score; it plays on each computer at the metronome's tempo. See doc/TINCAN-SCORE.md.
+     Model: score-model.js. Page logic: score-ui.js. Notation drawn by VexFlow 4.2.5 (MIT,
+     vexflow-bravura.js, unchanged from the npm package). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>CanDuet score</title>
+<style>
+  /* Colours match tincanstudios.ca night palette (Source/TinCanTheme.h) */
+  :root { --bg: #0a0f1e; --panel: #121a2e; --panel2: #1a2440; --text: #e8ecf6; --muted: #b4bed6;
+          --accent: #e5484d; --blue: #47b0f8; --line: #3a4a75; --paper: #fbfaf6; --ink: #15171c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+               font: 14px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+  #bar { flex: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+         padding: 7px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  #bar .group { display: flex; gap: 3px; align-items: center; flex: none; }
+  #bar .sep { width: 1px; height: 28px; background: var(--line); margin: 0 3px; flex: none; }
+  button, select, input { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+                          border-radius: 6px; min-height: 32px; flex: none; }
+  button { padding: 2px 9px; cursor: pointer; }
+  select { padding: 2px 4px; cursor: pointer; }
+  button:hover, select:hover { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: #233052; border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.glyph { min-width: 34px; padding: 0 4px; font: 22px/1 "Segoe UI Symbol", "Segoe UI", sans-serif; }
+  button.small { font-size: 13px; }
+  #tempo { width: 62px; padding: 2px 6px; text-align: right; }
+  #play { min-width: 76px; font-weight: 600; }
+  #play[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  #status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; padding-left: 8px;
+            flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+  #sheet { flex: 1; min-height: 0; overflow: auto; background: var(--bg); padding: 16px; }
+  #paper { position: relative; margin: 0 auto; max-width: 1400px; background: var(--paper); color: var(--ink);
+           border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.4); padding: 14px 20px 30px; min-height: 200px; }
+  #title { display: block; width: 100%; border: 0; background: transparent; color: var(--ink); text-align: center;
+           font: 600 22px "Segoe UI", system-ui, sans-serif; padding: 4px; margin-bottom: 4px; }
+  #title:hover { background: rgba(0,0,0,.04); }
+  #title::placeholder { color: #9aa0ab; }
+  #score { position: relative; cursor: crosshair; user-select: none; }
+  #score svg { display: block; }
+  #score:focus { outline: none; }
+  #score:focus-visible { outline: 1px dashed rgba(71,176,248,.6); outline-offset: 4px; border-radius: 4px; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; }
+  .cursor { position: absolute; width: 3px; border-radius: 2px; background: var(--blue); opacity: .85; }
+  .playhead { position: absolute; width: 2px; background: var(--accent); }
+  .ghost { position: absolute; width: 13px; height: 10px; border-radius: 50%; background: var(--blue); opacity: .55;
+           transform: translate(-50%, -50%) rotate(-20deg); }
+  .ghost.rest { width: 10px; height: 18px; border-radius: 3px; transform: translate(-50%, -50%); }
+  .ledger { position: absolute; height: 1.5px; width: 22px; background: var(--blue); opacity: .55; transform: translateX(-50%); }
+  .barsel { position: absolute; border: 2px solid var(--blue); border-radius: 4px; opacity: .35; }
+  #empty { color: #6b7280; text-align: center; padding: 30px 0; }
+  #empty[hidden], [hidden] { display: none !important; }
+  #help { position: absolute; right: 14px; top: 58px; width: 330px; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.5); z-index: 10; font-size: 13px; }
+  #help h2 { margin: 0 0 6px; font-size: 14px; }
+  #help dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+  #help dt { color: var(--muted); white-space: nowrap; }
+  #help dd { margin: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div id="bar" role="toolbar" aria-label="Score tools">
+  <div class="group">
+    <button id="new" class="small" title="Start a new score (for everyone)">New</button>
+    <button id="open" class="small" title="Open a saved score (for everyone)">Open…</button>
+    <button id="save" class="small" title="Save this score to a file">Save…</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group" role="group" aria-label="Note length">
+    <button class="glyph" data-dur="1920" title="Whole note (7)" aria-label="Whole note">𝅝</button>
+    <button class="glyph" data-dur="960" title="Half note (6)" aria-label="Half note">𝅗𝅥</button>
+    <button class="glyph" data-dur="480" title="Quarter note (5)" aria-label="Quarter note" aria-pressed="true">♩</button>
+    <button class="glyph" data-dur="240" title="Eighth note (4)" aria-label="Eighth note">♪</button>
+    <button class="glyph" data-dur="120" title="Sixteenth note (3)" aria-label="Sixteenth note">𝅘𝅥𝅯</button>
+    <button class="glyph" id="dot" title="Dotted (.)" aria-label="Dotted" aria-pressed="false">•</button>
+    <button class="glyph" id="rest" title="Rest: clicks and keys write silence (0 writes one rest)" aria-label="Rest" aria-pressed="false">𝄽</button>
+    <button class="glyph" id="tie" title="Tie the selected note to the next one (+)" aria-label="Tie">‿</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group" role="group" aria-label="Accidentals">
+    <button class="glyph" data-alt="-1" title="Flat (selected note)" aria-label="Flat">♭</button>
+    <button class="glyph" data-alt="0" title="Natural (selected note)" aria-label="Natural">♮</button>
+    <button class="glyph" data-alt="1" title="Sharp (selected note)" aria-label="Sharp">♯</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="del" class="small" title="Delete the selected note (Delete)">Delete</button>
+    <button id="undo" class="small" title="Undo your last change (Ctrl+Z)">Undo</button>
+    <button id="redo" class="small" title="Redo (Ctrl+Y)">Redo</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <label class="sr" for="clef">Clef</label>
+    <select id="clef" title="Clef"><option value="treble">Treble 𝄞</option><option value="bass">Bass 𝄢</option></select>
+    <label class="sr" for="time">Time signature</label>
+    <select id="time" title="Time signature from the selected bar on"></select>
+    <label class="sr" for="key">Key</label>
+    <select id="key" title="Key from the selected bar on"></select>
+    <button id="addBar" class="small" title="Add a bar after the selected one">+ Bar</button>
+    <button id="delBar" class="small" title="Remove the selected bar">− Bar</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="midi" class="small" aria-pressed="false" title="Write notes by playing your MIDI keyboard (N)">Write from keys</button>
+    <label class="sr" for="instrument">Sound</label>
+    <select id="instrument" title="Sound (each computer plays its own)"><option value="piano">Piano</option><option value="guitar">Guitar</option><option value="bass">Bass</option></select>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <label for="tempo" title="Tempo (the metronome's; changes it for everyone)">♩ =</label>
+    <input id="tempo" type="number" min="20" max="300" step="1" value="100">
+    <button id="click" class="small" aria-pressed="true" title="Metronome click while playing, with its count-in">Click</button>
+    <button id="play" aria-pressed="false" title="Play from the selected bar (Space)">▶ Play</button>
+  </div>
+  <button id="helpBtn" class="small" aria-expanded="false" title="Keys and tips">?</button>
+  <span id="status" role="status" aria-live="polite"></span>
+</div>
+<div id="help" hidden>
+  <h2>Writing music</h2>
+  <dl>
+    <dt>Click the staff</dt><dd>Write a note at the blue cursor's spot</dd>
+    <dt>Shift+click</dt><dd>Add a note to the chord there</dd>
+    <dt>Click a note</dt><dd>Select it</dd>
+    <dt>A–G</dt><dd>Write that note at the cursor</dd>
+    <dt>Shift+A–G</dt><dd>Add it to the last chord</dd>
+    <dt>3 4 5 6 7</dt><dd>16th, 8th, quarter, half, whole</dd>
+    <dt>.</dt><dd>Dotted</dd>
+    <dt>0</dt><dd>Rest</dd>
+    <dt>↑ ↓</dt><dd>Selected note up or down (Ctrl: octave)</dd>
+    <dt>← →</dt><dd>Previous or next note</dd>
+    <dt>+</dt><dd>Tie to the next note</dd>
+    <dt>Delete</dt><dd>Remove the selected note</dd>
+    <dt>N</dt><dd>Write from your MIDI keyboard</dd>
+    <dt>Space</dt><dd>Play or stop</dd>
+  </dl>
+  <p>Everyone in the lesson sees and edits the same score. Each computer plays its own sound.</p>
+</div>
+<div id="sheet">
+  <div id="paper">
+    <input id="title" type="text" maxlength="120" placeholder="Untitled" aria-label="Title" spellcheck="false">
+    <div id="score" tabindex="0" aria-label="Score. Click to write notes.">
+      <div id="overlay"></div>
+    </div>
+    <div id="empty" hidden>No bars yet. <button id="emptyAdd" class="small">+ Bar</button></div>
+  </div>
+</div>
+<input id="file" type="file" accept=".json,application/json" hidden>
+<script src="vexflow-bravura.js"></script>
+<script src="score-model.js"></script>
+<script src="score-ui.js"></script>
+</body>
+</html>

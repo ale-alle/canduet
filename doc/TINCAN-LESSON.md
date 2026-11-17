@@ -13,7 +13,7 @@ Stage 1 of the CanDuet redesign (decision D-028 in the tincanstudios-site repo; 
   - Mic: mute, plus ▲ for the meter, microphone level, Hear myself, the device, and Reverb… for teachers.
   - Camera: on/off, plus ▲ for the camera and Mirror.
   - Share: your screen or one window, or a second camera.
-  - Tools, Board, Chat, and Record (asks everyone first, then a pill with the time, Mark and Stop).
+  - Tools, Board, Score (shared score, doc/TINCAN-SCORE.md), Chat, and Record (asks everyone first, then a pill with the time, Mark and Stop).
   - Settings: lesson volume, Mute everything I hear, Labels under the icons (teachers), All settings, Set up your sound again, Help.
   - Leave: asks once.
 - **Waiting / couldn't connect:** the waiting card has a microphone meter, "Check my sound" and "Tune up while you wait". The problem card has three numbered steps.

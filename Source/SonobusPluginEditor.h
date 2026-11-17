@@ -29,6 +29,7 @@
 #include "TinCanUpdate.h"
 #include "TinCanAudioSetup.h"
 #include "TinCanWorkspace.h"
+#include "TinCanScore.h"
 #include "TinCanLesson.h"
 #include "TinCanHome.h"
 
@@ -604,6 +605,18 @@ private:
     // lesson workspace (T-037); kept when closed so the board survives
     std::unique_ptr<TinCan::WorkspaceWindow> mWorkspaceWindow;
     void showWorkspace();
+    // shared score (T-080): one per lesson or practice, kept when closed, gone when the lesson ends
+    std::unique_ptr<TinCan::ScoreWindow> mScoreWindow;
+    void showScore();
+    void toggleScore();
+    // shared metronome tempo (T-080): anyone in the lesson can change it
+    std::unique_ptr<TinCan::TempoShare> mTempoShare;
+    TinCan::TempoShare & getTempoShare();
+    CriticalSection mScoreMsgLock;             // score and tempo messages from the network thread
+    StringArray mScoreMsgFrom, mScoreMsgPayload, mScoreMsgTag;
+    bool mScoreMsgPosted = false;
+    bool mScoreToldThisLesson = false;         // "X is writing in the score" shown once
+    void handleScoreMessages();
     String mLessonTitle;
 
     // lesson recording with everyone's consent, highlights and summaries (T-045, T-046)

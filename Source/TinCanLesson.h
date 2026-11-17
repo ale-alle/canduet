@@ -24,14 +24,14 @@
 //
 // Messages (JSON, WebView2 postMessage):
 //   app  -> page  {"t":"state","me":{…},"conn":"connecting|connected|lost","lesson":{…},
-//                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board"}}      ~10 a second
+//                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board","score"}}      ~10 a second
 //                 {"t":"chat","items":[{"from","text","me","sys"}]}                    new messages
 //                 {"t":"toast","text","ms"}                                           a short notice
 //   page -> app   {"t":"ready"}
 //                 {"t":"gain"|"pan","id","v"}                    a person's volume (0..2) or pan (-1..1)
 //                 {"t":"peer","id","k":"mute|solo|quality|buffer|resetBuffer|remove","v"}
 //                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"recvMute","v"}
-//                 {"t":"tools"} {"t":"board"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
+//                 {"t":"tools"} {"t":"board"} {"t":"score"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
 //                 {"t":"chat","text"}
 //                 {"t":"dock","rect":[x,y,w,h]}                  the Tools gap, as fractions of the page ([] = closed)
@@ -60,12 +60,12 @@ class LessonView : public Component, private Timer, private NoteShare::Listener
 public:
     struct Hooks
     {
-        std::function<void()> toggleBoard, openSetup, openSettings, openEffects, openHelp, leave, shareVideoId;
+        std::function<void()> toggleBoard, toggleScore, openSetup, openSettings, openEffects, openHelp, leave, shareVideoId;
         std::function<void()> recordAsk, recordStop, markStart;
         std::function<void(const String &)> markSave;
         std::function<String()> recordPhase;      // "idle", "asking", "asked" or "recording"
         std::function<double()> recordSeconds;
-        std::function<bool()> boardOpen;
+        std::function<bool()> boardOpen, scoreOpen;
         std::function<void(String & in, String & out)> deviceNames;
         std::function<std::unique_ptr<ToolsPanel>()> makeTools;
         NoteShare * noteShare = nullptr;   // MIDI notes go to the page too, for lesson modules (T-075)
