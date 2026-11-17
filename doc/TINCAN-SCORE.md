@@ -29,6 +29,22 @@ One staff of music that everyone in the lesson writes in together, played on eac
   - Playback follows the metronome's tempo as it changes. It stops at the end, and switches the metronome off again if Play switched it on.
 - **New**, **Open…**, **Save…** (Ctrl+S): New and Open replace the score for everyone (Undo brings it back). Save writes `<title>.score.json`.
 
+## Tools (toolbar, left)
+| Tool | Key | What it does |
+|---|---|---|
+| **Write** | W | Click the staff to write the note length you picked. Clicking a note writes over it: a different length or pitch replaces it. The same length and pitch selects it. |
+| **Select** | V or Esc | Click notes (Shift adds or removes), or drag a box. Click a slur to select it. Delete removes the selection. ↑ ↓ move every selected note. Shift+S sets staccato on all of them. |
+| **Eraser** | X | Click or drag over noteheads to remove them (one note of a chord at a time). Click a slur to remove it. One drag is one Undo. |
+| **Tie** | T | Drag from a note to the very next note of the same pitch, in the same bar or the next. Clicking a tied note unties it. |
+| **Slur** | S | Drag from one note to another. Then, in Select or Slur: drag an end handle to another note, drag the middle handle to make the arc higher or flatter, or drag the slur itself to slide it along the notes. |
+
+- **Staccato** (Shift+S, or the button by the accidentals): toggles staccato on the selected notes. The dot sits on the notehead side, and the note plays half as long.
+- **Slurs:**
+  - A slur belongs to two notes, not to a place on the page. So it stays with its notes when the page reflows or someone else's window is a different size.
+  - It goes on the notehead side (below when both ends have stems up), rises to clear the notes under it, and splits in two across a line break.
+  - Slurred notes play legato (full length). Other notes play slightly detached, so the difference is heard.
+  - Slurs are shared, saved in the file, and undone like everything else.
+
 ## How the music is written down
 - **Ties:**
   - A note longer than what's left of the bar goes on into the next bar as tied notes. Bars are added at the end if needed.
@@ -55,7 +71,7 @@ One staff of music that everyone in the lesson writes in together, played on eac
 - **Spacing:** each line of music grows to fit its highest and lowest notes.
 - **Test sheet:** `score.html#demo=2` in a browser draws 12 bars covering all of the above, in either clef.
 
-**Not in Phase A:** tab, chord symbols and diagrams (Phase B), recording to the click (C), scoring (D), two staves, two voices on one staff, tuplets other than triplets, grace notes, lyrics, dynamics and articulations, and saving to an assignment or the school library.
+**Not in Phase A:** tab, chord symbols and diagrams (Phase B), recording to the click (C), scoring (D), two staves, two voices on one staff, tuplets other than triplets, grace notes, lyrics, dynamics, articulations other than staccato, and saving to an assignment or the school library.
 
 ## How it's built
 | Part | Where |

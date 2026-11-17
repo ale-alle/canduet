@@ -33,6 +33,7 @@
     notes: 6000,
     pitches: 10,     // notes in one chord
     removed: 20000,  // tombstones kept
+    slurs: 1000,
     id: 64,
     author: 80,
     title: 120,
@@ -62,7 +63,8 @@
       meta: { clef: "treble", instrument: "piano", title: "" },
       metaTs: {},     // field -> [ts, by]
       measures: {},   // id -> {id, pos, time, key, ts, by, fieldTs}
-      notes: {},      // id -> {id, m, t, d, p, tie, ts, by}
+      notes: {},      // id -> {id, m, t, d, p, tie, st, ts, by}   (st: staccato)
+      slurs: {},      // id -> {id, a: [measure, tick], b: [measure, tick], h, ts, by, fieldTs}
       removed: {},    // id -> [ts, by]
     };
   }
@@ -126,7 +128,8 @@
   function validNote(n) {
     if (!plainObj(n)) return false;
     const keys = Object.keys(n).sort().join(",");
-    if (keys !== "d,m,p,t,tie") return false;
+    if (keys !== "d,m,p,t,tie" && keys !== "d,m,p,st,t,tie") return false;
+    if (has(n, "st") && n.st !== true) return false;   // staccato: present and true, or absent
     if (!isId(n.m) || !DURS.includes(n.d) || !isInt(n.t, 0, 16 * 1920) || n.t % 20 !== 0) return false;
     if (typeof n.tie !== "boolean") return false;
     if (!Array.isArray(n.p) || n.p.length < 1 || n.p.length > LIMITS.pitches || !n.p.every(validPitch)) return false;
@@ -142,8 +145,15 @@
     removeMeasure: [],
     setNote: ["note"],
     removeNote: [],
+    addSlur: ["slur"],
+    setSlur: ["changes"],
+    removeSlur: [],
     reset: [],
   };
+
+  // a slur end: [measure id, tick]; h: how far the arc bulges, -30..30 (0 = the usual height)
+  const validAnchor = (a) => Array.isArray(a) && a.length === 2 && isId(a[0]) && isInt(a[1], 0, 16 * 1920) && a[1] % 20 === 0;
+  const validBulge = (h) => isInt(h, -30, 30);
 
   // null when the operation is fine, otherwise a short reason
   function validateOp(op) {
@@ -184,6 +194,22 @@
       case "setNote":
         if (!validNote(op.note)) return "note";
         break;
+      case "addSlur": {
+        const sl = op.slur;
+        if (!plainObj(sl) || Object.keys(sl).sort().join(",") !== "a,b,h") return "slur";
+        if (!validAnchor(sl.a) || !validAnchor(sl.b) || !validBulge(sl.h)) return "slur";
+        break;
+      }
+      case "setSlur": {
+        const ch = op.changes;
+        if (!plainObj(ch) || Object.keys(ch).length === 0) return "changes";
+        for (const [k, v] of Object.entries(ch)) {
+          if (k === "a" || k === "b") { if (!validAnchor(v)) return "slur"; }
+          else if (k === "h") { if (!validBulge(v)) return "slur"; }
+          else return "changes";
+        }
+        break;
+      }
     }
     return null;
   }
@@ -273,8 +299,40 @@
         if (!old && Object.keys(state.notes).length >= LIMITS.notes) return false;
         if (state.removed[op.note.m]) return false;  // its measure is gone
         const n = op.note;
-        state.notes[op.id] = { id: op.id, m: n.m, t: n.t, d: n.d, p: n.p.map((x) => x.slice()), tie: n.tie, ts: op.ts, by: op.by };
+        state.notes[op.id] = { id: op.id, m: n.m, t: n.t, d: n.d, p: n.p.map((x) => x.slice()), tie: n.tie, st: !!n.st, ts: op.ts, by: op.by };
         return true;
+      }
+      case "addSlur": {
+        if (state.removed[op.id] || state.slurs[op.id]) return false;
+        if (beforeReset(state, op.ts, op.by)) return false;
+        if (Object.keys(state.slurs).length >= LIMITS.slurs) return false;
+        const sl = op.slur;
+        state.slurs[op.id] = {
+          id: op.id, a: sl.a.slice(), b: sl.b.slice(), h: sl.h, ts: op.ts, by: op.by,
+          fieldTs: { a: [op.ts, op.by], b: [op.ts, op.by], h: [op.ts, op.by] },
+        };
+        return true;
+      }
+      case "setSlur": {
+        const sl = state.slurs[op.id];
+        if (!sl) return false;
+        let changed = false;
+        for (const [k, v] of Object.entries(op.changes)) {
+          const [ts, by] = sl.fieldTs[k];
+          if (later(op.ts, op.by, ts, by)) {
+            sl[k] = Array.isArray(v) ? v.slice() : v;
+            sl.fieldTs[k] = [op.ts, op.by];
+            changed = true;
+          }
+        }
+        return changed;
+      }
+      case "removeSlur": {
+        const had = !!state.slurs[op.id];
+        const knew = !!state.removed[op.id];
+        delete state.slurs[op.id];
+        tombstone(state, op.id, op.ts, op.by);
+        return had || !knew;
       }
       case "removeNote": {
         const had = !!state.notes[op.id];
@@ -293,6 +351,9 @@
         }
         for (const n of Object.values(state.notes)) {
           if (beforeReset(state, n.ts, n.by) || !state.measures[n.m]) delete state.notes[n.id];
+        }
+        for (const sl of Object.values(state.slurs)) {
+          if (beforeReset(state, sl.ts, sl.by)) delete state.slurs[sl.id];
         }
         return true;
       }
@@ -321,6 +382,9 @@
       removeMeasure: (id) => base("removeMeasure", id),
       setNote: (id, note) => ({ ...base("setNote", id || newId("n")), note }),
       removeNote: (id) => base("removeNote", id),
+      addSlur: (a, b, h) => ({ ...base("addSlur", newId("s")), slur: { a, b, h } }),
+      setSlur: (id, changes) => ({ ...base("setSlur", id), changes }),
+      removeSlur: (id) => base("removeSlur", id),
       reset: () => base("reset", newId("r")),
     };
   }
@@ -464,7 +528,7 @@
       for (const n of kept) {
         gap(p, n.t);
         const gi = groupOf(n.t);
-        const item = { rest: false, t: n.t, d: n.d, p: n.p, tie: n.tie, id: n.id, by: n.by };
+        const item = { rest: false, t: n.t, d: n.d, p: n.p, tie: n.tie, st: n.st, id: n.id, by: n.by };
         if (gi >= 0 && isTriplet(n.d)) item.tup = gi;
         items.push(item);
         p = n.t + n.d;
@@ -476,7 +540,19 @@
       out.push({ id: m.id, index: i, time: time.slice(), key, timeChanged, keyChanged, len, beat, items, hidden, tuplets });
       beat += len / PPQ;
     }
-    return { meta: { ...state.meta }, measures: out, totalBeats: beat };
+    // slurs whose two bars both exist, start before end
+    const index = {};
+    out.forEach((m) => { index[m.id] = m.index; });
+    const slurs = [];
+    for (const sl of Object.values(state.slurs)) {
+      if (!(sl.a[0] in index) || !(sl.b[0] in index)) continue;
+      let a = { mi: index[sl.a[0]], t: sl.a[1] }, b = { mi: index[sl.b[0]], t: sl.b[1] };
+      if (b.mi < a.mi || (b.mi === a.mi && b.t < a.t)) [a, b] = [b, a];
+      if (a.t >= out[a.mi].len || b.t >= out[b.mi].len) continue;   // the bar got shorter
+      slurs.push({ id: sl.id, a, b, h: sl.h, by: sl.by });
+    }
+    slurs.sort((x, y) => (x.id < y.id ? -1 : 1));
+    return { meta: { ...state.meta }, measures: out, totalBeats: beat, slurs };
   }
 
   // Note events for playback, in quarter-note beats from the start: {beat, len, midi}. Tied notes
@@ -493,12 +569,24 @@
           const midi = midiOf(p);
           const prev = open[midi];
           if (prev && Math.abs(prev.beat + prev.len - beat) < 1e-6) prev.len += len;
-          else events.push((open[midi] = { beat, len, midi }));
+          else events.push((open[midi] = { beat, len, midi, st: !!it.st }));
           if (!it.tie) delete open[midi];
         }
       }
     }
+    // under a slur: legato
+    const at = (x) => v.measures[x.mi].beat + x.t / PPQ;
+    const ranges = (v.slurs || []).map((sl) => [at(sl.a) - 1e-6, at(sl.b) + 1e-6]);
+    for (const e of events) e.legato = ranges.some(([a, b]) => e.beat >= a && e.beat <= b);
     return events.sort((a, b) => a.beat - b.beat || a.midi - b.midi);
+  }
+
+  // how long a note actually sounds, in beats: staccato half, slurred notes their full length,
+  // others a little detached (so legato can be heard)
+  function soundingLength(e) {
+    if (e.st) return Math.min(e.len * 0.5, 0.5);
+    if (e.legato) return e.len;
+    return Math.max(e.len - Math.min(0.08, e.len * 0.12), e.len * 0.85);
   }
 
   // ---------------------------------------------------------------------------
@@ -522,10 +610,20 @@
       }
     }
     for (const n of Object.values(state.notes)) {
-      ops.push(op("setNote", n.id, n.by, n.ts, { note: { m: n.m, t: n.t, d: n.d, p: n.p, tie: n.tie } }));
+      const note = { m: n.m, t: n.t, d: n.d, p: n.p, tie: n.tie };
+      if (n.st) note.st = true;
+      ops.push(op("setNote", n.id, n.by, n.ts, { note }));
+    }
+    for (const sl of Object.values(state.slurs)) {
+      ops.push(op("addSlur", sl.id, sl.by, sl.ts, { slur: { a: sl.a, b: sl.b, h: sl.h } }));
+      for (const k of ["a", "b", "h"]) {
+        const [ts, by] = sl.fieldTs[k];
+        if (ts !== sl.ts || by !== sl.by) ops.push(op("setSlur", sl.id, by, ts, { changes: { [k]: sl[k] } }));
+      }
     }
     for (const [id, [ts, by]] of Object.entries(state.removed)) {
-      ops.push(op(id.startsWith("m.") ? "removeMeasure" : "removeNote", id, by, ts, {}));
+      const type = id.startsWith("m.") ? "removeMeasure" : id.startsWith("s.") ? "removeSlur" : "removeNote";
+      ops.push(op(type, id, by, ts, {}));
     }
     return ops;
   }
@@ -539,7 +637,11 @@
     }
     for (const id of Object.keys(state.notes).sort()) {
       const n = state.notes[id];
-      parts.push(id + n.ts + n.by + JSON.stringify([n.m, n.t, n.d, n.p, n.tie]));
+      parts.push(id + n.ts + n.by + JSON.stringify([n.m, n.t, n.d, n.p, n.tie, n.st]));
+    }
+    for (const id of Object.keys(state.slurs).sort()) {
+      const sl = state.slurs[id];
+      parts.push(id + JSON.stringify([sl.a, sl.b, sl.h]));
     }
     const s = parts.join("|");
     let h1 = 0x811c9dc5, h2 = 0x01000193;
@@ -564,8 +666,10 @@
         .sort((a, b) => (a.pos < b.pos ? -1 : a.pos > b.pos ? 1 : 0) || (a.id < b.id ? -1 : 1))
         .map((m) => ({
           time: m.time, key: m.key,
-          notes: v.measures.find((x) => x.id === m.id).items.filter((i) => !i.rest).map((i) => ({ t: i.t, d: i.d, p: i.p, tie: i.tie })),
+          notes: v.measures.find((x) => x.id === m.id).items.filter((i) => !i.rest)
+            .map((i) => (i.st ? { t: i.t, d: i.d, p: i.p, tie: i.tie, st: true } : { t: i.t, d: i.d, p: i.p, tie: i.tie })),
         })),
+      slurs: v.slurs.map((sl) => ({ a: [sl.a.mi, sl.a.t], b: [sl.b.mi, sl.b.t], h: sl.h })),
     };
   }
 
@@ -584,16 +688,28 @@
     if (Object.keys(meta).length) ops.push(session.setMeta(meta));
     let pos = "";
     let count = 0;
+    const ids = [];
     for (const fm of file.measures) {
       if (!plainObj(fm) || !validTime(fm.time) || !validKey(fm.key) || !Array.isArray(fm.notes)) return null;
       pos = posBetween(pos, "");
       const add = session.addMeasure(pos, fm.time, fm.key);
       ops.push(add);
+      ids.push(add.id);
       for (const fn of fm.notes) {
         if (++count > LIMITS.notes) return null;
         const note = plainObj(fn) ? { m: add.id, t: fn.t, d: fn.d, p: fn.p, tie: !!fn.tie } : null;
+        if (note && fn.st === true) note.st = true;
         if (!validNote(note)) return null;
         ops.push(session.setNote(null, note));
+      }
+    }
+    if (Array.isArray(file.slurs)) {
+      for (const fs of file.slurs.slice(0, LIMITS.slurs)) {
+        if (!plainObj(fs) || !Array.isArray(fs.a) || !Array.isArray(fs.b)) return null;
+        const a = [ids[fs.a[0]], fs.a[1]], b = [ids[fs.b[0]], fs.b[1]];
+        const op = session.addSlur(a, b, fs.h);
+        if (validateOp(op) !== null) return null;
+        ops.push(op);
       }
     }
     return ops;
@@ -603,6 +719,6 @@
     VERSION, PPQ, LIMITS, DURS, BASE_DURS, TRIPLET_DURS, CLEFS, INSTRUMENTS, isTriplet, isCompound,
     emptyState, validateOp, applyOp, createSession, later,
     midiOf, spell, keyAlter, validPitch, posBetween, measureTicks, fillRests, fillTripletRests, notePieces, tripletStart,
-    view, playEvents, snapshotOps, digest, toFile, opsFromFile,
+    view, playEvents, soundingLength, snapshotOps, digest, toFile, opsFromFile,
   };
 });

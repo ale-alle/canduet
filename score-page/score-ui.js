@@ -53,6 +53,29 @@
   const tripletOk = () => baseDur === 480 || baseDur === 240 || baseDur === 120;
   const curDur = () => (triplet && tripletOk() ? (baseDur * 2) / 3 : dotted ? baseDur * 1.5 : baseDur);
 
+  // tools: write, select, erase, tie, slur
+  let mode = "write";
+  const multi = new Set();   // notes selected besides sel (select tool)
+  let selSlur = null;        // id of the selected slur
+  let slurPreview = null;    // {id, a, b, h} while a slur is being drawn or dragged
+  let drag = null;           // what the pointer is doing (see bindPointer)
+
+  // a note's data for setNote, keeping its staccato unless `over` says otherwise
+  function nd(n, over = {}) {
+    const o = { m: n.m, t: n.t, d: n.d, p: n.p, tie: n.tie, ...over };
+    const st = "st" in over ? over.st : n.st;
+    delete o.st;
+    if (st) o.st = true;
+    return o;
+  }
+  // every selected note id (the main selection and the others)
+  function selectedIds() {
+    const ids = new Set(multi);
+    if (sel && state.notes[sel.id]) ids.add(sel.id);
+    for (const id of ids) if (!state.notes[id]) ids.delete(id);
+    return [...ids];
+  }
+
   // ---------------------------------------------------------------------------
   // applying changes (mine and everyone's)
   // ---------------------------------------------------------------------------
@@ -80,19 +103,31 @@
         const add = session.addMeasure(m.pos, m.time, m.key);
         const out = [add];
         for (const n of Object.values(state.notes)) {
-          if (n.m === m.id) out.push(session.setNote(null, { m: add.id, t: n.t, d: n.d, p: n.p, tie: n.tie }));
+          if (n.m === m.id) out.push(session.setNote(null, nd(n, { m: add.id })));
         }
         return out;
       }
       case "setNote": {
         const n = state.notes[op.id];
         if (!n) return [session.removeNote(op.id)];
-        return [session.setNote(op.id, { m: n.m, t: n.t, d: n.d, p: n.p, tie: n.tie })];
+        return [session.setNote(op.id, nd(n))];
       }
       case "removeNote": {
         const n = state.notes[op.id];
         if (!n) return [];
-        return [session.setNote(null, { m: n.m, t: n.t, d: n.d, p: n.p, tie: n.tie })];
+        return [session.setNote(null, nd(n))];
+      }
+      case "addSlur": return [session.removeSlur(op.id)];
+      case "setSlur": {
+        const sl = state.slurs[op.id];
+        if (!sl) return [];
+        const back = {};
+        for (const k of Object.keys(op.changes)) back[k] = sl[k];
+        return [session.setSlur(op.id, back)];
+      }
+      case "removeSlur": {
+        const sl = state.slurs[op.id];
+        return sl ? [session.addSlur(sl.a, sl.b, sl.h)] : [];
       }
       case "reset": {
         const ops = S.opsFromFile(session, S.toFile(state));
@@ -112,7 +147,10 @@
       S.applyOp(state, op);
     }
     // the inverse was made with timestamps from before the action; give it fresh ones when used
-    if (!opts.noUndo) {
+    if (opts.merge && undoStack.length) {
+      undoStack[undoStack.length - 1] = inverse.concat(undoStack[undoStack.length - 1]);
+      redoStack = [];
+    } else if (!opts.noUndo) {
       undoStack.push(inverse);
       if (undoStack.length > 200) undoStack.shift();
       if (!opts.keepRedo) redoStack = [];
@@ -297,12 +335,13 @@
     lastView = v;
     const scoreEl = $("#score");
     const overlay = $("#overlay");
-    for (const el of Array.from(scoreEl.children)) if (el !== overlay) el.remove();
+    const slurLayer = $("#slurs");
+    for (const el of Array.from(scoreEl.children)) if (el !== overlay && el !== slurLayer) el.remove();
     $("#empty").hidden = v.measures.length > 0;
     if (!cursorValid(v)) cursor = v.measures.length ? { m: v.measures[0].id, t: 0 } : null;
     syncControls(v);
     layout = [];
-    if (!VF || v.measures.length === 0) { drawOverlay(); return; }
+    if (!VF || v.measures.length === 0) { slurLayer.innerHTML = ""; drawOverlay(); return; }
 
     const width = Math.max(320, scoreEl.clientWidth || 800);
     const clef = state.meta.clef;
@@ -369,7 +408,10 @@
 
     const svg = ctx.svg;
     svg.setAttribute("aria-hidden", "true");
-    scoreEl.insertBefore(svg, overlay);
+    scoreEl.insertBefore(svg, slurLayer);
+    slurLayer.setAttribute("width", width);
+    slurLayer.setAttribute("height", acc + 20);
+    drawSlurs();
     drawOverlay();
   }
 
@@ -403,7 +445,7 @@
           inForce[k] = p[2];
         });
         if (dots) VF.Dot.buildAndAttach([sn], { all: true });
-        const selected = sel && sel.id === it.id;
+        const selected = (sel && sel.id === it.id) || multi.has(it.id);
         const fresh = remoteFresh.has(it.id) && now - remoteFresh.get(it.id) < 4000;
         if (selected) sn.setStyle({ fillStyle: "#e5484d", strokeStyle: "#e5484d" });
         else if (fresh) sn.setStyle({ fillStyle: "#1d7fd0", strokeStyle: "#1d7fd0" });
@@ -452,6 +494,15 @@
       run.push(n); runKey = key;
     }
     flush();
+
+    // staccato dots go on the notehead side (after the beams, which can turn stems)
+    for (const n of notes) {
+      if (n.item.rest || !n.item.st) continue;
+      try {
+        const up = n.sn.getStemDirection() === 1;
+        n.sn.addModifier(new VF.Articulation("a.").setPosition(up ? VF.Modifier.Position.BELOW : VF.Modifier.Position.ABOVE), 0);
+      } catch (e) { /* drawn without */ }
+    }
 
     const fmt = new VF.Formatter();
     fmt.joinVoices([voice]);
@@ -602,6 +653,16 @@
         followPlayhead(g);
       }
     }
+    // the selection box, and the tie tool's line while dragging
+    if (drag && drag.type === "box") {
+      add("boxsel", { left: Math.min(drag.x0, drag.x1) + "px", top: Math.min(drag.y0, drag.y1) + "px",
+                      width: Math.abs(drag.x1 - drag.x0) + "px", height: Math.abs(drag.y1 - drag.y0) + "px" });
+    }
+    if (drag && drag.type === "tie" && drag.moved) {
+      const len = Math.hypot(drag.x1 - drag.x0, drag.y1 - drag.y0);
+      const ang = Math.atan2(drag.y1 - drag.y0, drag.x1 - drag.x0);
+      add("rubber", { left: drag.x0 + "px", top: drag.y0 + "px", width: len + "px", transform: `rotate(${ang}rad)` });
+    }
   }
 
   let lastScrollRow = -1;
@@ -726,7 +787,7 @@
   function pushShortened(ops, m, n, end) {
     const { pieces } = S.notePieces(n.t, end - n.t, m.len, m.time);
     pieces.forEach((pc, i) => {
-      const note = { m: n.m, t: pc.t, d: pc.d, p: n.p, tie: i < pieces.length - 1 };
+      const note = nd(n, { t: pc.t, d: pc.d, tie: i < pieces.length - 1 });
       ops.push(i === 0 ? session.setNote(n.id, note) : session.setNote(null, note));
     });
   }
@@ -813,7 +874,7 @@
     const last = chain[chain.length - 1];
     if (!last || !cursor || S.isTriplet(curDur())) return false;
     const pitches = last.p;
-    const extra = [session.setNote(last.id, { m: last.m, t: last.t, d: last.d, p: last.p, tie: true })];
+    const extra = [session.setNote(last.id, nd(last, { tie: true }))];
     writeAt(cursor.m, cursor.t, pitches, false, extra);
     return true;
   }
@@ -825,7 +886,7 @@
     for (const x of ids) {
       const n = state.notes[x];
       if (!n || n.p.some((q) => S.midiOf(q) === S.midiOf(p)) || n.p.length >= S.LIMITS.pitches) continue;
-      ops.push(session.setNote(x, { m: n.m, t: n.t, d: n.d, p: n.p.concat([p]), tie: n.tie }));
+      ops.push(session.setNote(x, nd(n, { p: n.p.concat([p]) })));
     }
     if (!ops.length) return;
     act(ops);
@@ -855,7 +916,7 @@
       const c = state.notes[id];
       const cp = c.p.map((q) => (S.midiOf(q) === oldMidi ? np : q));
       if (new Set(cp.map(S.midiOf)).size !== cp.length) continue;
-      const op = session.setNote(id, { m: c.m, t: c.t, d: c.d, p: cp, tie: c.tie });
+      const op = session.setNote(id, nd(c, { p: cp }));
       if (S.validateOp(op) === null) ops.push(op);
     }
     if (ops.length) act(ops);
@@ -910,6 +971,19 @@
   }
 
   function transposeSelected(semis) {
+    const ids = selectedIds();
+    if (ids.length > 1) {
+      const ops = [];
+      for (const id of ids) {
+        const n = state.notes[id];
+        const m = measureOf(n.m);
+        const np = n.p.map((q) => S.spell(S.midiOf(q) + semis, m ? m.key : 0));
+        if (np.some((q) => S.midiOf(q) < 12 || S.midiOf(q) > 115)) return true;
+        ops.push(session.setNote(id, nd(n, { p: np })));
+      }
+      act(ops);
+      return true;
+    }
     const m = selectedNote() && measureOf(selectedNote().m);
     return changeSelected((p) => {
       const midi = S.midiOf(p) + semis;
@@ -934,18 +1008,25 @@
     const d = fitDur(curDur(), m.len - n.t);
     if (!d || d === n.d) return true;
     const ops = d > n.d ? clearOps(m, n.t + n.d, d - n.d, null).filter((o) => o.id !== n.id) : [];
-    ops.push(session.setNote(n.id, { m: n.m, t: n.t, d, p: n.p, tie: n.tie }));
+    ops.push(session.setNote(n.id, nd(n, { d })));
     act(ops);
     return true;
   }
 
   function deleteSelected() {
+    if (selSlur && state.slurs[selSlur]) { act([session.removeSlur(selSlur)]); selSlur = null; return; }
+    const ids = selectedIds();
+    if (ids.length > 1) {
+      act(ids.map((id) => session.removeNote(id)));
+      multi.clear(); sel = null;
+      return;
+    }
     const n = selectedNote();
     if (!n) return;
     const ps = sortedPitches(n);
     if (ps.length > 1) {
       const rest = ps.filter((_, i) => i !== Math.min(sel.pi, ps.length - 1));
-      act([session.setNote(n.id, { m: n.m, t: n.t, d: n.d, p: rest, tie: n.tie })]);
+      act([session.setNote(n.id, nd(n, { p: rest }))]);
       sel = { id: n.id, pi: 0 };
     } else {
       act([session.removeNote(n.id)]);
@@ -1018,7 +1099,7 @@
     const shift = state.meta.instrument === "piano" ? 0 : -12;
     const evs = S.playEvents(lastView)
       .filter((e) => e.beat >= from.beat - 1e-9)
-      .map((e) => [+(e.beat - from.beat).toFixed(6), +e.len.toFixed(6), e.midi + shift])
+      .map((e) => [+(e.beat - from.beat).toFixed(6), +S.soundingLength(e).toFixed(6), e.midi + shift])
       .filter((e) => e[2] >= 0 && e[2] <= 127);
     const quarters = (from.time[0] * 4) / from.time[1];
     send({
@@ -1074,8 +1155,12 @@
     $("#key").value = String(m ? m.key : 0);
     $("#undo").disabled = undoStack.length === 0;
     $("#redo").disabled = redoStack.length === 0;
-    $("#del").disabled = !selectedNote();
-    $("#tie").disabled = !selectedNote();
+    $("#del").disabled = !selectedNote() && !(selSlur && state.slurs[selSlur]);
+    document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+    document.body.dataset.mode = mode;
+    const ids = selectedIds();
+    $("#stacc").disabled = ids.length === 0;
+    $("#stacc").setAttribute("aria-pressed", String(ids.length > 0 && ids.every((id) => state.notes[id].st)));
     $("#delBar").disabled = !m;
     document.querySelectorAll("[data-alt]").forEach((b) => (b.disabled = !selectedNote()));
   }
@@ -1093,6 +1178,16 @@
 
   function fixSelection() {
     if (sel && !state.notes[sel.id]) sel = null;
+    for (const id of multi) if (!state.notes[id]) multi.delete(id);
+    if (selSlur && !state.slurs[selSlur]) selSlur = null;
+  }
+
+  function setMode(m) {
+    mode = m;
+    drag = null;
+    slurPreview = null;
+    if (m === "write") { multi.clear(); selSlur = null; }
+    render();
   }
 
   function bind() {
@@ -1103,7 +1198,8 @@
     $("#dot").addEventListener("click", () => { dotted = !dotted; if (dotted) triplet = false; setDurationSelected(); render(); });
     $("#triplet").addEventListener("click", () => { triplet = !triplet; if (triplet) dotted = false; render(); });
     $("#rest").addEventListener("click", () => { restMode = !restMode; render(); });
-    $("#tie").addEventListener("click", toggleTie);
+    document.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+    $("#stacc").addEventListener("click", toggleStaccato);
     document.querySelectorAll("[data-alt]").forEach((b) => b.addEventListener("click", () => setAlterSelected(+b.dataset.alt)));
     $("#del").addEventListener("click", deleteSelected);
     $("#undo").addEventListener("click", undo);
@@ -1206,41 +1302,446 @@
       render();
     });
 
-    const scoreEl = $("#score");
-    scoreEl.addEventListener("mousemove", (e) => {
-      const h = hit(e);
-      if (!h || (h.near && !e.shiftKey)) { drawOverlay(); return; }
-      drawOverlay({ geo: h.geo, t: h.tick, p: h.p, rest: restMode });
-    });
-    scoreEl.addEventListener("mouseleave", () => drawOverlay());
-    scoreEl.addEventListener("mousedown", (e) => {
-      if (e.button !== 0) return;
-      scoreEl.focus();
-      const h = hit(e);
-      if (!h) return;
-      e.preventDefault();
-      if (h.near && !e.shiftKey) {
-        sel = { id: h.near.g.item.id, pi: h.near.pi };
-        cursor = { m: h.geo.id, t: h.near.g.item.t };
-        lastWritten = sel.id;
-        render();
-        return;
-      }
-      if (e.shiftKey) {
-        const at = h.geo.m.items.find((it) => !it.rest && it.t === h.tick) || (h.near && h.near.g.item);
-        if (at) { addToChord(at.id, h.p); return; }
-      }
-      writeAt(h.geo.id, h.tick, [h.p], restMode);
-    });
+    bindPointer($("#score"));
 
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", render);
   }
 
+  // staccato on (or off, when they all have it) for the selected notes
+  function toggleStaccato() {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    const on = !ids.every((id) => state.notes[id].st);
+    act(ids.map((id) => session.setNote(id, nd(state.notes[id], { st: on }))));
+  }
+
   function toggleTie() {
     const n = selectedNote();
     if (!n) return;
-    act([session.setNote(n.id, { m: n.m, t: n.t, d: n.d, p: n.p, tie: !n.tie })]);
+    act([session.setNote(n.id, nd(n, { tie: !n.tie }))]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // tools: write, select, eraser, tie, slur
+  // ---------------------------------------------------------------------------
+  const scoreXY = (ev) => {
+    const r = $("#score").getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  };
+
+  let flashTimer = null;
+  function flash(text) {
+    $("#status").textContent = text;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(updateStatus, 3500);
+  }
+
+  // the note or rest whose start is nearest the pointer, in the bar under it: {m, t}
+  function anchorAt(ev) {
+    const h = hit(ev);
+    if (!h) return null;
+    const { x } = scoreXY(ev);
+    let best = null, bd = Infinity;
+    for (const g of h.geo.notes) {
+      const d = Math.abs(g.x + 6 - x);
+      if (d < bd) { bd = d; best = g; }
+    }
+    return best ? { m: h.geo.id, t: best.item.t } : null;
+  }
+
+  // the drawn note (or rest) at {m, t}: {geo, g}
+  function drawnAt(m, t) {
+    const geo = layout.find((l) => l.id === m);
+    if (!geo) return null;
+    let best = null, bd = Infinity;
+    for (const g of geo.notes) {
+      const d = Math.abs(g.item.t - t);
+      if (d < bd) { bd = d; best = g; }
+    }
+    return best ? { geo, g: best } : null;
+  }
+
+  const stemDir = (g) => {
+    if (g.item.rest) return 1;
+    try { return g.sn.getStemDirection(); } catch (e) { return 1; }
+  };
+  const before = (a, b) => {
+    const ia = lastView.measures.findIndex((m) => m.id === a.m), ib = lastView.measures.findIndex((m) => m.id === b.m);
+    return ia < ib || (ia === ib && a.t <= b.t);
+  };
+
+  // Where a slur is drawn: one segment, or two when it crosses a line break. It goes on the
+  // notehead side: below when both ends have stems up, otherwise above. Its height clears the
+  // notes under it, plus the height people gave it (h, 4 px a step).
+  function slurShape(sl) {
+    let a = sl.a, b = sl.b;
+    if (!before(a, b)) [a, b] = [b, a];
+    const A = drawnAt(a.m, a.t), B = drawnAt(b.m, b.t);
+    if (!A || !B) return null;
+    const dir = stemDir(A.g) === 1 && stemDir(B.g) === 1 ? 1 : -1;   // 1: below, -1: above
+    const yOf = (D) => {
+      if (D.g.item.rest || !D.g.ys.length) return D.geo.stave.getYForLine(dir > 0 ? 4 : 0) + dir * 10;
+      return dir > 0 ? Math.max(...D.g.ys) + 9 : Math.min(...D.g.ys) - 9;
+    };
+    const xa = A.g.x + 6, xb = B.g.x + 6, ya = yOf(A), yb = yOf(B);
+    const segs = [];
+    if (A.geo.row === B.geo.row) segs.push({ x1: xa, y1: ya, x2: xb, y2: yb, row: A.geo.row });
+    else {
+      const rowA = layout.filter((l) => l.row === A.geo.row), rowB = layout.filter((l) => l.row === B.geo.row);
+      const endX = Math.max(...rowA.map((l) => l.x + l.w)) - 4;
+      const startX = Math.min(...rowB.map((l) => l.startX)) - 8;
+      segs.push({ x1: xa, y1: ya, x2: endX, y2: ya, row: A.geo.row, open: "end" });
+      segs.push({ x1: startX, y1: yb, x2: xb, y2: yb, row: B.geo.row, open: "start" });
+    }
+    for (const sg of segs) {
+      // clear every note in between (and its stem when the stem points the slur's way)
+      let need = 0;
+      for (const l of layout) {
+        if (l.row !== sg.row) continue;
+        for (const g of l.notes) {
+          const x = g.x + 6;
+          if (x <= sg.x1 + 1 || x >= sg.x2 - 1 || g.item.rest || !g.ys.length) continue;
+          const base = sg.y1 + ((sg.y2 - sg.y1) * (x - sg.x1)) / Math.max(1, sg.x2 - sg.x1);
+          const stemOurWay = (stemDir(g) === 1) === (dir < 0);
+          const edge = dir < 0 ? Math.min(...g.ys) - (stemOurWay ? 34 : 0) - 6 : Math.max(...g.ys) + (stemOurWay ? 34 : 0) + 6;
+          need = Math.max(need, dir < 0 ? base - edge : edge - base);
+        }
+      }
+      const natural = Math.min(28, 9 + (sg.x2 - sg.x1) * 0.04);
+      sg.bulge = Math.max(3, Math.max(natural, need + 4) + (sl.h || 0) * 4);
+      sg.dir = dir;
+    }
+    return { segs, dir };
+  }
+
+  // the filled crescent of a slur segment, and its centre line (for clicking)
+  function slurPaths(sg) {
+    const k = sg.bulge / 0.75;   // a cubic reaches 3/4 of its control offset
+    const c1x = sg.x1 + (sg.x2 - sg.x1) / 4, c2x = sg.x1 + (3 * (sg.x2 - sg.x1)) / 4;
+    const l1 = sg.y1 + (sg.y2 - sg.y1) / 4, l2 = sg.y1 + (3 * (sg.y2 - sg.y1)) / 4;
+    const o = sg.dir * k, i = sg.dir * (k - 4.2);   // about 3 px thick in the middle
+    const f = (n) => n.toFixed(1);
+    const fill = `M${f(sg.x1)} ${f(sg.y1)} C${f(c1x)} ${f(l1 + o)} ${f(c2x)} ${f(l2 + o)} ${f(sg.x2)} ${f(sg.y2)} ` +
+                 `C${f(c2x)} ${f(l2 + i)} ${f(c1x)} ${f(l1 + i)} ${f(sg.x1)} ${f(sg.y1)}Z`;
+    const line = `M${f(sg.x1)} ${f(sg.y1)} C${f(c1x)} ${f(l1 + o)} ${f(c2x)} ${f(l2 + o)} ${f(sg.x2)} ${f(sg.y2)}`;
+    const apex = { x: (sg.x1 + sg.x2) / 2, y: (sg.y1 + sg.y2) / 2 + sg.dir * sg.bulge };
+    return { fill, line, apex };
+  }
+
+  // the view's slurs with measure ids, as {id, a: {m, t}, b: {m, t}, h}
+  function slursById() {
+    if (!lastView) return [];
+    const ms = lastView.measures;
+    return lastView.slurs.map((sl) => ({ id: sl.id, a: { m: ms[sl.a.mi].id, t: sl.a.t }, b: { m: ms[sl.b.mi].id, t: sl.b.t }, h: sl.h }));
+  }
+
+  function drawSlurs() {
+    const layer = $("#slurs");
+    layer.innerHTML = "";
+    if (!lastView || !layout.length) return;
+    const NS = "http://www.w3.org/2000/svg";
+    const el = (name, attrs) => {
+      const e = document.createElementNS(NS, name);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+      layer.appendChild(e);
+      return e;
+    };
+    const list = slursById().map((sl) => (slurPreview && slurPreview.id === sl.id ? { ...slurPreview } : sl));
+    if (slurPreview && slurPreview.id === "new") list.push({ ...slurPreview });
+    for (const sl of list) {
+      const shape = slurShape(sl);
+      if (!shape) continue;
+      const editing = slurPreview && slurPreview.id === sl.id;
+      const selected = sl.id === selSlur;
+      shape.segs.forEach((sg) => {
+        const p = slurPaths(sg);
+        el("path", { d: p.fill, class: "arc" + (editing ? " preview" : selected ? " sel" : "") });
+        if (sl.id !== "new") el("path", { d: p.line, class: "hit", "data-slur": sl.id });
+      });
+      if ((selected || editing) && sl.id !== "new") {
+        const first = shape.segs[0], last = shape.segs[shape.segs.length - 1];
+        const longest = shape.segs.reduce((x, y) => (y.x2 - y.x1 > x.x2 - x.x1 ? y : x));
+        const apex = slurPaths(longest).apex;
+        el("circle", { cx: first.x1, cy: first.y1, r: 5, class: "handle", "data-slur": sl.id, "data-handle": "a" });
+        el("circle", { cx: last.x2, cy: last.y2, r: 5, class: "handle", "data-slur": sl.id, "data-handle": "b" });
+        el("circle", { cx: apex.x, cy: apex.y, r: 5, class: "handle", "data-slur": sl.id, "data-handle": "h" });
+      }
+    }
+  }
+
+  // all notes and rests in order, as anchors (for sliding a whole slur along)
+  function allAnchors() {
+    const out = [];
+    for (const m of lastView.measures) for (const it of m.items) out.push({ m: m.id, t: it.t });
+    return out;
+  }
+  const anchorIndex = (list, a) => {
+    let best = 0, bd = Infinity;
+    list.forEach((x, i) => {
+      if (x.m !== a.m) return;
+      const d = Math.abs(x.t - a.t);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  };
+
+  // eraser: the notehead under the pointer (one note of a chord, or the whole note)
+  function eraseAt(ev) {
+    const h = hit(ev);
+    if (!h || !h.near) return;
+    const it = h.near.g.item;
+    const key = it.id + ":" + h.near.pi;
+    if (drag.done.has(key)) return;
+    drag.done.add(key);
+    const n = state.notes[it.id];
+    if (!n) return;
+    const ps = sortedPitches(n);
+    const op = ps.length > 1 ? session.setNote(n.id, nd(n, { p: ps.filter((_, i) => i !== h.near.pi) })) : session.removeNote(n.id);
+    act([op], { merge: !drag.first });
+    drag.first = false;
+    if (sel && sel.id === n.id) sel = null;
+    multi.delete(n.id);
+  }
+
+  // tie tool: may `x` be tied to `y`? y must start where x ends (in the next bar if x ends the bar),
+  // with a pitch in common
+  function canTie(x, y) {
+    const ms = lastView.measures;
+    const mx = ms.find((m) => m.items.includes(x)), my = ms.find((m) => m.items.includes(y));
+    if (!mx || !my) return false;
+    const next = (mx === my && y.t === x.t + x.d) || (my.index === mx.index + 1 && x.t + x.d === mx.len && y.t === 0);
+    return next && x.p.some((q) => y.p.some((r) => S.midiOf(q) === S.midiOf(r)));
+  }
+
+  function onSlurDown(e) {
+    const id = e.target.dataset && e.target.dataset.slur;
+    if (!id || e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    $("#score").focus();
+    if (mode === "erase") {
+      act([session.removeSlur(id)]);
+      if (selSlur === id) selSlur = null;
+      return;
+    }
+    if (mode !== "select" && mode !== "slur") return;
+    selSlur = id;
+    sel = null;
+    multi.clear();
+    const orig = slursById().find((x) => x.id === id);
+    if (!orig) return;
+    const shape = slurShape(orig);
+    drag = { type: "slur-edit", id, handle: e.target.dataset.handle || "body", start: scoreXY(e), from: anchorAt(e), orig, dir: shape ? shape.dir : -1 };
+    $("#score").setPointerCapture(e.pointerId);
+    render();
+  }
+
+  function onDown(e) {
+    if (e.button !== 0) return;
+    const scoreEl = $("#score");
+    scoreEl.focus();
+    const h = hit(e);
+    const pt = scoreXY(e);
+    if (mode === "write") {
+      if (!h) return;
+      e.preventDefault();
+      if (e.shiftKey) {
+        const at = h.geo.m.items.find((it) => !it.rest && it.t === h.tick) || (h.near && h.near.g.item);
+        if (at) { addToChord(at.id, h.p); return; }
+      }
+      if (h.near) {
+        // clicking a note: the same length and pitch selects it; anything else writes over it
+        const it = h.near.g.item;
+        if (it.d === curDur() && it.p.some((q) => S.midiOf(q) === S.midiOf(h.p)) && !restMode) {
+          sel = { id: it.id, pi: h.near.pi };
+          cursor = { m: h.geo.id, t: it.t };
+          lastWritten = it.id; lastChain = [it.id];
+          render();
+          return;
+        }
+        writeAt(h.geo.id, it.t, [h.p], restMode);
+        return;
+      }
+      writeAt(h.geo.id, h.tick, [h.p], restMode);
+      return;
+    }
+    e.preventDefault();
+    if (mode === "select") {
+      selSlur = null;
+      if (h && h.near) {
+        const id = h.near.g.item.id;
+        if (e.shiftKey) {
+          if (multi.has(id)) multi.delete(id);
+          else if (sel && sel.id === id) sel = null;
+          else { if (sel) multi.add(sel.id); sel = { id, pi: h.near.pi }; }
+        } else { multi.clear(); sel = { id, pi: h.near.pi }; }
+        cursor = { m: h.geo.id, t: h.near.g.item.t };
+        lastWritten = id; lastChain = [id];
+        render();
+        return;
+      }
+      if (!e.shiftKey) { multi.clear(); sel = null; }
+      if (h) cursor = { m: h.geo.id, t: h.tick };
+      drag = { type: "box", x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y };
+      scoreEl.setPointerCapture(e.pointerId);
+      render();
+      return;
+    }
+    if (mode === "erase") {
+      drag = { type: "erase", done: new Set(), first: true };
+      scoreEl.setPointerCapture(e.pointerId);
+      eraseAt(e);
+      return;
+    }
+    if (mode === "tie") {
+      if (!h || !h.near) { flash("Start the tie on a note."); return; }
+      const g = h.near.g;
+      drag = { type: "tie", from: g.item, x0: g.x + 6, y0: g.ys[h.near.pi], x1: pt.x, y1: pt.y, moved: false };
+      scoreEl.setPointerCapture(e.pointerId);
+      drawOverlay();
+      return;
+    }
+    if (mode === "slur") {
+      const a = anchorAt(e);
+      if (!a) return;
+      selSlur = null;
+      drag = { type: "slur-new", a };
+      slurPreview = { id: "new", a, b: a, h: 0 };
+      scoreEl.setPointerCapture(e.pointerId);
+      drawSlurs();
+    }
+  }
+
+  function onMove(e) {
+    const pt = scoreXY(e);
+    if (!drag) {
+      if (mode !== "write") return;
+      const h = hit(e);
+      if (!h) { drawOverlay(); return; }
+      const t = h.near && !e.shiftKey ? h.near.g.item.t : h.tick;
+      drawOverlay({ geo: h.geo, t, p: h.p, rest: restMode });
+      return;
+    }
+    if (drag.type === "box") { drag.x1 = pt.x; drag.y1 = pt.y; drawOverlay(); return; }
+    if (drag.type === "erase") { eraseAt(e); return; }
+    if (drag.type === "tie") {
+      drag.x1 = pt.x; drag.y1 = pt.y;
+      if (Math.hypot(drag.x1 - drag.x0, drag.y1 - drag.y0) > 6) drag.moved = true;
+      drawOverlay();
+      return;
+    }
+    if (drag.type === "slur-new") {
+      const b = anchorAt(e);
+      if (b) { slurPreview = { id: "new", a: drag.a, b, h: 0 }; drawSlurs(); }
+      return;
+    }
+    if (drag.type === "slur-edit") {
+      const o = drag.orig;
+      let next = { id: o.id, a: o.a, b: o.b, h: o.h };
+      if (drag.handle === "a" || drag.handle === "b") {
+        const at = anchorAt(e);
+        if (at) next[drag.handle] = at;
+      } else if (drag.handle === "h") {
+        const dy = pt.y - drag.start.y;
+        next.h = Math.max(-30, Math.min(30, Math.round(o.h + (drag.dir * dy) / 4)));
+      } else {
+        const at = anchorAt(e);
+        if (at && drag.from) {
+          const list = allAnchors();
+          const delta = anchorIndex(list, at) - anchorIndex(list, drag.from);
+          const ia = anchorIndex(list, o.a), ib = anchorIndex(list, o.b);
+          const clamp = (i) => Math.max(0, Math.min(list.length - 1, i));
+          const shift = Math.max(-Math.min(ia, ib), Math.min(list.length - 1 - Math.max(ia, ib), delta));
+          next.a = list[clamp(ia + shift)];
+          next.b = list[clamp(ib + shift)];
+        }
+      }
+      slurPreview = next;
+      drawSlurs();
+    }
+  }
+
+  function onUp(e) {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.type === "box") {
+      const x0 = Math.min(d.x0, d.x1), x1 = Math.max(d.x0, d.x1), y0 = Math.min(d.y0, d.y1), y1 = Math.max(d.y0, d.y1);
+      if (x1 - x0 > 4 || y1 - y0 > 4) {
+        for (const l of layout) for (const g of l.notes) {
+          const x = g.x + 6;
+          if (g.item.rest || x < x0 || x > x1 || !g.ys.some((y) => y >= y0 && y <= y1)) continue;
+          if (!sel) sel = { id: g.item.id, pi: 0 }; else if (sel.id !== g.item.id) multi.add(g.item.id);
+        }
+      }
+      render();
+      return;
+    }
+    if (d.type === "tie") {
+      const from = state.notes[d.from.id];
+      if (!d.moved) {
+        // a click: a tied note comes untied
+        if (from && from.tie) act([session.setNote(from.id, nd(from, { tie: false }))]);
+        else flash("Drag from this note to the next one of the same pitch.");
+        drawOverlay();
+        return;
+      }
+      const h = hit(e);
+      const to = h && h.near ? h.near.g.item : null;
+      if (to && to.id !== d.from.id) {
+        let x = d.from, y = to;
+        if (!before({ m: lastView.measures.find((m) => m.items.includes(x)).id, t: x.t }, { m: h.geo.id, t: y.t })) [x, y] = [y, x];
+        if (canTie(x, y)) {
+          const n = state.notes[x.id];
+          act([session.setNote(n.id, nd(n, { tie: true }))]);
+          return;
+        }
+      }
+      flash("A tie joins a note to the very next note of the same pitch.");
+      drawOverlay();
+      return;
+    }
+    if (d.type === "slur-new") {
+      const pv = slurPreview;
+      slurPreview = null;
+      if (pv && (pv.a.m !== pv.b.m || pv.a.t !== pv.b.t)) {
+        let a = pv.a, b = pv.b;
+        if (!before(a, b)) [a, b] = [b, a];
+        const op = session.addSlur([a.m, a.t], [b.m, b.t], 0);
+        act([op]);
+        selSlur = op.id;
+      } else flash("Drag from one note to another to draw a slur.");
+      render();
+      return;
+    }
+    if (d.type === "slur-edit") {
+      const pv = slurPreview;
+      slurPreview = null;
+      if (pv) {
+        const o = d.orig, ch = {};
+        const same = (x, y) => x.m === y.m && x.t === y.t;
+        let a = pv.a, b = pv.b;
+        if (!before(a, b)) [a, b] = [b, a];
+        if (!same(a, o.a)) ch.a = [a.m, a.t];
+        if (!same(b, o.b)) ch.b = [b.m, b.t];
+        if (pv.h !== o.h) ch.h = pv.h;
+        if (same(a, b)) { render(); return; }
+        if (Object.keys(ch).length) act([session.setSlur(o.id, ch)]);
+      }
+      render();
+      return;
+    }
+    render();
+  }
+
+  function bindPointer(scoreEl) {
+    $("#slurs").addEventListener("pointerdown", onSlurDown);
+    scoreEl.addEventListener("pointerdown", onDown);
+    scoreEl.addEventListener("pointermove", onMove);
+    scoreEl.addEventListener("pointerup", onUp);
+    scoreEl.addEventListener("pointercancel", () => { drag = null; slurPreview = null; render(); });
+    scoreEl.addEventListener("pointerleave", () => { if (!drag) drawOverlay(); });
   }
 
   function onKey(e) {
@@ -1261,9 +1762,16 @@
     if (k === "0") { if (cursor) writeAt(cursor.m, cursor.t, [], true); return; }
     if (k === "+") { if (!(sel && sel.entry && tieOnward())) toggleTie(); return; }
     if (k === " ") { e.preventDefault(); playing ? stopPlay() : startPlay(); return; }
+    if (k === "S" && e.shiftKey) { toggleStaccato(); return; }
+    const modeKeys = { w: "write", v: "select", x: "erase", t: "tie", s: "slur" };
+    if (modeKeys[k]) { setMode(modeKeys[k]); return; }
     if (k === "n" || k === "N") { midiWrite = !midiWrite; render(); return; }
     if (k === "Delete" || k === "Backspace") { e.preventDefault(); deleteSelected(); return; }
-    if (k === "Escape") { sel = null; $("#help").hidden = true; render(); return; }
+    if (k === "Escape") {
+      if (drag) { drag = null; slurPreview = null; render(); return; }
+      if (mode !== "select") { setMode("select"); return; }
+      sel = null; multi.clear(); selSlur = null; $("#help").hidden = true; render(); return;
+    }
     if (k === "ArrowUp" || k === "ArrowDown") { e.preventDefault(); transposeSelected(k === "ArrowUp" ? 1 : -1); return; }
     if (k === "ArrowLeft" || k === "ArrowRight") { e.preventDefault(); moveSelection(k === "ArrowLeft" ? -1 : 1); return; }
     const letter = k.toLowerCase();

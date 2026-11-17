@@ -49,6 +49,20 @@
   #score { position: relative; cursor: crosshair; user-select: none; }
   #score svg { display: block; }
   #score:focus { outline: none; }
+  body[data-mode="select"] #score { cursor: default; }
+  body[data-mode="erase"] #score { cursor: cell; }
+  body[data-mode="tie"] #score, body[data-mode="slur"] #score { cursor: alias; }
+  /* slurs: drawn over the notes; clickable in the select, eraser and slur tools */
+  #slurs { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  #slurs .arc { fill: #15171c; }
+  #slurs .arc.sel { fill: #e5484d; }
+  #slurs .arc.preview { fill: #1d7fd0; opacity: .8; }
+  #slurs .hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: none; }
+  body[data-mode="select"] #slurs .hit, body[data-mode="erase"] #slurs .hit, body[data-mode="slur"] #slurs .hit { pointer-events: stroke; cursor: pointer; }
+  body[data-mode="erase"] #slurs .hit { cursor: cell; }
+  #slurs .handle { fill: #fff; stroke: #1d7fd0; stroke-width: 2; pointer-events: all; cursor: grab; }
+  .boxsel { position: absolute; border: 1px dashed var(--blue); background: rgba(71,176,248,.12); }
+  .rubber { position: absolute; height: 2px; background: var(--blue); transform-origin: 0 50%; opacity: .8; }
   #score:focus-visible { outline: 1px dashed rgba(71,176,248,.6); outline-offset: 4px; border-radius: 4px; }
   #overlay { position: absolute; inset: 0; pointer-events: none; }
   .cursor { position: absolute; width: 3px; border-radius: 2px; background: var(--blue); opacity: .85; }
@@ -77,6 +91,14 @@
     <button id="save" class="small" title="Save this score to a file">Save…</button>
   </div>
   <span class="sep"></span>
+  <div class="group" role="group" aria-label="Tool">
+    <button class="glyph" data-mode="write" title="Write notes: click the staff (W)" aria-label="Write" aria-pressed="true"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
+    <button class="glyph" data-mode="select" title="Select: click notes or slurs, drag a box, Shift adds (V or Esc)" aria-label="Select" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l13 8-6 1.5L9 19z" fill="currentColor"/></svg></button>
+    <button class="glyph" data-mode="erase" title="Eraser: click or drag over notes and slurs (X)" aria-label="Eraser" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l9-9 6 6-7 7H7z"/><path d="M9 11l6 6M12 20h8"/></svg></button>
+    <button class="glyph" data-mode="tie" title="Tie: drag from a note to the next one of the same pitch (T); click a tied note to untie" aria-label="Tie tool" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="13" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="13" r="2" fill="currentColor" stroke="none"/><path d="M5 16c4 5 10 5 14 0"/></svg></button>
+    <button class="glyph" data-mode="slur" title="Slur: drag from one note to another (S); drag its ends or middle to change it" aria-label="Slur tool" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17C7 6 17 6 21 17"/></svg></button>
+  </div>
+  <span class="sep"></span>
   <div class="group" role="group" aria-label="Note length">
     <button class="glyph" data-dur="1920" title="Whole note (7)" aria-label="Whole note"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="12" cy="16" rx="6.5" ry="4.2" fill="none" stroke-width="2.4"/></svg></button>
     <button class="glyph" data-dur="960" title="Half note (6)" aria-label="Half note"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="21" rx="5" ry="3.4" transform="rotate(-20 9 21)" fill="none" stroke-width="1.8"/><path d="M13.4 19.6V3" stroke-width="1.6" fill="none"/></svg></button>
@@ -86,17 +108,17 @@
     <button class="glyph" id="dot" title="Dotted (.)" aria-label="Dotted" aria-pressed="false">•</button>
     <button class="glyph small" id="triplet" title="Triplet: three in the time of two (Ctrl+3)" aria-label="Triplet" aria-pressed="false">³</button>
     <button class="glyph" id="rest" title="Rest: clicks and keys write silence (0 writes one rest)" aria-label="Rest" aria-pressed="false"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><path d="M9 3l5.5 6.5-4 4.5 5 6c-3-1.5-6-.5-5 3-3-3-1-6 2-5L8 12.5l4-4.5z" stroke="none"/></svg></button>
-    <button class="glyph" id="tie" title="Tie the selected note to the next one (+)" aria-label="Tie"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><path d="M3 13c4 7 14 7 18 0" fill="none" stroke-width="2.2"/></svg></button>
   </div>
   <span class="sep"></span>
   <div class="group" role="group" aria-label="Accidentals">
     <button class="glyph" data-alt="-1" title="Flat (selected note)" aria-label="Flat">♭</button>
     <button class="glyph" data-alt="0" title="Natural (selected note)" aria-label="Natural">♮</button>
     <button class="glyph" data-alt="1" title="Sharp (selected note)" aria-label="Sharp">♯</button>
+    <button class="glyph" id="stacc" title="Staccato on or off for the selected notes (Shift+S)" aria-label="Staccato" aria-pressed="false"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="16" rx="5" ry="3.4" transform="rotate(-20 9 16)" stroke="none"/><path d="M13.4 14.6V2" stroke-width="1.6" fill="none"/><circle cx="9" cy="24" r="2" stroke="none"/></svg></button>
   </div>
   <span class="sep"></span>
   <div class="group">
-    <button id="del" class="small" title="Delete the selected note (Delete)">Delete</button>
+    <button id="del" class="small" title="Delete the selected notes or slur (Delete)">Delete</button>
     <button id="undo" class="small" title="Undo your last change (Ctrl+Z)">Undo</button>
     <button id="redo" class="small" title="Redo (Ctrl+Y)">Redo</button>
   </div>
@@ -130,8 +152,13 @@
 <div id="help" hidden>
   <h2>Writing music</h2>
   <dl>
-    <dt>Click the staff</dt><dd>Write a note there (one too long for the bar goes on, tied, into the next)</dd>
+    <dt>W</dt><dd>Write: click the staff to write the note length you picked. Clicking a note replaces it. A note too long for the bar goes on, tied, into the next</dd>
     <dt>Shift+click</dt><dd>Add a note to the chord there</dd>
+    <dt>V or Esc</dt><dd>Select: click notes or slurs (Shift adds), or drag a box</dd>
+    <dt>X</dt><dd>Eraser: click or drag over notes and slurs</dd>
+    <dt>T</dt><dd>Tie: drag from a note to the next one of the same pitch; click a tied note to untie it</dd>
+    <dt>S</dt><dd>Slur: drag from one note to another. Select it to drag its ends, its middle (height) or the whole slur</dd>
+    <dt>Shift+S</dt><dd>Staccato on the selected notes</dd>
     <dt>Click a note</dt><dd>Select it</dd>
     <dt>A–G</dt><dd>Write that note at the cursor</dd>
     <dt>Shift+A–G</dt><dd>Add it to the last chord</dd>
@@ -152,6 +179,7 @@
   <div id="paper">
     <input id="title" type="text" maxlength="120" placeholder="Untitled" aria-label="Title" spellcheck="false">
     <div id="score" tabindex="0" aria-label="Score. Click to write notes.">
+      <svg id="slurs" aria-hidden="true"></svg>
       <div id="overlay"></div>
     </div>
     <div id="empty" hidden>No bars yet. <button id="emptyAdd" class="small">+ Bar</button></div>

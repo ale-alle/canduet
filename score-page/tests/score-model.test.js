@@ -254,12 +254,55 @@ test("playback events: ties join, rests are skipped, measures follow on", () => 
   S.applyOp(st, me.setNote(null, note(m2.id, 0, 240, [G4])));
   S.applyOp(st, me.setNote(null, note(m2.id, 480, 720, [D4])));
   const ev = S.playEvents(S.view(st));
-  assert.deepEqual(ev, [
+  assert.deepEqual(ev.map(({ beat, len, midi }) => ({ beat, len, midi })), [
     { beat: 0, len: 1, midi: 60 },
     { beat: 0, len: 1, midi: 64 },
     { beat: 2, len: 1.5, midi: 67 },
     { beat: 4, len: 1.5, midi: 62 },
   ]);
+  assert.ok(ev.every((e) => !e.st && !e.legato));
+});
+
+test("staccato and slurs: stored, shared, saved, and heard", () => {
+  const { a, b, ann, bob } = pair();
+  const m1 = ann.addMeasure(S.posBetween("", ""), [4, 4], 0);
+  const m2 = ann.addMeasure(S.posBetween(S.posBetween("", ""), ""), null, null);
+  apply([a, b], [m1, m2]);
+  const ns = [0, 480, 960, 1440].map((t, i) => ann.setNote(null, note(m1.id, t, 480, [[i, 4, 0]])));
+  ns.push(ann.setNote(null, { ...note(m2.id, 0, 480, [G4]), st: true }));
+  apply([a, b], ns);
+  // a slur from beat 2 to beat 4, then Bob moves its end while Ann raises the arc
+  const sl = ann.addSlur([m1.id, 480], [m1.id, 1440], 0);
+  apply([a, b], sl);
+  const moveEnd = bob.setSlur(sl.id, { b: [m2.id, 0] });
+  const higher = ann.setSlur(sl.id, { h: 6 });
+  S.applyOp(b, moveEnd); S.applyOp(a, higher); S.applyOp(a, moveEnd); S.applyOp(b, higher);
+  assert.equal(S.digest(a), S.digest(b));
+  const v = S.view(a);
+  assert.deepEqual(v.slurs.map((x) => [x.a, x.b, x.h]), [[{ mi: 0, t: 480 }, { mi: 1, t: 0 }, 6]]);
+  const ev = S.playEvents(v);
+  assert.deepEqual(ev.map((e) => [e.beat, !!e.legato, !!e.st]), [[0, false, false], [1, true, false], [2, true, false], [3, true, false], [4, true, true]]);
+  assert.equal(S.soundingLength(ev[0]) < 1, true);        // plain: a little detached
+  assert.equal(S.soundingLength(ev[1]), 1);               // slurred: full length
+  assert.equal(S.soundingLength(ev[4]), 0.5);             // staccato: half
+  // a snapshot carries both
+  const c = S.emptyState();
+  for (const op of S.snapshotOps(a)) { assert.equal(S.validateOp(op), null); S.applyOp(c, op); }
+  assert.equal(S.digest(c), S.digest(a));
+  // removing the slur, and files keep staccato and slurs
+  const file = JSON.parse(JSON.stringify(S.toFile(a)));
+  assert.equal(file.slurs.length, 1);
+  const d = S.emptyState();
+  for (const op of S.opsFromFile(S.createSession(d, "Zoe"), file)) S.applyOp(d, op);
+  assert.deepEqual(S.view(d).slurs.map((x) => [x.a, x.b, x.h]), [[{ mi: 0, t: 480 }, { mi: 1, t: 0 }, 6]]);
+  assert.equal(S.view(d).measures[1].items[0].st, true);
+  apply([a, b], ann.removeSlur(sl.id));
+  assert.equal(S.view(b).slurs.length, 0);
+  assert.equal(S.applyOp(b, sl), false, "a removed slur stays removed");
+  // bad slurs and staccato values are refused
+  assert.notEqual(S.validateOp({ ...sl, id: "s.z", slur: { a: [m1.id, 30], b: [m1.id, 0], h: 0 } }), null);
+  assert.notEqual(S.validateOp({ ...sl, id: "s.z", slur: { a: [m1.id, 0], b: [m1.id, 0], h: 99 } }), null);
+  assert.notEqual(S.validateOp({ ...ns[0], note: { ...ns[0].note, st: false } }), null);
 });
 
 test("files round-trip and bad files are refused", () => {
