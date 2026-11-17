@@ -39,16 +39,19 @@
   // ---------------------------------------------------------------------------
   // entry state
   // ---------------------------------------------------------------------------
-  let baseDur = 480, dotted = false, restMode = false, midiWrite = false;
+  let baseDur = 480, dotted = false, triplet = false, restMode = false, midiWrite = false;
   let cursor = null;     // {m: measure id, t: ticks}
   let sel = null;        // {id: note id, pi: index in its pitches (sorted low..high)}
   let lastWritten = null;  // note id of the last note written here, for Shift+letter chords
+  let lastChain = [];      // all the tied pieces of that note
   let undoStack = [], redoStack = [];
   let playing = false, playPos = null, countIn = 0;
   let tempo = 100;
   const remoteFresh = new Map();  // note id -> time it arrived from someone else (shown tinted briefly)
 
-  const curDur = () => (dotted ? baseDur * 1.5 : baseDur);
+  // triplets: quarter, 8th and 16th only (three in the time of two)
+  const tripletOk = () => baseDur === 480 || baseDur === 240 || baseDur === 120;
+  const curDur = () => (triplet && tripletOk() ? (baseDur * 2) / 3 : dotted ? baseDur * 1.5 : baseDur);
 
   // ---------------------------------------------------------------------------
   // applying changes (mine and everyone's)
@@ -241,7 +244,9 @@
   const TIMES = [[2, 4], [3, 4], [4, 4], [5, 4], [6, 4], [2, 2], [3, 2], [3, 8], [6, 8], [9, 8], [12, 8], [5, 8], [7, 8]];
   // a row: VexFlow puts the top staff line 4 spaces below the stave's y, so the staff sits at
   // 50-90 px with room for ledger lines (and chord names later) above and below
-  const ROW_H = 150, STAVE_TOP = 10;
+  // Lines of music grow to fit their highest and lowest notes. VexFlow puts the top staff line 4
+  // spaces (40 px) below the stave's y; SPACE is one staff space.
+  const SPACE = 10, MIN_ABOVE = 50, MIN_BELOW = 60;
 
   let layout = [];   // per measure: {id, m (view), x, w, y, stave, ticksX:[[tick,x]], notes:[{item, sn}]}
   let lastView = null;
@@ -249,8 +254,30 @@
 
   function durCode(d) {
     if (DUR_CODE[d]) return { code: DUR_CODE[d], dots: 0 };
+    if (S.isTriplet(d)) return { code: DUR_CODE[d * 1.5], dots: 0 };
     if (DUR_CODE[d / 1.5]) return { code: DUR_CODE[d / 1.5], dots: 1 };
     return { code: "q", dots: 0 };
+  }
+  const ACC_GLYPH = { "-2": "bb", "-1": "b", 0: "n", 1: "#", 2: "##" };
+
+  // the length beams group by: a beat (a dotted quarter in 6/8, 9/8, 12/8), a half note in x/2
+  function beamUnit(time) {
+    if (S.isCompound(time)) return 720;
+    if (time[1] === 2) return 960;
+    if (time[1] === 16) return 240;
+    return 480;
+  }
+
+  // the note before `it` (in this measure, or the last of the one before) if it's tied into `it`
+  function tiedFrom(m, it, prevM) {
+    const i = m.items.indexOf(it);
+    for (let j = i - 1; j >= 0; j--) {
+      const q = m.items[j];
+      if (q.t + q.d === it.t) return !q.rest && q.tie ? q : null;
+    }
+    if (it.t !== 0 || !prevM) return null;
+    const last = prevM.items[prevM.items.length - 1];
+    return last && !last.rest && last.tie && last.t + last.d === prevM.len ? last : null;
   }
   function vfKey(p) {
     const acc = p[2] === 1 ? "#" : p[2] === 2 ? "##" : p[2] === -1 ? "b" : p[2] === -2 ? "bb" : "";
@@ -282,7 +309,7 @@
     const now = Date.now();
 
     // build each measure's notes first, to know how wide it wants to be
-    const built = v.measures.map((m) => buildMeasure(m, clef, now));
+    const built = v.measures.map((m, i) => buildMeasure(m, clef, now, i > 0 ? v.measures[i - 1] : null));
 
     // rows: as many measures as fit; the first of each row repeats clef and key
     const rows = [];
@@ -298,7 +325,17 @@
     if (row.length) rows.push(row);
 
     const renderer = new VF.Renderer(document.createElement("div"), VF.Renderer.Backends.SVG);
-    renderer.resize(width, rows.length * ROW_H + 20);
+    // each line's height: room for its highest and lowest notes (in staff lines, 1 = bottom line,
+    // 5 = top line), their stems and triplet numbers
+    const rowBox = rows.map((r) => {
+      const hi = Math.max(5, ...r.map((c) => c.b.hi)), lo = Math.min(1, ...r.map((c) => c.b.lo));
+      const above = Math.max(MIN_ABOVE, (hi - 5) * SPACE + 45);
+      const below = Math.max(MIN_BELOW, (1 - lo) * SPACE + 45);
+      return { above, h: above + 4 * SPACE + below };
+    });
+    let acc = 0;
+    for (const rb of rowBox) { rb.top = acc; acc += rb.h; }
+    renderer.resize(width, acc + 20);
     const ctx = renderer.getContext();
     ctx.setFont("Segoe UI", 10);
 
@@ -310,8 +347,9 @@
       let x = 0;
       r.forEach((cell, ci) => {
         const w = Math.floor(cell.w * stretch) - (ci === r.length - 1 && stretch !== 1 ? 1 : 0);
-        const geo = drawMeasure(ctx, cell.b, x, ri * ROW_H + STAVE_TOP, w, ci === 0, clef, tieQueue);
-        layout.push({ ...geo, row: ri });
+        const rb = rowBox[ri];
+        const geo = drawMeasure(ctx, cell.b, x, rb.top + rb.above - 4 * SPACE, w, ci === 0, clef, tieQueue, ci === r.length - 1 && ri < rows.length - 1, ri);
+        layout.push({ ...geo, row: ri, rowTop: rb.top, rowH: rb.h });
         x += w;
       });
     });
@@ -335,9 +373,14 @@
     drawOverlay();
   }
 
-  function buildMeasure(m, clef, now) {
-    const keyName = KEY_NAMES[m.key];
+  function buildMeasure(m, clef, now, prevM) {
     const notes = [];
+    let hi = 5, lo = 1;
+    // Accidentals, worked out here rather than by VexFlow: a sign is shown when the note differs
+    // from what's in force for that line and octave (the key signature, or an earlier sign in the
+    // bar). A note tied over from the bar before shows no sign and doesn't count as one, so the next
+    // note on that line shows its sign again; a note tied within the bar shows none.
+    const inForce = {};
     for (const it of m.items) {
       let sn;
       if (it.rest) {
@@ -350,23 +393,66 @@
         const { code, dots } = durCode(it.d);
         const pitches = it.p.slice().sort((a, b) => S.midiOf(a) - S.midiOf(b));
         sn = new VF.StaveNote({ clef, keys: pitches.map(vfKey), duration: code + (dots ? "d" : ""), auto_stem: true });
+        const from = tiedFrom(m, it, prevM);
+        pitches.forEach((p, i) => {
+          const k = p[0] + "," + p[1];
+          const current = k in inForce ? inForce[k] : S.keyAlter(m.key, p[0]);
+          const continued = from && from.p.some((q) => S.midiOf(q) === S.midiOf(p));
+          if (continued) return;
+          if (current !== p[2]) sn.addModifier(new VF.Accidental(ACC_GLYPH[p[2]]), i);
+          inForce[k] = p[2];
+        });
         if (dots) VF.Dot.buildAndAttach([sn], { all: true });
         const selected = sel && sel.id === it.id;
         const fresh = remoteFresh.has(it.id) && now - remoteFresh.get(it.id) < 4000;
         if (selected) sn.setStyle({ fillStyle: "#e5484d", strokeStyle: "#e5484d" });
         else if (fresh) sn.setStyle({ fillStyle: "#1d7fd0", strokeStyle: "#1d7fd0" });
         it.sorted = pitches;
+        for (const q of pitches) {
+          const line = (diatonic(q) - clefBase()) / 2;   // VexFlow line: 1 bottom, 5 top
+          if (line > hi) hi = line;
+          if (line < lo) lo = line;
+        }
       }
       notes.push({ item: it, sn });
     }
+
+    // triplets: a 3:2 bracket over each group (no bracket when the group is one beam)
+    const tuplets = [];
+    (m.tuplets || []).forEach((g, gi) => {
+      const members = notes.filter((n) => n.item.tup === gi);
+      if (!members.length) return;
+      const beamable = members.every((n) => !n.item.rest && n.item.d < 320);
+      try {
+        tuplets.push(new VF.Tuplet(members.map((n) => n.sn), { num_notes: 3, notes_occupied: 2, ratioed: false, bracketed: !beamable }));
+      } catch (e) { /* drawn without */ }
+    });
+
     const voice = new VF.Voice({ num_beats: m.time[0], beat_value: m.time[1] }).setMode(VF.Voice.Mode.SOFT);
     voice.addTickables(notes.map((n) => n.sn));
-    try { VF.Accidental.applyAccidentals([voice], keyName); } catch (e) { /* drawn without */ }
-    let beams = [];
-    try {
-      // rests included so beams stop at them
-      beams = VF.Beam.generateBeams(notes.map((n) => n.sn), { groups: VF.Beam.getDefaultBeamGroups(m.time.join("/")), beam_rests: false });
-    } catch (e) { beams = []; }
+
+    // Beams: notes shorter than a quarter, joined within a beat (within the group for triplets);
+    // a rest, a longer note or the next beat ends the beam.
+    const beams = [];
+    const unit = beamUnit(m.time);
+    let run = [], runKey = null;
+    const flush = () => {
+      if (run.length >= 2) { try { beams.push(new VF.Beam(run.map((n) => n.sn), true)); } catch (e) { /* flags instead */ } }
+      run = []; runKey = null;
+    };
+    for (const n of notes) {
+      const it = n.item;
+      const flagged = !it.rest && (S.isTriplet(it.d) ? it.d < 320 : it.d < 480);
+      if (!flagged) { flush(); continue; }
+      const g = it.tup !== undefined ? m.tuplets[it.tup] : null;
+      const key = g ? "t" + it.tup : "b" + Math.floor(it.t / unit);
+      const end = g ? g.start + g.len : (Math.floor(it.t / unit) + 1) * unit;
+      if (runKey !== null && key !== runKey) flush();
+      if (it.t + it.d > end) { flush(); continue; }   // runs past the beat: flag on its own
+      run.push(n); runKey = key;
+    }
+    flush();
+
     const fmt = new VF.Formatter();
     fmt.joinVoices([voice]);
     let minW = 0;
@@ -375,19 +461,31 @@
     const headW = (first) => {
       let w = 0;
       if (first) w += 34 + Math.abs(m.key) * 10;
-      else if (m.keyChanged) w += Math.abs(m.key) * 10 + 14;
+      if (m.keyChanged) w += (first ? 0 : Math.abs(m.key) * 10 + 14) + (prevM ? Math.abs(prevM.key) * 9 : 0);
       if (m.timeChanged) w += 30;
       return w;
     };
-    return { m, voice, notes, beams, fmt, minW, headW };
+    if (tuplets.length) hi += 1.5;   // the "3" above
+    return { m, prevM, voice, notes, beams, tuplets, fmt, minW, headW, hi, lo };
   }
 
-  function drawMeasure(ctx, b, x, y, w, first, clef, tieQueue) {
+  function drawMeasure(ctx, b, x, y, w, first, clef, tieQueue, nextStartsRow, rowIndex) {
     const m = b.m;
     const stave = new VF.Stave(x, y, w);
-    if (first) { stave.addClef(clef); if (m.key !== 0 || m.keyChanged) stave.addKeySignature(KEY_NAMES[m.key]); }
-    else if (m.keyChanged) stave.addKeySignature(KEY_NAMES[m.key]);
+    // a new key cancels the old one with naturals where needed
+    const cancel = m.keyChanged && b.prevM ? KEY_NAMES[b.prevM.key] : undefined;
+    if (first) stave.addClef(clef);
+    if (m.keyChanged) stave.addKeySignature(KEY_NAMES[m.key], cancel);
+    else if (first && m.key !== 0) stave.addKeySignature(KEY_NAMES[m.key]);
     if (m.timeChanged) stave.addTimeSignature(m.time.join("/"));
+    // the line ends just before a change: show the coming key and time at its end (courtesy)
+    const next = lastView.measures[m.index + 1];
+    if (next && nextStartsRow) {
+      try {
+        if (next.keyChanged) stave.setEndKeySignature(KEY_NAMES[next.key], KEY_NAMES[m.key]);
+        if (next.timeChanged) stave.setEndTimeSignature(next.time.join("/"));
+      } catch (e) { /* without */ }
+    }
     if (first) stave.setMeasure(m.index + 1);
     if (m.index === (lastView.measures.length - 1)) stave.setEndBarType(VF.Barline.type.END);
     stave.setContext(ctx).draw();
@@ -395,6 +493,7 @@
     try { b.fmt.format([b.voice], Math.max(20, endX - startX - 14)); } catch (e) { /* leave unformatted */ }
     try { b.voice.draw(ctx, stave); } catch (e) { /* skip */ }
     for (const beam of b.beams) { try { beam.setContext(ctx).draw(); } catch (e) { /* skip */ } }
+    for (const tup of b.tuplets) { try { tup.setContext(ctx).draw(); } catch (e) { /* skip */ } }
 
     const ticksX = [];
     const geoNotes = [];
@@ -409,7 +508,7 @@
     }
     ticksX.push([m.len, endX - 4]);
     const geo = { id: m.id, m, x, w, y, stave, startX, endX, ticksX, notes: geoNotes };
-    for (const g of geoNotes) g.row = Math.round(y / ROW_H);
+    for (const g of geoNotes) g.row = rowIndex;
 
     // ties start here; the end is found when the next measure is drawn
     for (const g of geoNotes) {
@@ -500,21 +599,20 @@
         const top = g.stave.getYForLine(0), bottom = g.stave.getYForLine(4);
         const x = xForTick(g, (playPos - mv.beat) * S.PPQ);
         add("playhead", { left: x + "px", top: top - 18 + "px", height: bottom - top + 36 + "px" });
-        followPlayhead(top);
+        followPlayhead(g);
       }
     }
   }
 
   let lastScrollRow = -1;
-  function followPlayhead(top) {
+  function followPlayhead(g) {
     const sheet = $("#sheet");
     const scoreTop = $("#score").offsetTop + $("#paper").offsetTop;
-    const yIn = scoreTop + top;
-    const row = Math.floor(top / ROW_H);
-    if (row !== lastScrollRow && (yIn < sheet.scrollTop + 40 || yIn > sheet.scrollTop + sheet.clientHeight - ROW_H)) {
-      sheet.scrollTo({ top: Math.max(0, yIn - 60), behavior: "smooth" });
+    const yIn = scoreTop + g.rowTop;
+    if (g.row !== lastScrollRow && (yIn < sheet.scrollTop + 20 || yIn + g.rowH > sheet.scrollTop + sheet.clientHeight)) {
+      sheet.scrollTo({ top: Math.max(0, yIn - 40), behavior: "smooth" });
     }
-    lastScrollRow = row;
+    lastScrollRow = g.row;
   }
 
   // ---------------------------------------------------------------------------
@@ -523,7 +621,7 @@
   function hit(ev) {
     const r = $("#score").getBoundingClientRect();
     const x = ev.clientX - r.left, y = ev.clientY - r.top;
-    const geo = layout.find((g) => x >= g.x && x < g.x + g.w && y >= g.y - STAVE_TOP && y < g.y - STAVE_TOP + ROW_H);
+    const geo = layout.find((g) => x >= g.x && x < g.x + g.w && y >= g.rowTop && y < g.rowTop + g.rowH);
     if (!geo) return null;
     // pitch from the height: half a staff space per step
     const sp = geo.stave.getSpacingBetweenLines();
@@ -545,9 +643,16 @@
       }
     }
     // the grid spot nearest the pointer, in steps of the note length being written
-    const step0 = Math.min(baseDur, 960);
+    const cd = curDur();
+    const spots = [];
+    if (S.isTriplet(cd)) {
+      const align = cd === 320 ? 480 : cd * 3;
+      for (let st = 0; st + cd * 3 <= geo.m.len; st += align) for (let k = 0; k < 3; k++) spots.push(st + k * cd);
+    } else {
+      for (let t = 0; t < geo.m.len; t += Math.min(baseDur, 960)) spots.push(t);
+    }
     let tick = 0, bx = Infinity;
-    for (let t = 0; t < geo.m.len; t += step0) {
+    for (const t of spots) {
       const dx = Math.abs(xForTick(geo, t) + 6 - x);
       if (dx < bx) { bx = dx; tick = t; }
     }
@@ -570,60 +675,161 @@
     return S.DURS.filter((d) => d <= room).sort((a, b) => b - a)[0] || 0;
   }
 
-  // operations that clear [t, t+d) in a measure: notes inside go, notes reaching in are shortened
-  function clearOps(m, t, d) {
+  // the triplet group an existing triplet note is drawn in (from the view), or where it would be
+  function groupOfNote(m, n) {
+    const it = m.items && m.items.find((x) => x.id === n.id);
+    if (it && it.tup !== undefined && m.tuplets) return m.tuplets[it.tup];
+    const s0 = S.tripletStart(n.t, n.d);
+    return { start: s0 === null ? n.t : s0, len: n.d * 3 };
+  }
+
+  // Operations that clear [t, t+d) in measure m (a measure from view(), or a new one):
+  // - notes starting inside go;
+  // - a note reaching in from before is shortened, written as tied notes when its new length
+  //   isn't one length;
+  // - a triplet group holds only its own triplets: writing a triplet (group = its group) clears
+  //   plain notes and other groups' triplets from the whole group, and writing a plain note
+  //   clears every triplet group it touches.
+  function clearOps(m, t, d, group) {
     const ops = [];
+    const overlaps = (a1, b1, a2, b2) => a1 < b2 && a2 < b1;
     for (const n of Object.values(state.notes)) {
       if (n.m !== m.id) continue;
-      const end = n.t + n.d;
-      if (end <= t || n.t >= t + d) continue;
-      if (n.t < t && S.DURS.includes(t - n.t)) ops.push(session.setNote(n.id, { m: n.m, t: n.t, d: t - n.t, p: n.p, tie: false }));
-      else ops.push(session.removeNote(n.id));
+      const nTrip = S.isTriplet(n.d);
+      let hit;
+      if (group) {
+        if (nTrip) {
+          const g = groupOfNote(m, n);
+          const same = g.start === group.start && g.len === group.len;
+          hit = same ? overlaps(n.t, n.t + n.d, t, t + d) : overlaps(g.start, g.start + g.len, group.start, group.start + group.len);
+        } else {
+          hit = overlaps(n.t, n.t + n.d, group.start, group.start + group.len);
+          if (hit && n.t < group.start) {
+            // a plain note reaching into the group is cut back to where the group starts
+            pushShortened(ops, m, n, group.start);
+            continue;
+          }
+        }
+      } else if (nTrip) {
+        const g = groupOfNote(m, n);
+        hit = overlaps(g.start, g.start + g.len, t, t + d);
+      } else {
+        hit = overlaps(n.t, n.t + n.d, t, t + d);
+        if (hit && n.t < t) { pushShortened(ops, m, n, t); continue; }
+      }
+      if (hit) ops.push(session.removeNote(n.id));
     }
     return ops;
   }
 
-  // next spot after [m, t+d); adds a bar at the end when needed
-  function advance(m, t, d, extraOps) {
-    if (t + d < m.len) { cursor = { m: m.id, t: t + d }; return; }
-    const ms = lastView.measures;
-    const next = ms[m.index + 1];
-    if (next) { cursor = { m: next.id, t: 0 }; return; }
-    const add = session.addMeasure(S.posBetween(state.measures[m.id].pos, ""), null, null);
-    extraOps.push(add);
-    cursor = { m: add.id, t: 0 };
+  // note n cut to end at `end`, as tied pieces if that isn't one written length
+  function pushShortened(ops, m, n, end) {
+    const { pieces } = S.notePieces(n.t, end - n.t, m.len, m.time);
+    pieces.forEach((pc, i) => {
+      const note = { m: n.m, t: pc.t, d: pc.d, p: n.p, tie: i < pieces.length - 1 };
+      ops.push(i === 0 ? session.setNote(n.id, note) : session.setNote(null, note));
+    });
   }
 
-  function writeAt(mId, t, pitches, asRest) {
-    const m = measureOf(mId);
-    if (!m) return;
-    const d = fitDur(curDur(), m.len - t);
-    if (!d) return;
-    const ops = clearOps(m, t, d);
-    let id = null;
-    if (!asRest) {
-      const uniq = [];
-      for (const p of pitches) if (!uniq.some((q) => S.midiOf(q) === S.midiOf(p))) uniq.push(p);
-      const op = session.setNote(null, { m: m.id, t, d, p: uniq.slice(0, S.LIMITS.pitches), tie: false });
-      if (S.validateOp(op) !== null) return;
-      ops.push(op);
-      id = op.id;
+  // the measure after m, from the view, or a new one added at the end (with m's time and key)
+  function nextMeasure(m, ops) {
+    const ms = lastView.measures;
+    const real = ms.find((x) => x.index === m.index + 1);
+    if (real && !m.virtual) return { ...real, pos: state.measures[real.id].pos };
+    const pos = S.posBetween(m.pos, "");
+    const add = session.addMeasure(pos, null, null);
+    ops.push(add);
+    return { id: add.id, index: m.index + 1, len: m.len, time: m.time, key: m.key, pos, virtual: true };
+  }
+
+  // Everything that writing a note (or a rest) of the current length at [mId, t] does. A note longer
+  // than what's left of the bar goes on into the next bars as tied notes (bars are added at the end
+  // when needed), the way MuseScore does it. Returns {ops, ids, cursor} or null.
+  function buildWrite(mId, t, pitches, asRest) {
+    const m0 = measureOf(mId);
+    if (!m0) return null;
+    let m = { ...m0, pos: state.measures[m0.id].pos };
+    const total = curDur();
+    const trip = S.isTriplet(total);
+    const ops = [], ids = [];
+    const uniq = [];
+    for (const p of pitches) if (!uniq.some((q) => S.midiOf(q) === S.midiOf(p))) uniq.push(p);
+    const ps = uniq.slice(0, S.LIMITS.pitches);
+
+    let pieces, group = null;
+    if (trip) {
+      // a triplet goes in the group already there when this spot is on its grid; otherwise it
+      // starts a group here (moved on to the next place a group can start, if need be)
+      const glen = total * 3, align = total === 320 ? 480 : glen;
+      group = (m.tuplets || []).find((g) => g.len === glen && t >= g.start && t < g.start + g.len && (t - g.start) % total === 0) || null;
+      if (!group) {
+        let st = S.tripletStart(t, total);
+        if (st === null) { t = Math.ceil(t / align) * align; st = t; }
+        group = { start: st, len: glen };
+      }
+      if (group.start + group.len > m.len) return null;
+      pieces = [{ m, t, d: total }];
+    } else {
+      pieces = [];
+      let left = total, at = t, guard = 0;
+      while (left > 0 && guard++ < 16) {
+        const r = S.notePieces(at, left, m.len, m.time);
+        for (const pc of r.pieces) pieces.push({ m, t: pc.t, d: pc.d });
+        left = r.left;
+        if (left > 0) { m = nextMeasure(m, ops); at = 0; }
+      }
     }
-    advance(m, t, d, ops);
-    act(ops);
-    lastWritten = id;
+    pieces.forEach((pc, i) => {
+      ops.push(...clearOps(pc.m, pc.t, pc.d, group));
+      if (asRest || !ps.length) return;
+      const op = session.setNote(null, { m: pc.m.id, t: pc.t, d: pc.d, p: ps, tie: i < pieces.length - 1 });
+      ops.push(op);
+      ids.push(op.id);
+    });
+    if (!asRest && ps.length && ops.some((o) => o.type === "setNote" && S.validateOp(o) !== null)) return null;
+    const lastPc = pieces[pieces.length - 1];
+    let next;
+    if (lastPc.t + lastPc.d < lastPc.m.len) next = { m: lastPc.m.id, t: lastPc.t + lastPc.d };
+    else { const nm = nextMeasure(lastPc.m, ops); next = { m: nm.id, t: 0 }; }
+    return { ops, ids, cursor: next };
+  }
+
+  function writeAt(mId, t, pitches, asRest, extraOps) {
+    const w = buildWrite(mId, t, pitches, asRest);
+    if (!w) return;
+    act((extraOps || []).concat(w.ops));
+    cursor = w.cursor;
+    lastWritten = w.ids[0] || null;
+    lastChain = w.ids;
     // the note just written stays selected, so ↑ ↓ and accidentals fix it straight away; note
     // lengths chosen now are for the next note (entry), not this one
-    sel = id ? { id, pi: 0, entry: true } : null;
+    sel = w.ids.length ? { id: w.ids[0], pi: 0, entry: true } : null;
     render();
+  }
+
+  // "+" right after writing a note: the same notes again at the cursor, tied to it (MuseScore)
+  function tieOnward() {
+    const chain = lastChain.map((id) => state.notes[id]).filter(Boolean);
+    const last = chain[chain.length - 1];
+    if (!last || !cursor || S.isTriplet(curDur())) return false;
+    const pitches = last.p;
+    const extra = [session.setNote(last.id, { m: last.m, t: last.t, d: last.d, p: last.p, tie: true })];
+    writeAt(cursor.m, cursor.t, pitches, false, extra);
+    return true;
   }
 
   // add a pitch to the chord of note `id`
   function addToChord(id, p) {
-    const n = state.notes[id];
-    if (!n || n.p.some((q) => S.midiOf(q) === S.midiOf(p)) || n.p.length >= S.LIMITS.pitches) return;
-    act([session.setNote(id, { m: n.m, t: n.t, d: n.d, p: n.p.concat([p]), tie: n.tie })]);
-    sel = { id, pi: 0 };
+    const ids = lastChain.includes(id) ? lastChain : [id];
+    const ops = [];
+    for (const x of ids) {
+      const n = state.notes[x];
+      if (!n || n.p.some((q) => S.midiOf(q) === S.midiOf(p)) || n.p.length >= S.LIMITS.pitches) continue;
+      ops.push(session.setNote(x, { m: n.m, t: n.t, d: n.d, p: n.p.concat([p]), tie: n.tie }));
+    }
+    if (!ops.length) return;
+    act(ops);
+    sel = { id, pi: 0, entry: !!(sel && sel.entry) };
   }
 
   function selectedNote() { return sel && state.notes[sel.id]; }
@@ -641,11 +847,66 @@
     const next = ps.slice();
     next[i] = np;
     if (new Set(next.map(S.midiOf)).size !== next.length) return true;
-    const op = session.setNote(n.id, { m: n.m, t: n.t, d: n.d, p: next, tie: n.tie });
-    if (S.validateOp(op) === null) act([op]);
+    // the same change for every note tied to this one on that pitch (MuseScore does the same),
+    // so a tie never ends up joining two different notes
+    const oldMidi = S.midiOf(ps[i]);
+    const ops = [];
+    for (const id of tieChain(n.id, oldMidi)) {
+      const c = state.notes[id];
+      const cp = c.p.map((q) => (S.midiOf(q) === oldMidi ? np : q));
+      if (new Set(cp.map(S.midiOf)).size !== cp.length) continue;
+      const op = session.setNote(id, { m: c.m, t: c.t, d: c.d, p: cp, tie: c.tie });
+      if (S.validateOp(op) === null) ops.push(op);
+    }
+    if (ops.length) act(ops);
     sel = { id: n.id, pi: sortedPitches(state.notes[n.id]).findIndex((q) => S.midiOf(q) === S.midiOf(np)), entry: !!sel.entry };
     render();
     return true;
+  }
+
+  // the notes tied to `id` on `midi`, back and forward, in order (ids)
+  function tieChain(id, midi) {
+    const ms = lastView ? lastView.measures : [];
+    const where = (nid) => {
+      for (const m of ms) { const it = m.items.find((x) => x.id === nid); if (it) return { m, it }; }
+      return null;
+    };
+    const after = (m, it) => {
+      const inBar = m.items.find((x) => !x.rest && x.t === it.t + it.d);
+      if (inBar) return inBar;
+      if (it.t + it.d < m.len) return null;
+      const nm = ms[m.index + 1];
+      const first = nm && nm.items[0];
+      return first && !first.rest && first.t === 0 ? first : null;
+    };
+    const before = (m, it) => {
+      const inBar = m.items.find((x) => !x.rest && x.t + x.d === it.t);
+      if (inBar) return inBar;
+      if (it.t !== 0 || m.index === 0) return null;
+      const pm = ms[m.index - 1];
+      const last = pm.items[pm.items.length - 1];
+      return last && !last.rest && last.t + last.d === pm.len ? last : null;
+    };
+    const has = (it) => it && it.p.some((q) => S.midiOf(q) === midi);
+    const start = where(id);
+    if (!start) return [id];
+    const chain = [id];
+    let cur = start;
+    for (let k = 0; k < 64; k++) {   // back
+      const b = before(cur.m, cur.it);
+      if (!b || !b.tie || !has(b)) break;
+      chain.unshift(b.id);
+      cur = where(b.id);
+    }
+    cur = start;
+    for (let k = 0; k < 64; k++) {   // forward
+      if (!cur.it.tie) break;
+      const a = after(cur.m, cur.it);
+      if (!a || !has(a)) break;
+      chain.push(a.id);
+      cur = where(a.id);
+    }
+    return chain;
   }
 
   function transposeSelected(semis) {
@@ -667,12 +928,12 @@
 
   function setDurationSelected() {
     const n = selectedNote();
-    if (!n || sel.entry) return false;
+    if (!n || sel.entry || S.isTriplet(curDur()) || S.isTriplet(n.d)) return false;
     const m = measureOf(n.m);
     if (!m) return false;
     const d = fitDur(curDur(), m.len - n.t);
     if (!d || d === n.d) return true;
-    const ops = clearOps(m, n.t + Math.min(d, n.d), Math.max(0, d - n.d)).filter((o) => o.id !== n.id);
+    const ops = d > n.d ? clearOps(m, n.t + n.d, d - n.d, null).filter((o) => o.id !== n.id) : [];
     ops.push(session.setNote(n.id, { m: n.m, t: n.t, d, p: n.p, tie: n.tie }));
     act(ops);
     return true;
@@ -797,6 +1058,8 @@
   function syncControls(v) {
     document.querySelectorAll("[data-dur]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.dur === baseDur)));
     $("#dot").setAttribute("aria-pressed", String(dotted));
+    $("#triplet").setAttribute("aria-pressed", String(triplet));
+    $("#triplet").disabled = !tripletOk();
     $("#rest").setAttribute("aria-pressed", String(restMode));
     $("#midi").setAttribute("aria-pressed", String(midiWrite));
     $("#clef").value = state.meta.clef;
@@ -837,7 +1100,8 @@
       baseDur = +b.dataset.dur;
       if (!setDurationSelected()) render(); else render();
     }));
-    $("#dot").addEventListener("click", () => { dotted = !dotted; setDurationSelected(); render(); });
+    $("#dot").addEventListener("click", () => { dotted = !dotted; if (dotted) triplet = false; setDurationSelected(); render(); });
+    $("#triplet").addEventListener("click", () => { triplet = !triplet; if (triplet) dotted = false; render(); });
     $("#rest").addEventListener("click", () => { restMode = !restMode; render(); });
     $("#tie").addEventListener("click", toggleTie);
     document.querySelectorAll("[data-alt]").forEach((b) => b.addEventListener("click", () => setAlterSelected(+b.dataset.alt)));
@@ -986,15 +1250,16 @@
     if ((e.ctrlKey || e.metaKey) && (k === "z" || k === "Z")) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === "y" || k === "Y")) { e.preventDefault(); redo(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === "s" || k === "S")) { e.preventDefault(); saveFile(); return; }
+    if ((e.ctrlKey || e.metaKey) && k === "3") { e.preventDefault(); triplet = !triplet; if (triplet) dotted = false; render(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if (k === "ArrowUp" || k === "ArrowDown") { e.preventDefault(); transposeSelected(k === "ArrowUp" ? 12 : -12); }
       return;
     }
     const durKeys = { 3: 120, 4: 240, 5: 480, 6: 960, 7: 1920 };
     if (durKeys[k]) { baseDur = durKeys[k]; setDurationSelected(); render(); return; }
-    if (k === ".") { dotted = !dotted; setDurationSelected(); render(); return; }
+    if (k === ".") { dotted = !dotted; if (dotted) triplet = false; setDurationSelected(); render(); return; }
     if (k === "0") { if (cursor) writeAt(cursor.m, cursor.t, [], true); return; }
-    if (k === "+") { toggleTie(); return; }
+    if (k === "+") { if (!(sel && sel.entry && tieOnward())) toggleTie(); return; }
     if (k === " ") { e.preventDefault(); playing ? stopPlay() : startPlay(); return; }
     if (k === "n" || k === "N") { midiWrite = !midiWrite; render(); return; }
     if (k === "Delete" || k === "Backspace") { e.preventDefault(); deleteSelected(); return; }
@@ -1118,11 +1383,62 @@
     for (const op of ops) S.applyOp(state, op);
   }
 
+  // #demo=2: a test sheet of the notation rules (doc/TINCAN-SCORE.md lists what each bar shows)
+  function demoSheet() {
+    const ops = [session.reset(), session.setMeta({ title: "Notation test sheet" })];
+    const bars = [
+      [[4, 4], 1], [null, 0], [null, null], [null, null], [[6, 8], null], [null, null],
+      [[3, 4], null], [[4, 4], null], [null, -3], [[2, 2], null], [[4, 4], 0], [null, null],
+    ];
+    const ids = [];
+    let pos = "";
+    for (const [time, key] of bars) {
+      pos = S.posBetween(pos, "");
+      const op = session.addMeasure(pos, time, key);
+      ops.push(op);
+      ids.push(op.id);
+    }
+    const P = (name) => {   // "F#4", "Bb3", "C5"
+      const step = "CDEFGAB".indexOf(name[0]);
+      const alt = name.includes("##") ? 2 : name.includes("#") ? 1 : name.includes("bb") ? -2 : /^.b/.test(name) ? -1 : 0;
+      return [step, +name.slice(-1), alt];
+    };
+    const n = (b, t, d, names, tie = false) => ops.push(session.setNote(null, { m: ids[b], t, d, p: names.split(" ").map(P), tie }));
+    // 1 (G major): dotted rhythms and sixteenths
+    n(0, 0, 360, "G4"); n(0, 360, 120, "A4"); n(0, 480, 240, "B4"); n(0, 720, 120, "C5"); n(0, 840, 120, "D5");
+    n(0, 960, 120, "E5"); n(0, 1080, 120, "D5"); n(0, 1200, 240, "C5"); n(0, 1440, 240, "B4"); n(0, 1680, 240, "A4");
+    // 2 (C major, naturals cancel G major): accidentals in force for the bar, per octave
+    n(1, 0, 240, "F#4"); n(1, 240, 240, "F4"); n(1, 480, 240, "F#4"); n(1, 720, 240, "F#5");
+    n(1, 960, 480, "Bb4"); n(1, 1440, 480, "Bb4");
+    // 3: syncopation, a chord with a second, a G# tied over the bar line
+    n(2, 0, 240, "C4 D4 E4"); n(2, 240, 480, "E4"); n(2, 720, 240, "F4"); n(2, 960, 480, "A3"); n(2, 1440, 480, "G#4", true);
+    // 4: the tied G# shows no sharp, the next G# shows it again; high ledger notes
+    n(3, 0, 480, "G#4"); n(3, 480, 480, "G#4"); n(3, 960, 480, "C6"); n(3, 1440, 480, "A5 C6");
+    // 5 (6/8): beamed in dotted-quarter beats, a dotted quarter
+    n(4, 0, 240, "C5"); n(4, 240, 240, "D5"); n(4, 480, 240, "E5"); n(4, 720, 720, "F5");
+    // 6: eighth, eighth rest, eighth, then a silent beat (dotted quarter rest)
+    n(5, 0, 240, "G4"); n(5, 480, 240, "A4");
+    // 7 (3/4): triplet eighths, a quarter, a triplet with a rest in the middle
+    n(6, 0, 160, "C5"); n(6, 160, 160, "D5"); n(6, 320, 160, "E5"); n(6, 480, 480, "F5");
+    n(6, 960, 160, "G5"); n(6, 1280, 160, "E5");
+    // 8 (4/4): triplet quarters over two beats, then a half note
+    n(7, 0, 320, "C5"); n(7, 320, 320, "B4"); n(7, 640, 320, "A4"); n(7, 960, 960, "G4");
+    // 9 (Eb major): no signs for Eb and Ab; E natural needs one
+    n(8, 0, 480, "Eb4"); n(8, 480, 480, "Ab4"); n(8, 960, 480, "E4"); n(8, 1440, 480, "Eb5");
+    // 10 (2/2): eighths beamed by the half bar
+    for (let i = 0; i < 8; i++) n(9, i * 240, 240, ["C5", "D5", "E5", "F5", "G5", "F5", "E5", "D5"][i]);
+    // 11 (4/4, C major): a whole note tied into the next bar
+    n(10, 0, 1920, "C4 E4 G4", true);
+    n(11, 0, 960, "C4 E4 G4"); n(11, 960, 240, "D4"); n(11, 1200, 240, "E4");
+    for (const op of ops) S.applyOp(state, op);
+  }
+
   // ---------------------------------------------------------------------------
   fillSelects();
   bind();
   ensureStart();
   if (params.get("demo") === "1") demoFill();
+  if (params.get("demo") === "2") demoSheet();
   render();
   updateStatus();
   if (host) {

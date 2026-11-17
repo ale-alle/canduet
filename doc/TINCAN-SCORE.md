@@ -29,7 +29,33 @@ One staff of music that everyone in the lesson writes in together, played on eac
   - Playback follows the metronome's tempo as it changes. It stops at the end, and switches the metronome off again if Play switched it on.
 - **New**, **Open…**, **Save…** (Ctrl+S): New and Open replace the score for everyone (Undo brings it back). Save writes `<title>.score.json`.
 
-**Not in Phase A:** tab, chord symbols and diagrams (Phase B), recording to the click (C), scoring (D), two staves, triplets, voices, lyrics, dynamics, and saving to an assignment or the school library.
+## How the music is written down
+- **Ties:**
+  - A note longer than what's left of the bar goes on into the next bar as tied notes. Bars are added at the end if needed.
+  - **+** straight after writing a note writes the same note again, tied. Otherwise **+** ties the selected note to the next one.
+  - Changing the pitch or accidental of a tied note changes the whole tie.
+  - Ties are drawn across bar lines and line breaks, as two half-ties.
+- **Shortening:** writing over part of a note cuts the note back, as tied notes when the shorter length isn't one written length.
+- **Triplets** (Ctrl+3 or the ³ button; quarter, 8th or 16th):
+  - Groups of three, with a "3", and a bracket when the group isn't one beam.
+  - Triplet 8ths and 16ths start on their own length. Triplet quarters can start on any beat.
+  - Gaps inside a group are triplet rests. A plain note written over a group clears the group.
+- **Rests:**
+  - Each rest starts on a multiple of its own length, so the beats show.
+  - In 4/4 a half rest only covers beats 1–2 or 3–4.
+  - In 6/8, 9/8 and 12/8 a silent beat is a dotted-quarter rest, and rests never cross a beat.
+  - In 5/8 and 7/8, nothing longer than a quarter rest. A silent bar is one whole rest.
+- **Beams:**
+  - Notes shorter than a quarter are joined within a beat: a dotted quarter in compound time, a half in 2/2, a triplet within its group.
+  - Rests and longer notes break beams.
+- **Accidentals:**
+  - A sign shows when a note differs from what's in force on that line and octave: the key signature, or an earlier sign in the bar.
+  - A note tied over the bar line shows no sign, and the next note on that line shows its sign again.
+- **Key and time changes:** a new key cancels the old one with naturals. Just before a line break, the coming key and time are shown at the end of the line.
+- **Spacing:** each line of music grows to fit its highest and lowest notes.
+- **Test sheet:** `score.html#demo=2` in a browser draws 12 bars covering all of the above, in either clef.
+
+**Not in Phase A:** tab, chord symbols and diagrams (Phase B), recording to the click (C), scoring (D), two staves, two voices on one staff, tuplets other than triplets, grace notes, lyrics, dynamics and articulations, and saving to an assignment or the school library.
 
 ## How it's built
 | Part | Where |
@@ -63,6 +89,7 @@ One staff of music that everyone in the lesson writes in together, played on eac
 - TinySoundFont's voices are made before playing, so the audio thread never allocates. Its output goes to this computer's speakers only, never to the others.
 
 ## Tests
+- `node --test score-page/tests/score-notation.test.js`: rests for each time signature, tied pieces, where triplet groups start, triplet rests and playback.
 - `node --test score-page/tests/score-model.test.js`: 14 tests. Convergence in any order over 30 shuffles, tombstones, last writer wins, reset, repair by snapshot, hostile input, limits, rests, playback events with ties, files.
 - `TinCanTests`, new score checks:
   - timing at sample accuracy, the same in any block size

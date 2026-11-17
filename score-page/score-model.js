@@ -37,9 +37,12 @@
     author: 80,
     title: 120,
   };
-  // note lengths in ticks: whole .. 32nd, and their dotted forms
+  // note lengths in ticks: whole .. 32nd, their dotted forms, and triplet quarter, 8th and 16th
+  // (three in the time of two: 320, 160, 80)
   const BASE_DURS = [1920, 960, 480, 240, 120, 60];
-  const DURS = BASE_DURS.concat(BASE_DURS.slice(0, 5).map((d) => d * 1.5));
+  const TRIPLET_DURS = [320, 160, 80];
+  const DURS = BASE_DURS.concat(BASE_DURS.slice(0, 5).map((d) => d * 1.5), TRIPLET_DURS);
+  const isTriplet = (d) => TRIPLET_DURS.includes(d);
   const CLEFS = ["treble", "bass"];
   const INSTRUMENTS = ["piano", "guitar", "bass"];
   const TIME_DENS = [1, 2, 4, 8, 16];
@@ -124,7 +127,7 @@
     if (!plainObj(n)) return false;
     const keys = Object.keys(n).sort().join(",");
     if (keys !== "d,m,p,t,tie") return false;
-    if (!isId(n.m) || !DURS.includes(n.d) || !isInt(n.t, 0, 16 * 1920) || n.t % 60 !== 0) return false;
+    if (!isId(n.m) || !DURS.includes(n.d) || !isInt(n.t, 0, 16 * 1920) || n.t % 20 !== 0) return false;
     if (typeof n.tie !== "boolean") return false;
     if (!Array.isArray(n.p) || n.p.length < 1 || n.p.length > LIMITS.pitches || !n.p.every(validPitch)) return false;
     const midis = n.p.map(midiOf);
@@ -328,19 +331,72 @@
 
   function measureTicks(time) { return Math.round((time[0] * 4 * PPQ) / time[1]); }
 
-  // Rest lengths that fill [from, to) inside a measure: the longest length that starts on a
-  // multiple of itself, so rests line up with the beat.
-  function fillRests(from, to) {
+  // Where the triplet group holding a triplet note at t starts: a group lasts three notes (a quarter
+  // for triplet 8ths, a half for triplet quarters) and starts on its own length, except triplet
+  // quarters, which can start on any beat. The note must fall on the group's grid. null if none.
+  function tripletStart(t, d) {
+    const glen = d * 3, align = d === 320 ? 480 : glen;
+    for (let s = Math.floor(t / align) * align; s > t - glen; s -= align) {
+      if (s >= 0 && (t - s) % d === 0) return s;
+    }
+    return null;
+  }
+
+  // compound time (6/8, 9/8, 12/8, 3/8): the beat is a dotted quarter
+  const isCompound = (time) => !!time && time[1] === 8 && time[0] % 3 === 0;
+
+  // Rest lengths that fill [from, to) inside a measure, written the usual way for the time
+  // signature: each rest starts on a multiple of its own length, so rests show where the beats are.
+  // In compound time a whole silent beat is a dotted quarter rest, and rests never cross a beat.
+  // In 5/8, 7/8 and the like nothing longer than a quarter rest. (A silent whole bar is one whole
+  // rest; view() does that.)
+  function fillRests(from, to, time) {
     const out = [];
+    const greedy = (a, b, maxD) => {
+      let p = a;
+      while (p < b) {
+        let d = BASE_DURS.find((x) => x <= maxD && p % x === 0 && p + x <= b);
+        if (!d) d = Math.min(b - p, 60);
+        out.push({ t: p, d });
+        p += d;
+      }
+    };
+    if (isCompound(time)) {
+      for (let beat = Math.floor(from / 720) * 720; beat < to; beat += 720) {
+        const a = Math.max(from, beat), b = Math.min(to, beat + 720);
+        if (a === beat && b === beat + 720) out.push({ t: a, d: 720 });
+        else if (a < b) greedy(a, b, 240);
+      }
+      return out;
+    }
+    greedy(from, to, time && time[1] === 8 ? 480 : 1920);
+    return out;
+  }
+
+  // rests inside a triplet group [start, start+len): in steps of a third of the group
+  function fillTripletRests(from, to, start, len) {
+    const out = [];
+    const third = len / 3;
     let p = from;
     while (p < to) {
-      let d = BASE_DURS.find((x) => p % x === 0 && p + x <= to);
-      if (!d) d = 60;
-      if (p + d > to) d = to - p;  // only happens with odd lengths; never longer than the gap
+      let d = [2 * third, third, third / 2].find((x) => (p - start) % x === 0 && p + x <= to);
+      if (!d) d = to - p;
       out.push({ t: p, d });
       p += d;
     }
     return out;
+  }
+
+  // How a note of `total` ticks starting at `t` in a measure of `len` ticks is written: the pieces
+  // that go in this measure (tied together), and what's left for the next measures. One piece when
+  // it's a written length; otherwise lengths placed like rests (on the beat).
+  function notePieces(t, total, len, time) {
+    const here = Math.min(total, len - t);
+    let pieces;
+    if (here <= 0) pieces = [];
+    else if (DURS.includes(here) && (here === total || !isTriplet(here))) pieces = [{ t, d: here }];
+    else pieces = fillRests(t, t + here, time);
+    return { pieces, left: total - Math.max(0, here) };
   }
 
   // The score as it's shown: measures in order with the time and key that apply, the notes that
@@ -371,18 +427,53 @@
       }
       kept.sort((a, b) => a.t - b.t);
 
+      // triplet groups: each triplet note belongs to the group of three around it (a triplet 8th
+      // to a quarter's worth, a triplet quarter to a half's), placed on that length
+      const tuplets = [];
+      for (const n of kept) {
+        if (!isTriplet(n.d)) continue;
+        if (tuplets.some((g) => n.t >= g.start && n.t < g.start + g.len)) continue;
+        const glen = n.d * 3;
+        const start = tripletStart(n.t, n.d);
+        if (start === null || start + glen > len || tuplets.some((g) => start < g.start + g.len && g.start < start + glen)) continue;
+        tuplets.push({ start, len: glen });
+      }
+      tuplets.sort((a, b) => a.start - b.start);
+      const groupOf = (t) => tuplets.findIndex((g) => t >= g.start && t < g.start + g.len);
+
       const items = [];
+      const gap = (a, b) => {
+        // rests for [a, b): triplet rests inside groups, ordinary rests between them
+        let p = a;
+        while (p < b) {
+          const gi = groupOf(p);
+          if (gi >= 0) {
+            const g = tuplets[gi];
+            const e = Math.min(b, g.start + g.len);
+            for (const r of fillTripletRests(p, e, g.start, g.len)) items.push({ rest: true, t: r.t, d: r.d, tup: gi });
+            p = e;
+          } else {
+            const next = tuplets.find((g) => g.start > p);
+            const e = Math.min(b, next ? next.start : b);
+            for (const r of fillRests(p, e, time)) items.push({ rest: true, t: r.t, d: r.d });
+            p = e;
+          }
+        }
+      };
       let p = 0;
       for (const n of kept) {
-        for (const r of fillRests(p, n.t)) items.push({ rest: true, t: r.t, d: r.d });
-        items.push({ rest: false, t: n.t, d: n.d, p: n.p, tie: n.tie, id: n.id, by: n.by });
+        gap(p, n.t);
+        const gi = groupOf(n.t);
+        const item = { rest: false, t: n.t, d: n.d, p: n.p, tie: n.tie, id: n.id, by: n.by };
+        if (gi >= 0 && isTriplet(n.d)) item.tup = gi;
+        items.push(item);
         p = n.t + n.d;
       }
       const wholeRest = kept.length === 0;
       if (wholeRest) items.push({ rest: true, t: 0, d: len, whole: true });
-      else for (const r of fillRests(p, len)) items.push({ rest: true, t: r.t, d: r.d });
+      else gap(p, len);
 
-      out.push({ id: m.id, index: i, time: time.slice(), key, timeChanged, keyChanged, len, beat, items, hidden });
+      out.push({ id: m.id, index: i, time: time.slice(), key, timeChanged, keyChanged, len, beat, items, hidden, tuplets });
       beat += len / PPQ;
     }
     return { meta: { ...state.meta }, measures: out, totalBeats: beat };
@@ -509,9 +600,9 @@
   }
 
   return {
-    VERSION, PPQ, LIMITS, DURS, BASE_DURS, CLEFS, INSTRUMENTS,
+    VERSION, PPQ, LIMITS, DURS, BASE_DURS, TRIPLET_DURS, CLEFS, INSTRUMENTS, isTriplet, isCompound,
     emptyState, validateOp, applyOp, createSession, later,
-    midiOf, spell, keyAlter, validPitch, posBetween, measureTicks, fillRests,
+    midiOf, spell, keyAlter, validPitch, posBetween, measureTicks, fillRests, fillTripletRests, notePieces, tripletStart,
     view, playEvents, snapshotOps, digest, toFile, opsFromFile,
   };
 });
