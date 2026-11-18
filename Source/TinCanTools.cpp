@@ -648,7 +648,8 @@ void InstrumentPanel::resized()
     auto r = getLocalBounds().reduced(8);
     const int d = IconCircle::size;
 
-    // icons: the instrument and its menus on the left, naming and sharing on the right
+    // icons: the instrument and its menus on the left, naming and sharing on the right, and the
+    // MIDI status, chord and last note in the middle of the same row (the keys get the room)
     auto row = r.removeFromTop(d + 4);
     auto place = [&](Component & c, int width) { c.setBounds(row.removeFromLeft(width).withSizeKeepingCentre(width, d)); row.removeFromLeft(6); };
     auto placeRight = [&](Component & c) { c.setBounds(row.removeFromRight(d).withSizeKeepingCentre(d, d)); row.removeFromRight(6); };
@@ -682,21 +683,30 @@ void InstrumentPanel::resized()
     if (instrumentPicker.isOpen()) instrumentPicker.toFront(false);
     if (rangePicker.isOpen()) rangePicker.toFront(false);
 
+    {
+        auto info = row.withSizeKeepingCentre(row.getWidth(), 24);
+        info.removeFromLeft(10);
+        info.removeFromRight(10);
+        lastNoteLabel.setBounds(info.removeFromRight(jmin(200, info.getWidth() / 3)));
+        info.removeFromRight(8);
+        chordLabel.setBounds(info.removeFromRight(jmin(260, info.getWidth() / 2)));
+        midiStatus.setBounds(info);
+    }
     r.removeFromTop(4);
-    auto info = r.removeFromTop(24);
-    lastNoteLabel.setBounds(info.removeFromRight(220));
-    info.removeFromRight(12);
-    chordLabel.setBounds(info.removeFromRight(jmin(320, jmax(0, info.getWidth() / 2))));
-    midiStatus.setBounds(info);
 
     auto status = r.removeFromBottom(20);
     legendArea = status.removeFromRight(jmin(360, status.getWidth()));
     r.removeFromBottom(4);
 
-    // the keyboard keeps a real piano's proportions: as wide as fits, never stretched or squashed
+    // The keyboard keeps a real piano's proportions and one key size for every range: the size at
+    // which 88 keys span the screen's width less the window and panel edges (64 px; owner,
+    // 2026-11-17: "88 keys 1920 wide on a 1920 screen"). Smaller only when the room is smaller.
     int whites = 0;
     for (int n = lowNote; n < lowNote + numKeys; ++n) if (!MidiMessage::isMidiNoteBlack(n)) ++whites;
-    float keyW = jmin(r.getWidth() / (float) jmax(1, whites), r.getHeight() / whiteKeyHeightPerWidth);
+    float screenW = 1920.0f;
+    if (auto * disp = Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds())) screenW = (float) disp->userArea.getWidth();
+    const float fullKeyW = (screenW - 64.0f) / 52.0f;   // 52 white keys on an 88-key piano
+    float keyW = jmin(fullKeyW, r.getWidth() / (float) jmax(1, whites), r.getHeight() / whiteKeyHeightPerWidth);
     int kw = (int) std::floor(keyW * whites), kh = (int) std::floor(keyW * whiteKeyHeightPerWidth);
     keyboard.setBounds(juce::Rectangle<int>(kw, kh).withCentre(r.getCentre()).withY(r.getY()));
     fretboard.setBounds(r);

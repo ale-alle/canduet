@@ -224,8 +224,13 @@ body[data-right=chat] .dock-r.chat { display: flex; }
 
 /* the native Tools panel sits exactly here */
 #dockHole { flex: none; height: 0; margin: 0 12px; }
-body.tools-on #dockHole { height: 260px; margin-top: 12px; border-radius: var(--r-tile); background: var(--surface); border: 1px solid var(--line); }
-body.tools-on { --dockb: 272px; }
+/* the Tools panel's height follows its keyboard: keys sized so 88 fill a full-width window (--dockh, set by sizeDock) */
+body.tools-on #dockHole { height: var(--dockh, 260px); margin-top: 12px; border-radius: var(--r-tile); background: var(--surface); border: 1px solid var(--line); }
+body.tools-on { --dockb: calc(var(--dockh, 260px) + 12px); }
+/* With Tools open the people get less room: each video shrinks to its camera's own shape and fits
+   above, the whole picture, never cropped (--ar is the camera's width/height, set when it starts) */
+body.tools-on .people .tile.fit { aspect-ratio: auto !important; max-height: none !important; flex: none; justify-self: center; align-self: center; margin: auto; }
+body.tools-on .face video.main, body.tools-on .face video.cam { object-fit: contain; }
 
 /* ---------- lesson bar ---------- */
 .bar { position: relative; flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 8px 16px 10px; margin-top: 10px;
@@ -815,7 +820,51 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const k = $("#sknot"); k.style.left = mx + "px"; k.style.top = my + "px";
     const pc = $("#pop-conn"); pc.style.left = Math.max(8, Math.min(P.width - 308, mx - 150)) + "px"; pc.style.top = Math.min(P.height - 200, my + 24) + "px";
   }
-  new ResizeObserver(() => { drawString(); sendDock(); }).observe(body);
+  // Tools height: room for the panel's icons and legend (about 120 px) and a keyboard whose keys
+  // make 88 span the screen's width less the window and panel edges (64 px), with keys 5.6 times
+  // as tall as wide (the app keeps that shape); never more than half the window
+  function sizeDock() {
+    const keyW = Math.max(12, ((screen.availWidth || window.innerWidth) - 64) / 52);
+    const h = Math.min(Math.round(120 + keyW * 5.6), Math.round(window.innerHeight * 0.5));
+    body.style.setProperty("--dockh", Math.max(220, h) + "px");
+  }
+  sizeDock();
+  // With Tools open, a tile alone in its space takes the largest size of its camera's shape that
+  // fits there (sized here: CSS can't fit a shape to both a width and a height). Tiles sharing a
+  // space (three people or more) keep their place and show the whole picture inside it.
+  const parseAr = (v) => { const m = String(v).match(/([\d.]+)\s*\/\s*([\d.]+)/); return m && +m[2] ? +m[1] / +m[2] : 0; };
+  function fitTiles() {
+    const on = body.classList.contains("tools-on");
+    for (const t of document.querySelectorAll(".people .tile")) {
+      // alone among the tiles shown there (the waiting card is a hidden tile too)
+      const shown = t.parentElement ? [...t.parentElement.children].filter((c) => c.classList.contains("tile") && !c.hidden && getComputedStyle(c).display !== "none") : [];
+      const alone = shown.length === 1 && shown[0] === t;
+      if (!on || !alone) {
+        if (t.classList.contains("fit")) { t.classList.remove("fit"); t.style.width = ""; t.style.height = ""; }
+        continue;
+      }
+      t.classList.add("fit");
+      const box = t.parentElement.getBoundingClientRect();
+      const ar = parseAr(t.style.getPropertyValue("--ar")) || 4 / 3;
+      let w = box.width, h = w / ar;
+      if (h > box.height) { h = box.height; w = h * ar; }
+      t.style.width = Math.floor(w) + "px";
+      t.style.height = Math.floor(h) + "px";
+    }
+  }
+  new ResizeObserver(() => { sizeDock(); fitTiles(); drawString(); sendDock(); }).observe(body);
+  // each video's own shape, for fitting it whole above the Tools panel
+  const noteShape = (e) => {
+    const v = e.target;
+    if (!(v instanceof HTMLVideoElement) || !v.videoWidth || !v.videoHeight) return;
+    const tile = v.closest(".tile");
+    if (tile && (v.classList.contains("main") || v.classList.contains("cam"))) {
+      tile.style.setProperty("--ar", v.videoWidth + " / " + v.videoHeight);
+      requestAnimationFrame(() => { fitTiles(); drawString(); });
+    }
+  };
+  document.addEventListener("loadedmetadata", noteShape, true);
+  document.addEventListener("resize", noteShape, true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawString);
 
   // ---- me ----
@@ -875,7 +924,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     $("#toolsBtn").setAttribute("aria-pressed", String(!!docks.tools));
     $("#boardBtn").setAttribute("aria-pressed", String(!!docks.board));
     $("#scoreBtn").setAttribute("aria-pressed", String(!!docks.score));
-    if (body.classList.contains("tools-on") !== !!docks.tools) { body.classList.toggle("tools-on", !!docks.tools); sendDock(); requestAnimationFrame(drawString); }
+    if (body.classList.contains("tools-on") !== !!docks.tools) { body.classList.toggle("tools-on", !!docks.tools); sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); }); }
   }
   setInterval(renderLesson, 1000);
 
