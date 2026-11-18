@@ -760,10 +760,248 @@
     return ops;
   }
 
+  // ---------------------------------------------------------------------------
+  // MusicXML export (the standard other notation programs open: MuseScore, Sibelius, Dorico,
+  // Finale, Guitar Pro). MusicXML 4.0, one part; a piano score is one part with two staves.
+  // ---------------------------------------------------------------------------
+
+  const XML_TYPE = { 1920: "whole", 960: "half", 480: "quarter", 240: "eighth", 120: "16th", 60: "32nd" };
+  const XML_ACC = { "-2": "flat-flat", "-1": "flat", 0: "natural", 1: "sharp", 2: "double-sharp" };
+  const escXml = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+
+  // a written length: its type, dot and whether it's a triplet
+  function xmlLength(d) {
+    if (XML_TYPE[d]) return { type: XML_TYPE[d], dot: false, trip: false };
+    if (isTriplet(d)) return { type: XML_TYPE[d * 1.5], dot: false, trip: true };
+    if (XML_TYPE[d / 1.5]) return { type: XML_TYPE[d / 1.5], dot: true, trip: false };
+    return null;
+  }
+
+  // the length beams group by (the page beams the same way)
+  function beamUnit(time) {
+    if (isCompound(time)) return 720;
+    if (time[1] === 2) return 960;
+    if (time[1] === 16) return 240;
+    return 480;
+  }
+
+  // The score as a MusicXML document (a string). opts: {tempo, date}
+  function toMusicXML(state, opts = {}) {
+    const v = view(state);
+    const two = v.measures.length && v.measures[0].staves.length === 2;
+    const clef = state.meta.clef;
+    const base = clef === "bass" ? 16 : 28;   // diatonic index of staff line 0 (as on the page)
+    const lineOf = (p, s) => (p[1] * 7 + p[0] - (two ? (s === 1 ? 16 : 28) : base)) / 2;
+
+    // divisions: the smallest unit every length and position is a whole number of
+    let unit = PPQ;
+    for (const m of v.measures) for (const st of m.staves) for (const it of st.items) unit = gcd(unit, gcd(it.t || PPQ, it.d));
+    const div = (ticks) => Math.round(ticks / unit);
+
+    // where each note sits, for ties and slurs: id -> {mi, s, idx}
+    const at = {};
+    v.measures.forEach((m, mi) => m.staves.forEach((st, s) => st.items.forEach((it, idx) => { if (!it.rest) at[it.id] = { mi, s, idx }; })));
+    const itemsOf = (mi, s) => v.measures[mi].staves[s].items;
+    // the next / previous note on the same staff, if it's straight after / before (across a bar line too)
+    function neighbour(mi, s, it, dir) {
+      const items = itemsOf(mi, s);
+      const i = items.indexOf(it);
+      if (dir > 0) {
+        const n = items.find((x) => x.t === it.t + it.d);
+        if (n) return n.rest ? null : n;
+        if (it.t + it.d !== v.measures[mi].len || !v.measures[mi + 1]) return null;
+        const f = itemsOf(mi + 1, s)[0];
+        return f && !f.rest && f.t === 0 ? f : null;
+      }
+      for (let j = i - 1; j >= 0; j--) if (items[j].t + items[j].d === it.t) return items[j].rest ? null : items[j];
+      if (it.t !== 0 || mi === 0) return null;
+      const prev = itemsOf(mi - 1, s);
+      const l = prev[prev.length - 1];
+      return l && !l.rest && l.t + l.d === v.measures[mi - 1].len ? l : null;
+    }
+    const tieStart = (mi, s, it, midi) => {
+      if (!it.tie) return false;
+      const n = neighbour(mi, s, it, 1);
+      return !!n && n.p.some((q) => midiOf(q) === midi);
+    };
+    const tieStop = (mi, s, it, midi) => {
+      const p = neighbour(mi, s, it, -1);
+      return !!p && p.tie && p.p.some((q) => midiOf(q) === midi);
+    };
+
+    // slurs: the first note at or after the start, the last at or before the end; the side, and
+    // the stems of the notes under it turned away (as the page draws them)
+    const slurStart = {}, slurStop = {}, stems = {};
+    let slurNo = 0;
+    for (const sl of v.slurs) {
+      const s = two ? sl.a.s || 0 : 0;
+      const under = [];
+      for (let mi = sl.a.mi; mi <= sl.b.mi; mi++) {
+        for (const it of itemsOf(mi, s)) {
+          if (it.rest || (mi === sl.a.mi && it.t < sl.a.t) || (mi === sl.b.mi && it.t > sl.b.t)) continue;
+          under.push(it);
+        }
+      }
+      if (under.length < 2) continue;
+      let side = sl.side;
+      if (!side) {
+        let sum = 0, n = 0;
+        for (const it of under) for (const p of it.p) { sum += lineOf(p, s); n++; }
+        side = n && sum / n >= 3 ? -1 : 1;
+      }
+      const no = (slurNo++ % 6) + 1;
+      const placement = side < 0 ? "above" : "below";
+      (slurStart[under[0].id] = slurStart[under[0].id] || []).push({ no, placement });
+      (slurStop[under[under.length - 1].id] = slurStop[under[under.length - 1].id] || []).push({ no });
+      for (const it of under) stems[it.id] = side < 0 ? "down" : "up";
+    }
+
+    const out = [];
+    const w = (line) => out.push(line);
+    w('<?xml version="1.0" encoding="UTF-8" standalone="no"?>');
+    w('<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">');
+    w('<score-partwise version="4.0">');
+    if (state.meta.title) w(`  <work><work-title>${escXml(state.meta.title)}</work-title></work>`);
+    w("  <identification>");
+    w("    <encoding>");
+    w("      <software>CanDuet</software>");
+    if (opts.date) w(`      <encoding-date>${escXml(opts.date)}</encoding-date>`);
+    w("    </encoding>");
+    w("  </identification>");
+    w("  <part-list>");
+    w(`    <score-part id="P1"><part-name>${two ? "Piano" : "Music"}</part-name></score-part>`);
+    w("  </part-list>");
+    w('  <part id="P1">');
+
+    v.measures.forEach((m, mi) => {
+      w(`    <measure number="${mi + 1}">`);
+      if (mi === 0 || m.keyChanged || m.timeChanged) {
+        w("      <attributes>");
+        if (mi === 0) w(`        <divisions>${PPQ / unit}</divisions>`);
+        if (mi === 0 || m.keyChanged) w(`        <key><fifths>${m.key}</fifths></key>`);
+        if (mi === 0 || m.timeChanged) w(`        <time><beats>${m.time[0]}</beats><beat-type>${m.time[1]}</beat-type></time>`);
+        if (mi === 0) {
+          if (two) {
+            w("        <staves>2</staves>");
+            w('        <clef number="1"><sign>G</sign><line>2</line></clef>');
+            w('        <clef number="2"><sign>F</sign><line>4</line></clef>');
+          } else if (clef === "bass") w("        <clef><sign>F</sign><line>4</line></clef>");
+          else w("        <clef><sign>G</sign><line>2</line></clef>");
+        }
+        w("      </attributes>");
+      }
+      if (mi === 0 && opts.tempo) {
+        w('      <direction placement="above">');
+        w(`        <direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(opts.tempo)}</per-minute></metronome></direction-type>`);
+        w(`        <sound tempo="${Math.round(opts.tempo)}"/>`);
+        w("      </direction>");
+      }
+
+      m.staves.forEach((st, s) => {
+        if (s > 0) w(`      <backup><duration>${div(m.len)}</duration></backup>`);
+        const voice = s === 0 ? 1 : 5;
+        const staffTag = two ? `<staff>${s + 1}</staff>` : "";
+        // accidentals shown, as the page shows them: when a note differs from what's in force on
+        // that line and octave in the bar; none on a note tied over from before
+        const inForce = {};
+        // beams: notes shorter than a quarter within a beat (or a triplet group)
+        const beamOf = {};
+        const bu = beamUnit(m.time);
+        let run = [], runKey = null;
+        const flush = () => {
+          if (run.length >= 2) run.forEach((it, i) => { beamOf[it.id] = i === 0 ? "begin" : i === run.length - 1 ? "end" : "continue"; });
+          run = []; runKey = null;
+        };
+        for (const it of st.items) {
+          const flagged = !it.rest && (isTriplet(it.d) ? it.d < 320 : it.d < 480);
+          if (!flagged) { flush(); continue; }
+          const g = it.tup !== undefined ? st.tuplets[it.tup] : null;
+          const key = g ? "t" + it.tup : "b" + Math.floor(it.t / bu);
+          const end = g ? g.start + g.len : (Math.floor(it.t / bu) + 1) * bu;
+          if (runKey !== null && key !== runKey) flush();
+          if (it.t + it.d > end) { flush(); continue; }
+          run.push(it); runKey = key;
+        }
+        flush();
+        // triplet brackets: first and last item of each group
+        const tupFirst = {}, tupLast = {};
+        st.items.forEach((it, i) => {
+          if (it.tup === undefined) return;
+          const prev = st.items[i - 1], next = st.items[i + 1];
+          if (!prev || prev.tup !== it.tup) tupFirst[i] = true;
+          if (!next || next.tup !== it.tup) tupLast[i] = true;
+        });
+
+        st.items.forEach((it, i) => {
+          if (it.rest) {
+            if (it.whole) {
+              w(`      <note><rest measure="yes"/><duration>${div(it.d)}</duration><voice>${voice}</voice>${staffTag}</note>`);
+              return;
+            }
+            const L = xmlLength(it.d) || { type: "quarter", dot: false, trip: false };
+            let x = `      <note><rest/><duration>${div(it.d)}</duration><voice>${voice}</voice><type>${L.type}</type>${L.dot ? "<dot/>" : ""}`;
+            if (L.trip) x += "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>";
+            x += staffTag;
+            const tn = [];
+            if (tupFirst[i]) tn.push('<tuplet type="start" bracket="yes"/>');
+            if (tupLast[i]) tn.push('<tuplet type="stop"/>');
+            if (tn.length) x += `<notations>${tn.join("")}</notations>`;
+            w(x + "</note>");
+            return;
+          }
+          const L = xmlLength(it.d) || { type: "quarter", dot: false, trip: false };
+          const pitches = it.p.slice().sort((a, b) => midiOf(a) - midiOf(b));
+          pitches.forEach((p, k) => {
+            const midi = midiOf(p);
+            const stop = tieStop(mi, s, it, midi), start = tieStart(mi, s, it, midi);
+            // the sign shown
+            const key = p[0] + "," + p[1];
+            const current = key in inForce ? inForce[key] : keyAlter(m.key, p[0]);
+            let acc = null;
+            if (!stop) {   // a note tied from the one before shows no sign and doesn't count as one
+              if (current !== p[2]) acc = XML_ACC[p[2]];
+              inForce[key] = p[2];
+            }
+            let x = "      <note>";
+            if (k > 0) x += "<chord/>";
+            x += `<pitch><step>${"CDEFGAB"[p[0]]}</step>${p[2] ? `<alter>${p[2]}</alter>` : ""}<octave>${p[1]}</octave></pitch>`;
+            x += `<duration>${div(it.d)}</duration>`;
+            if (stop) x += '<tie type="stop"/>';
+            if (start) x += '<tie type="start"/>';
+            x += `<voice>${voice}</voice><type>${L.type}</type>${L.dot ? "<dot/>" : ""}`;
+            if (acc) x += `<accidental>${acc}</accidental>`;
+            if (L.trip) x += "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>";
+            if (stems[it.id]) x += `<stem>${stems[it.id]}</stem>`;
+            x += staffTag;
+            if (k === 0 && beamOf[it.id]) x += `<beam number="1">${beamOf[it.id]}</beam>`;
+            const nt = [];
+            if (stop) nt.push('<tied type="stop"/>');
+            if (start) nt.push('<tied type="start"/>');
+            if (k === 0) {
+              for (const sl of slurStop[it.id] || []) nt.push(`<slur type="stop" number="${sl.no}"/>`);
+              for (const sl of slurStart[it.id] || []) nt.push(`<slur type="start" number="${sl.no}" placement="${sl.placement}"/>`);
+              if (tupFirst[i]) nt.push('<tuplet type="start" bracket="yes"/>');
+              if (tupLast[i]) nt.push('<tuplet type="stop"/>');
+              if (it.st) nt.push("<articulations><staccato/></articulations>");
+            }
+            if (nt.length) x += `<notations>${nt.join("")}</notations>`;
+            w(x + "</note>");
+          });
+        });
+      });
+      if (mi === v.measures.length - 1) w('      <barline location="right"><bar-style>light-heavy</bar-style></barline>');
+      w("    </measure>");
+    });
+    w("  </part>");
+    w("</score-partwise>");
+    return out.join("\n") + "\n";
+  }
+
   return {
     VERSION, PPQ, LIMITS, DURS, BASE_DURS, TRIPLET_DURS, CLEFS, INSTRUMENTS, isTriplet, isCompound,
     emptyState, validateOp, applyOp, createSession, later,
     midiOf, spell, keyAlter, validPitch, posBetween, measureTicks, fillRests, fillTripletRests, notePieces, tripletStart,
-    view, playEvents, soundingLength, snapshotOps, digest, toFile, opsFromFile,
+    view, playEvents, soundingLength, snapshotOps, digest, toFile, opsFromFile, toMusicXML,
   };
 });

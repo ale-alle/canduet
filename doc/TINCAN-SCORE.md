@@ -38,7 +38,21 @@ One staff of music that everyone in the lesson writes in together, played on eac
 - **Play** (**Space**):
   - Plays from the selected bar. With **Click** on, the metronome starts with its count-in and the music starts after it. If the metronome is already going, the music starts at the next bar.
   - Playback follows the metronome's tempo as it changes. It stops at the end, and switches the metronome off again if Play switched it on.
-- **New**, **Open…**, **Save…** (Ctrl+S): New and Open replace the score for everyone (Undo brings it back). Save writes `<title>.score.json`.
+- **New**, **Open…**, **Save…** (Ctrl+S): New and Open replace the score for everyone (Undo brings it back). Save writes `<title>.score.json`, CanDuet's own file, to open again here.
+- **MusicXML…** exports `<title>.musicxml`, the standard file that MuseScore, Sibelius, Dorico, Finale and Guitar Pro open.
+  - MusicXML 4.0, one part. A piano score is one part with two staves.
+  - Carries:
+    - title and tempo; key, time and clef, with changes
+    - notes, chords and rests; dots and triplets (with brackets)
+    - ties, including over bar lines
+    - accidentals exactly as shown on the page
+    - beams by beat
+    - slurs (with their side, and the stems of their notes turned away)
+    - staccato
+  - Not carried: each slur's hand-shaped points. Other programs draw slurs their own way.
+  - `S.toMusicXML(state, {tempo, date})` in `score-model.js`.
+  - Checked when written: validated against the MusicXML 4.0 schema (W3C), and read back with music21. Every pitch, length, tie, triplet, slur and both staves matched.
+  - Importing MusicXML (for the school library) is planned with the library.
 
 ## Tools (toolbar, left)
 | Tool | Key | What it does |

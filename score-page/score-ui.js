@@ -1404,6 +1404,7 @@
       render();
     });
     $("#save").addEventListener("click", saveFile);
+    $("#exportXml").addEventListener("click", exportMusicXML);
     $("#open").addEventListener("click", () => $("#file").click());
     $("#file").addEventListener("change", async (e) => {
       const f = e.target.files && e.target.files[0];
@@ -2252,12 +2253,23 @@
     }
   }
 
-  async function saveFile() {
-    const text = JSON.stringify(S.toFile(state), null, 1);
-    const name = ((state.meta.title || "Score").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Score") + ".score.json";
+  const fileBase = () => (state.meta.title || "Score").replace(/[\\/:*?"<>|]+/g, " ").trim() || "Score";
+
+  // CanDuet's own file: everything, to open again here
+  function saveFile() {
+    return saveText(JSON.stringify(S.toFile(state), null, 1), fileBase() + ".score.json", "CanDuet score", "application/json", ".json");
+  }
+
+  // MusicXML, the standard other notation programs open (MuseScore, Sibelius, Dorico, Finale)
+  function exportMusicXML() {
+    const xml = S.toMusicXML(state, { tempo, date: new Date().toISOString().slice(0, 10) });
+    return saveText(xml, fileBase() + ".musicxml", "MusicXML", "application/vnd.recordare.musicxml+xml", ".musicxml");
+  }
+
+  async function saveText(text, name, description, mime, ext) {
     try {
       if (window.showSaveFilePicker) {
-        const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "CanDuet score", accept: { "application/json": [".json"] } }] });
+        const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description, accept: { [mime]: [ext] } }] });
         const w = await h.createWritable();
         await w.write(text);
         await w.close();
@@ -2268,7 +2280,7 @@
       if (err && err.name === "AbortError") return;
     }
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    a.href = URL.createObjectURL(new Blob([text], { type: mime }));
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
