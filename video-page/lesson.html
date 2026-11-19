@@ -285,15 +285,19 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .pop .acts { display: flex; gap: 8px; justify-content: flex-end; }
 .pop.conn { bottom: auto; width: 300px; }
 /* the input mixer (T-077): a console of channel strips across the bottom, like a DAW's mixer */
-.pop.mixer { left: 12px; right: 12px; width: auto; padding: 12px 14px 14px; gap: 10px; }
-.mixer .mhead { display: flex; align-items: center; gap: 12px; }
+.pop.mixer { width: max-content; max-width: calc(100vw - 24px); padding: 12px 14px 14px; gap: 10px; }
+.mixer .mhead { width: 0; min-width: 100%; display: flex; align-items: center; gap: 10px; }
 .mixer .mhead h3 { flex: none; }
-.mixer .mhead p { flex: 1; min-width: 0; }
+.mixer .mhead .dev { flex: 1; min-width: 0; font-size: 12.5px; }
+.mixer .mhead .pill { flex: none; }
+.strip.bus { width: 92px; border-color: var(--line-strong); }
+.strip.bus .nm b { white-space: normal; line-height: 1.15; }
+.strip.bus .nm { background: color-mix(in srgb, var(--string) 18%, var(--raised)); }
+.busgap { flex: none; width: 14px; }
 .console { --fh: 168px; display: flex; align-items: stretch; overflow-x: auto; padding-bottom: 4px; }
 .strip { flex: none; width: 82px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 8px 6px 6px;
   background: linear-gradient(180deg, #1d2846, #131b31); border: 1px solid var(--line); border-radius: 10px; }
 .strip.st { width: 112px; }
-.strip.master { margin-left: 14px; border-color: var(--line-strong); }
 .strip .lk { height: 22px; display: grid; place-items: center; }
 .strip .pn { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
 .strip .pn::before { content: ""; position: absolute; left: 50%; top: 2px; width: 1px; height: 12px; background: var(--line-strong); }
@@ -391,7 +395,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
           <div class="avatar"><span id="selfInit">?</span></div>
           <video class="cam" autoplay playsinline muted hidden aria-label="Your camera"></video>
           <div class="label"><span class="nm">You</span><span class="meter"><i data-meter="me"></i></span><span class="off" id="selfOff" hidden>Muted</span></div>
-          <div class="tbtns ctl"><button class="tbtn" type="button" data-pop="mic" data-anchor="micBtn"><i data-i="mic"></i>My sound</button></div>
+          <div class="tbtns ctl"><button class="tbtn" type="button" data-pop="mixer" data-anchor="mixBtn"><i data-i="mixer"></i>My sound</button></div>
         </div></div>
       </article>
     </div>
@@ -411,7 +415,9 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     <div><b id="ltitle">Your lesson</b><span id="ltime"></span><i class="tprog"><i id="lprog"></i></i></div></div>
 
   <div class="icons" aria-label="Lesson controls">
-    <span class="split"><button class="ib" type="button" id="micBtn" data-tip="Mute my microphone (M)" aria-pressed="false"><span class="disc"><i data-i="mic"></i></span><span class="lbl">Mic</span></button><button class="caret" type="button" data-pop="mic" data-anchor="micBtn" aria-label="Microphone options" aria-expanded="false">&#9650;</button></span>
+    <button class="ib" type="button" id="micBtn" data-tip="Mute my microphone (M)" aria-pressed="false"><span class="disc"><i data-i="mic"></i></span><span class="lbl">Mute</span></button>
+    <button class="ib" type="button" id="outBtn" data-tip="Mute what I hear (O)" aria-pressed="false"><span class="disc"><i data-i="volume"></i></span><span class="lbl">Output</span></button>
+    <button class="ib" type="button" id="mixBtn" data-pop="mixer" data-tip="Mixer: inputs, microphone level, monitoring, output (X)" aria-expanded="false"><span class="disc"><i data-i="mixer"></i></span><span class="lbl">Mixer</span></button>
     <span class="split"><button class="ib" type="button" id="camBtn" data-tip="Turn my camera off (V)" aria-pressed="false"><span class="disc"><i data-i="video"></i></span><span class="lbl">Camera</span></button><button class="caret" type="button" data-pop="cam" data-anchor="camBtn" aria-label="Camera options" aria-expanded="false">&#9650;</button></span>
     <button class="ib" type="button" id="shareBtn" data-pop="share" data-tip="Share a screen or a second camera" aria-expanded="false"><span class="disc"><i data-i="share"></i></span><span class="lbl">Share</span></button>
     <span class="gap"></span>
@@ -430,19 +436,11 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   </div>
 
   <!-- popovers -->
-  <div class="pop" id="pop-mic" role="dialog" aria-label="Your microphone">
-    <h3>Your microphone</h3>
-    <div class="meter"><i data-meter="me"></i></div>
-    <div class="opt"><div class="lab">Microphone level <output id="inGainO"></output></div><input type="range" min="0" max="1" step="0.001" id="inGain" aria-label="Microphone level"></div>
-    <div class="opt" id="monLevelRow"><div class="lab">Hear myself <output id="monO"></output></div><input type="range" min="0" max="1" step="0.001" id="monLevel" aria-label="Hear myself level"><p class="hint">Your own sound in your headphones. All the way left is off.</p></div>
-    <div class="line" id="monSwitchRow" hidden><span>Hear myself<small>Your own sound in your headphones</small></span><input type="checkbox" class="sw" id="monitor" aria-label="Hear myself"></div>
-    <div class="dev"><span id="inDev"></span><button class="link" type="button" data-act="setup">Change…</button></div>
-    <button class="pill" type="button" id="inputsBtn" data-pop="inputs" data-anchor="micBtn" aria-expanded="false" hidden>Inputs…</button>
-    <hr class="t-only"><div class="advgrid t-only" style="margin:0"><button class="pill" type="button" data-act="effects">Reverb…</button></div>
-  </div>
-  <div class="pop mixer" id="pop-inputs" role="dialog" aria-label="Inputs">
-    <div class="mhead"><h3>Inputs</h3><p>Every input that's on, mixed into one stereo sound: what you hear, and what the others hear. Link two neighbours for a stereo source.</p>
-      <button class="xbtn" type="button" data-act="closepop" aria-label="Close inputs"><i data-i="x"></i></button></div>
+  <div class="pop mixer" id="pop-mixer" role="dialog" aria-label="Mixer">
+    <div class="mhead"><h3>Mixer</h3>
+      <span class="dev"><span id="inDev"></span> <button class="link" type="button" data-act="setup">Change…</button></span>
+      <button class="pill t-only" type="button" data-act="effects">Reverb…</button>
+      <button class="xbtn" type="button" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
     <div class="console" id="inList"></div>
   </div>
   <div class="pop" id="pop-cam" role="dialog" aria-label="Your camera">
@@ -467,7 +465,6 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   </form>
   <div class="pop" id="pop-set" role="dialog" aria-label="Quick settings">
     <h3>Quick settings</h3>
-    <div class="opt"><div class="lab">Lesson volume <output id="volO"></output></div><input type="range" min="0" max="1" step="0.001" id="vol" aria-label="Lesson volume"></div>
     <div class="dev"><span id="outDev"></span><button class="link" type="button" data-act="setup">Change…</button></div>
     <div class="line"><span>Mute everything I hear</span><input type="checkbox" class="sw" id="recvMute" aria-label="Mute everything I hear"></div>
     <div class="line t-only"><span>Labels under the icons</span><input type="checkbox" class="sw" id="labels" checked aria-label="Labels under the icons"></div>
@@ -535,6 +532,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.1 1-1.1 1.7M12 17h.01"/>',
     flip: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
     volume: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+    mixer: '<path d="M6 3v18M12 3v18M18 3v18"/><rect x="3.5" y="13" width="5" height="3" rx="1"/><rect x="9.5" y="6" width="5" height="3" rx="1"/><rect x="15.5" y="10" width="5" height="3" rx="1"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>', check: '<path d="m5 12 5 5 9-10"/>', dot: '<circle cx="12" cy="12" r="3"/>',
     flag: '<path d="M4 22V4s1-1 4-1 5 2 8 2 4-1 4-1v11s-1 1-4 1-5-2-8-2-4 1-4 1"/>',
@@ -569,7 +567,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   }
 
   // ---- what the app tells us ----
-  let me = { name: myName, role: "learner", micOff: false, inGain: 1, monitor: false, monitorLevel: 0, recvMute: false, volume: 1, level: 0, inDevice: "", outDevice: "" };
+  let me = { name: myName, role: "learner", micOff: false, inGain: 1, monitor: false, monitorLevel: 0, recvMute: false, volume: 1, outMute: false, outLevel: 0, level: 0, inDevice: "", outDevice: "" };
   let conn = "connecting", lessonInfo = { title: "", startsAt: 0, endsAt: 0, joinedAt: Date.now() };
   let audioPeers = [], rec = { phase: "idle", secs: 0 }, docks = { tools: false, board: false };
 
@@ -882,21 +880,16 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     $("#micBtn").setAttribute("aria-pressed", String(!!me.micOff));
     $("#micBtn").dataset.tip = me.micOff ? "Unmute my microphone (M)" : "Mute my microphone (M)";
     nameFromTip($("#micBtn"));
-    $("#micBtn .lbl").textContent = me.micOff ? "Muted" : "Mic";
+    $("#micBtn .lbl").textContent = me.micOff ? "Unmute" : "Mute";
+    $("#outBtn").classList.toggle("off", !!me.outMute);
+    $("#outBtn").setAttribute("aria-pressed", String(!!me.outMute));
+    $("#outBtn").dataset.tip = me.outMute ? "Unmute what I hear (O)" : "Mute what I hear (O)";
+    nameFromTip($("#outBtn"));
+    $("#outBtn .lbl").textContent = me.outMute ? "Output off" : "Output";
     $("#selfOff").hidden = !me.micOff;
     const lvl = me.micOff ? 0 : Math.max(0, Math.min(1, me.level || 0));
     $$("[data-meter=me]").forEach((el) => { el.style.transform = `scaleX(${lvl})`; });
-    if (performance.now() > meBusyUntil) {
-      $("#inGain").value = inGainToPos(me.inGain); $("#inGainO").textContent = dbText(me.inGain);
-      $("#monitor").checked = !!me.monitor;
-      $("#monLevel").value = monGainToPos(me.monitorLevel || 0); $("#monO").textContent = monText(me.monitorLevel || 0);
-      $("#vol").value = gainToPos(me.volume); $("#volO").textContent = dbText(me.volume);
-      $("#recvMute").checked = !!me.recvMute;
-    }
-    // older apps don't report a level: show their on/off switch instead of the slider
-    const hasLevel = typeof me.monitorLevel === "number";
-    $("#monLevelRow").hidden = !hasLevel;
-    $("#monSwitchRow").hidden = hasLevel;
+    if (performance.now() > meBusyUntil) $("#recvMute").checked = !!me.recvMute;
     $("#inDev").textContent = me.inDevice ? "Microphone: " + me.inDevice : "Microphone";
     $("#outDev").textContent = me.outDevice ? "Sound out: " + me.outDevice : "Headphones or speakers";
   }
@@ -908,13 +901,6 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     meQueue[msg.t] = msg;
     if (firstOne) setTimeout(() => { send(meQueue[msg.t]); delete meQueue[msg.t]; }, 33);
   }
-  $("#inGain").addEventListener("input", (e) => { meBusy(); const g = inPosToGain(+e.target.value); $("#inGainO").textContent = dbText(g); sendSoon({ t: "inGain", v: g }); });
-  $("#inGain").addEventListener("dblclick", (e) => { e.target.value = inGainToPos(1); e.target.dispatchEvent(new Event("input")); });
-  $("#vol").addEventListener("input", (e) => { meBusy(); const g = posToGain(+e.target.value); $("#volO").textContent = dbText(g); sendSoon({ t: "volume", v: g }); });
-  $("#vol").addEventListener("dblclick", (e) => { e.target.value = gainToPos(1); e.target.dispatchEvent(new Event("input")); });
-  $("#monLevel").addEventListener("input", (e) => { meBusy(); const g = monPosToGain(+e.target.value); $("#monO").textContent = monText(g); sendSoon({ t: "monitorLevel", v: g }); });
-  $("#monLevel").addEventListener("dblclick", (e) => { e.target.value = 1; e.target.dispatchEvent(new Event("input")); });
-  $("#monitor").addEventListener("change", (e) => { meBusy(); send({ t: "monitor", v: e.target.checked }); });
   $("#recvMute").addEventListener("change", (e) => { meBusy(); send({ t: "recvMute", v: e.target.checked }); });
   $("#labels").addEventListener("change", (e) => { body.classList.toggle("nolabels", !e.target.checked); try { localStorage.setItem("canduet.labels", e.target.checked ? "1" : "0"); } catch (_) {} });
   try { if (localStorage.getItem("canduet.labels") === "0") { $("#labels").checked = false; body.classList.add("nolabels"); } } catch (_) {}
@@ -969,7 +955,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (id === "mark") { $("#markIn").value = ""; send({ t: "mark", a: "start" }); }
     pop.classList.add("open"); btn.setAttribute("aria-expanded", "true");
     popOpener = btn;
-    if (pop.parentElement.id === "bar" && !pop.classList.contains("mixer")) {
+    if (pop.parentElement.id === "bar") {
       const bar = $("#bar").getBoundingClientRect();
       const anchor = btn.dataset.anchor ? ($("#" + btn.dataset.anchor) || btn) : btn;
       const r = (anchor.offsetParent ? anchor : btn).getBoundingClientRect();
@@ -1041,7 +1027,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       case "help": closePops(); send({ t: "help" }); break;
       case "leave": closePops(); send({ t: "leave" }); break;
     }
-    if (t.id === "micBtn") { me.micOff = !me.micOff; renderMe(); send({ t: "mic", off: me.micOff }); }
+    if (t.id === "micBtn") { me.micOff = !me.micOff; renderMe(); renderInputs(); send({ t: "mic", off: me.micOff }); }
+    if (t.id === "outBtn") { setOutMute(!me.outMute); }
     if (t.id === "camBtn") toggleCamera();
   });
   $("#pop-mark").addEventListener("submit", (e) => { e.preventDefault(); send({ t: "mark", a: "save", label: $("#markIn").value.trim().slice(0, 80) }); closePops(); toast("Highlight saved", 2500); });
@@ -1054,7 +1041,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "range" && e.target.type !== "checkbox" || e.ctrlKey || e.altKey || e.metaKey) return;
     const k = e.key.toLowerCase();
     if (practice && k === "c") return;
-    const map = { m: "#micBtn", v: "#camBtn", t: "#toolsBtn", b: "#boardBtn", c: "#chatBtn" };
+    const map = { m: "#micBtn", o: "#outBtn", x: "#mixBtn", v: "#camBtn", t: "#toolsBtn", b: "#boardBtn", c: "#chatBtn" };
     if (map[k]) { e.preventDefault(); $(map[k]).click(); }
     if (k === "h" && rec.phase === "recording") { e.preventDefault(); openPop($("#markBtn")); }
   });
@@ -1075,31 +1062,50 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     inQueue[key] = { t: "input", i, k, v };
     if (firstOne) setTimeout(() => { send(inQueue[key]); delete inQueue[key]; }, 33);
   }
-  function scaleHtml() {
-    return [12, 6, 0, -6, -12, -24, -40].map((db) => {
-      const y = faderY(inGainToPos(Math.pow(10, db / 20)));
+  function scaleHtml(ticks, toPos) {
+    return ticks.map((db) => {
+      const y = faderY(toPos(Math.pow(10, db / 20)));
       return `<span style="top:${y.toFixed(1)}px">${db > 0 ? "+" + db : db}</span>`;
     }).join("");
   }
-  function stripEl(r, master) {
+  // a level on the meters' scale (0..1 over -60..0 dB) after a gain
+  const levelAfter = (l, g) => g <= 0.001 ? 0 : Math.max(0, Math.min(1, (l || 0) + 20 * Math.log10(g) / 60));
+  function setOutMute(m) { me.outMute = m; renderMe(); renderInputs(); send({ t: "outMute", v: m }); }
+  const monOn = () => typeof me.monitorLevel === "number" ? me.monitorLevel > 0.001 : !!me.monitor;
+  // the strips after the inputs: what the whole sound does
+  const BUSES = [
+    { id: "mic", label: "Microphone level", sub: "All inputs", ticks: [12, 6, 0, -6, -12, -24, -40], toPos: inGainToPos, fromPos: inPosToGain,
+      get: () => me.inGain, level: () => me.micOff ? 0 : me.level, muted: () => !!me.micOff, muteTip: "Mute my microphone",
+      set: (g) => sendSoon({ t: "inGain", v: g }), mute: (m) => { me.micOff = m; renderMe(); send({ t: "mic", off: m }); } },
+    { id: "mon", label: "Monitoring", sub: "Hear myself", ticks: [0, -6, -12, -24, -40], toPos: monGainToPos, fromPos: monPosToGain,
+      get: () => me.monitorLevel || 0, level: () => monOn() ? levelAfter(me.level, me.monitorLevel || 1) : 0, muted: () => !monOn(), muteTip: "Turn monitoring off",
+      set: (g) => { me.monitorLevel = g; sendSoon({ t: "monitorLevel", v: g }); }, mute: (m) => send({ t: "monitor", v: !m }) },
+    { id: "out", label: "Output level", sub: "What I hear", ticks: [6, 0, -6, -12, -24, -40], toPos: gainToPos, fromPos: posToGain,
+      get: () => me.volume, level: () => me.outMute ? 0 : (me.outLevel || 0), muted: () => !!me.outMute, muteTip: "Mute what I hear",
+      set: (g) => sendSoon({ t: "volume", v: g }), mute: (m) => setOutMute(m) },
+  ];
+  const busById = (id) => BUSES.find((b) => b.id === id);
+  function stripEl(r, bus) {
     const el = document.createElement("div");
-    el.className = "strip" + (r.stereo ? " st" : "") + (master ? " master" : "");
-    if (!master) el.dataset.i = r.i;
-    const bars = master ? 1 : (r.stereo ? 2 : 1);
+    el.className = "strip" + (r.stereo ? " st" : "") + (bus ? " bus" : "");
+    if (bus) el.dataset.bus = bus.id; else el.dataset.i = r.i;
+    const bars = r.stereo ? 2 : 1;
+    const scale = bus ? scaleHtml(bus.ticks, bus.toPos) : scaleHtml([12, 6, 0, -6, -12, -24, -40], inGainToPos);
     el.innerHTML = `<div class="lk"></div>
-      <div class="pn${master ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
-      <div class="fz"><div class="scale">${scaleHtml()}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
+      <div class="pn${bus ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
+      <div class="fz"><div class="scale">${scale}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
         <div class="mt">${'<span class="vu"><i></i></span>'.repeat(bars)}</div></div>
       <output class="gO"></output>
-      <button class="mb${master ? " none" : ""}" type="button" aria-pressed="false" title="Mute">M</button>
+      <button class="mb" type="button" aria-pressed="false">M</button>
       <div class="nm"><b></b><small></small></div>`;
-    const label = master ? "Master" : (r.label || "Input");
+    const label = bus ? bus.label : (r.label || "Input");
     el.querySelector(".nm b").textContent = label;
-    el.querySelector(".nm small").textContent = master ? "Mic level" : (r.name || " ");
-    el.querySelector(".nm").title = master ? "All inputs together" : (r.name || label);
-    el.querySelector(".g").setAttribute("aria-label", label + " level");
+    el.querySelector(".nm small").textContent = bus ? bus.sub : (r.name || " ");
+    el.querySelector(".nm").title = bus ? bus.sub : (r.name || label);
+    el.querySelector(".g").setAttribute("aria-label", label);
     el.querySelector(".p").setAttribute("aria-label", label + (r.stereo ? " position" : " pan"));
-    el.querySelector(".mb").setAttribute("aria-label", "Mute " + label);
+    el.querySelector(".mb").title = bus ? bus.muteTip : "Mute " + label;
+    el.querySelector(".mb").setAttribute("aria-label", el.querySelector(".mb").title);
     if (r.stereo) el.querySelector(".lk").append(linkBtn(r.i, true, label));
     return el;
   }
@@ -1114,15 +1120,13 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     return b;
   }
   function renderInputs() {
-    $("#inputsBtn").hidden = inputs.length === 0;
-    $("#inputsBtn").textContent = inputs.length > 1 ? `Inputs (${inputs.length})…` : "Inputs…";
     const list = $("#inList");
     const layout = inputs.map((r) => r.label + (r.stereo ? "s" : "") + (r.canPair ? "+" : "")).join("|");
-    if (layout !== inLayout) {
+    if (layout !== inLayout || !list.firstChild) {
       inLayout = layout;
       list.textContent = "";
       inputs.forEach((r, k) => {
-        list.append(stripEl(r, false));
+        list.append(stripEl(r, null));
         const next = inputs[k + 1];
         if (!next) return;
         // between two neighbours: a link button only when both are single inputs side by side
@@ -1131,37 +1135,45 @@ body:not([data-rec=recording]) .rec-only { display: none; }
         if (r.canPair) gap.append(linkBtn(r.i, false, r.label + " and " + next.label));
         list.append(gap);
       });
-      list.append(stripEl({ i: -1 }, true));
+      if (inputs.length) { const g = document.createElement("div"); g.className = "busgap"; list.append(g); }
+      BUSES.forEach((b, k) => {
+        if (k) { const g = document.createElement("div"); g.className = "lkgap"; list.append(g); }
+        list.append(stripEl({}, b));
+      });
     }
     const now = performance.now();
+    const meter = (el, levels) => el.querySelectorAll(".vu i").forEach((b, k) => {
+      const l = Math.max(0, Math.min(1, +levels[Math.min(k, levels.length - 1)] || 0));
+      b.style.clipPath = `inset(${(100 - l * 100).toFixed(1)}% 0 0 0)`;
+    });
     for (const r of inputs) {
       const el = list.querySelector(`.strip[data-i="${r.i}"]`);
       if (!el) continue;
       const lv = Array.isArray(r.levels) && r.levels.length ? r.levels : [r.level || 0];
-      el.querySelectorAll(".vu i").forEach((b, k) => {
-        const l = r.muted ? 0 : Math.max(0, Math.min(1, +lv[Math.min(k, lv.length - 1)] || 0));
-        b.style.clipPath = `inset(${(100 - l * 100).toFixed(1)}% 0 0 0)`;
-      });
+      meter(el, r.muted ? [0] : lv);
       el.classList.toggle("off", !!r.muted);
       if (inBusyUntil[r.i] > now) continue;
       el.querySelector(".g").value = inGainToPos(r.gain); el.querySelector(".gO").textContent = dbShort(r.gain);
       el.querySelector(".p").value = r.pan || 0; el.querySelector(".pn output").textContent = panShort(r.pan || 0);
       el.querySelector(".mb").setAttribute("aria-pressed", String(!!r.muted));
     }
-    const m = list.querySelector(".strip.master");
-    if (m) {
-      const l = me.micOff ? 0 : Math.max(0, Math.min(1, me.level || 0));
-      m.querySelector(".vu i").style.clipPath = `inset(${(100 - l * 100).toFixed(1)}% 0 0 0)`;
-      if (performance.now() > meBusyUntil) { m.querySelector(".g").value = inGainToPos(me.inGain); m.querySelector(".gO").textContent = dbShort(me.inGain); }
+    for (const b of BUSES) {
+      const el = list.querySelector(`.strip[data-bus="${b.id}"]`);
+      if (!el) continue;
+      meter(el, [b.level()]);
+      el.classList.toggle("off", b.muted());
+      el.querySelector(".mb").setAttribute("aria-pressed", String(b.muted()));
+      if (now > meBusyUntil) { el.querySelector(".g").value = b.toPos(b.get()); el.querySelector(".gO").textContent = dbShort(b.get()); }
     }
   }
   $("#inList").addEventListener("input", (e) => {
     const el = e.target.closest(".strip"); if (!el) return;
-    if (el.classList.contains("master")) {
-      if (!e.target.classList.contains("g")) return;
-      meBusy(); const g = inPosToGain(+e.target.value);
-      el.querySelector(".gO").textContent = dbShort(g); $("#inGain").value = e.target.value; $("#inGainO").textContent = dbText(g);
-      sendSoon({ t: "inGain", v: g });
+    if (el.dataset.bus) {
+      const b = busById(el.dataset.bus);
+      if (!b || !e.target.classList.contains("g")) return;
+      meBusy(); const g = b.fromPos(+e.target.value);
+      el.querySelector(".gO").textContent = dbShort(g);
+      b.set(g);
       return;
     }
     const i = +el.dataset.i;
@@ -1169,11 +1181,19 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (e.target.classList.contains("p")) { const v = +e.target.value; el.querySelector(".pn output").textContent = panShort(v); sendInput(i, "pan", v); }
   });
   $("#inList").addEventListener("dblclick", (e) => {
-    if (e.target.classList.contains("g")) { e.target.value = inGainToPos(1); e.target.dispatchEvent(new Event("input", { bubbles: true })); }
+    if (e.target.classList.contains("g")) {
+      const b = busById(e.target.closest(".strip").dataset.bus || "");
+      e.target.value = b ? b.toPos(1) : inGainToPos(1); e.target.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     if (e.target.classList.contains("p")) { e.target.value = 0; e.target.dispatchEvent(new Event("input", { bubbles: true })); }
   });
   $("#inList").addEventListener("click", (e) => {
     const mb = e.target.closest(".mb");
+    if (mb && mb.closest(".strip").dataset.bus) {
+      const b = busById(mb.closest(".strip").dataset.bus);
+      if (b) { meBusy(); b.mute(!b.muted()); renderInputs(); }
+      return;
+    }
     if (mb) {
       const el = mb.closest(".strip"), muted = mb.getAttribute("aria-pressed") !== "true";
       mb.setAttribute("aria-pressed", String(muted)); el.classList.toggle("off", muted);

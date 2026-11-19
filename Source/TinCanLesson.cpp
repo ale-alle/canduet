@@ -392,6 +392,8 @@ void LessonView::sendState()
     me->setProperty("monitorLevel", getParam(SonobusAudioProcessor::paramDry));   // 0..1; pages with the slider use this
     me->setProperty("recvMute", getParam(SonobusAudioProcessor::paramMainRecvMute) > 0.5f);
     me->setProperty("volume", getParam(SonobusAudioProcessor::paramWet));
+    me->setProperty("outMute", getParam(SonobusAudioProcessor::paramWet) < 0.001f);   // the Output button (T-077)
+    me->setProperty("outLevel", meterLevel(&processor.getOutputMeterSource()));
     me->setProperty("level", meterLevel(&processor.getPostInputMeterSource()));   // after the microphone level (T-077)
     if (hooks.deviceNames) {
         String in, out;
@@ -557,6 +559,15 @@ void LessonView::handleMessage(const var & message)
             processor.setInputGroupStereoPair(g, (bool) value);
         }
         sendState();
+    }
+    else if (type == "outMute") {
+        // the Output button and the Output strip's M (T-077): off remembers the level, on brings it back
+        float now = getParam(SonobusAudioProcessor::paramWet);
+        if ((bool) value) {
+            if (now > 0.001f) outputLevel = now;
+            setParam(SonobusAudioProcessor::paramWet, 0.0f);
+        }
+        else setParam(SonobusAudioProcessor::paramWet, now > 0.001f ? now : outputLevel);
     }
     else if (type == "monitorLevel" && isNumber) {
         // the "Hear myself" slider: 0 is off

@@ -30,7 +30,7 @@
 //   page -> app   {"t":"ready"}
 //                 {"t":"gain"|"pan","id","v"}                    a person's volume (0..2) or pan (-1..1)
 //                 {"t":"peer","id","k":"mute|solo|quality|buffer|resetBuffer|remove","v"}
-//                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"monitorLevel","v"} {"t":"recvMute","v"}
+//                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"monitorLevel","v"} {"t":"outMute","v"} {"t":"recvMute","v"}
 //                 {"t":"input","i","k":"gain|pan|mute|pair","v"}   one input in the input mixer (T-077)
 //                 {"t":"tools"} {"t":"board"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
@@ -127,6 +127,7 @@ private:
     int64 joinedAtMs = 0;
     bool everConnected = false;
     float monitorLevel = 1.0f;   // "Hear myself" level to go back to
+    float outputLevel = 1.0f;    // output level to go back to after the Output button (T-077)
     int diagTicks = 0;           // DIAG (temporary, T-077)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LessonView)
