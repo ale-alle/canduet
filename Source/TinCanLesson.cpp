@@ -312,10 +312,18 @@ var LessonView::inputsState()
         }
         r->setProperty("pan", round1(pan * 10.0f) / 10.0f);
         r->setProperty("muted", processor.getInputGroupMuted(g));
-        float rms = 0.0f;
-        for (int c = meterCh; c < meterCh + count && c < meter.getNumChannels(); ++c) rms = jmax(rms, meter.getRMSLevel(c));
-        float level = jlimit(0.0f, 1.0f, (Decibels::gainToDecibels(rms, -60.0f) + 60.0f) / 60.0f);
-        r->setProperty("level", std::round(level * 100.0f) / 100.0f);
+        // one meter per channel (a pair's strip shows two), 0..1 over -60..0 dB
+        Array<var> levels;
+        float top = 0.0f;
+        for (int c = meterCh; c < meterCh + count; ++c) {
+            float rms = c < meter.getNumChannels() ? meter.getRMSLevel(c) : 0.0f;
+            float level = jlimit(0.0f, 1.0f, (Decibels::gainToDecibels(rms, -60.0f) + 60.0f) / 60.0f);
+            level = std::round(level * 100.0f) / 100.0f;
+            levels.add(level);
+            top = jmax(top, level);
+        }
+        r->setProperty("level", top);
+        r->setProperty("levels", levels);
         meterCh += count;
         rows.add(var(r.get()));
     }

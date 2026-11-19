@@ -284,19 +284,53 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .pop hr { border: 0; border-top: 1px solid var(--line); margin: 0; align-self: stretch; }
 .pop .acts { display: flex; gap: 8px; justify-content: flex-end; }
 .pop.conn { bottom: auto; width: 300px; }
-/* the input mixer (T-077) */
-.pop.wide { width: 380px; }
-.inlist { display: flex; flex-direction: column; gap: 10px; }
-.inrow { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
-.inrow.off .meter, .inrow.off .ctrls { opacity: .5; }
-.inrow .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
-.inrow .nm { min-width: 0; }
-.inrow .nm b { display: block; font-size: 14px; }
-.inrow .nm small { display: block; color: var(--subtle); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inrow .ctrls { display: grid; grid-template-columns: 56px 1fr auto; gap: 6px 10px; align-items: center; font-size: 12px; color: var(--muted); }
-.inrow .ctrls output { min-width: 54px; text-align: right; font-variant-numeric: tabular-nums; }
-.inrow .pairl { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted); }
-.inrow .mute[aria-pressed=true] { border-color: var(--string); color: var(--text); }
+/* the input mixer (T-077): a console of channel strips across the bottom, like a DAW's mixer */
+.pop.mixer { left: 12px; right: 12px; width: auto; padding: 12px 14px 14px; gap: 10px; }
+.mixer .mhead { display: flex; align-items: center; gap: 12px; }
+.mixer .mhead h3 { flex: none; }
+.mixer .mhead p { flex: 1; min-width: 0; }
+.console { --fh: 168px; display: flex; align-items: stretch; overflow-x: auto; padding-bottom: 4px; }
+.strip { flex: none; width: 82px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 8px 6px 6px;
+  background: linear-gradient(180deg, #1d2846, #131b31); border: 1px solid var(--line); border-radius: 10px; }
+.strip.st { width: 112px; }
+.strip.master { margin-left: 14px; border-color: var(--line-strong); }
+.strip .lk { height: 22px; display: grid; place-items: center; }
+.strip .pn { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+.strip .pn::before { content: ""; position: absolute; left: 50%; top: 2px; width: 1px; height: 12px; background: var(--line-strong); }
+.strip .pn input { width: 100%; height: 16px; position: relative; -webkit-appearance: none; appearance: none; background: transparent; }
+.strip .pn input::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: var(--night); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.strip .pn input::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 14px; margin-top: -5.5px; border-radius: 2px;
+  background: linear-gradient(90deg, #c9cfdc, #eef1f7 45%, #5d6680 50%, #eef1f7 55%, #aab2c4); box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.strip .pn output { display: block; min-height: 13px; }
+.strip .pn output, .strip .gO { font-size: 10.5px; color: var(--subtle); font-variant-numeric: tabular-nums; }
+.strip .pn.none { visibility: hidden; }
+.strip .fz { display: flex; align-items: stretch; gap: 3px; height: var(--fh); }
+.strip .scale { position: relative; width: 20px; font-size: 9px; color: var(--subtle); text-align: right; }
+.strip .scale span { position: absolute; right: 0; transform: translateY(-50%); line-height: 1; font-variant-numeric: tabular-nums; }
+.strip .fader { position: relative; width: 28px; }
+.strip .fader input { position: absolute; width: var(--fh); height: 28px; left: calc(14px - var(--fh) / 2); top: calc(var(--fh) / 2 - 14px);
+  transform: rotate(-90deg); -webkit-appearance: none; appearance: none; background: transparent; margin: 0; }
+.strip .fader input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--night); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.strip .fader input::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 26px; margin-top: -11px; border-radius: 3px;
+  background: linear-gradient(90deg, #c9cfdc, #eef1f7 45%, #5d6680 50%, #eef1f7 55%, #aab2c4); box-shadow: 0 2px 5px rgba(0, 0, 0, .55); cursor: grab; }
+.strip .fader input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--string); outline-offset: 1px; }
+.strip .mt { flex: none; display: flex; gap: 2px; }
+.strip .vu { flex: none; display: block; position: relative; width: 7px; border-radius: 2px; background: var(--night); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.strip .vu i { position: absolute; inset: 0; background: linear-gradient(0deg, var(--ok) 0 70%, var(--warn) 88%, var(--string) 100%);
+  clip-path: inset(100% 0 0 0); transition: clip-path .09s linear; }
+.strip .mb { width: 28px; height: 22px; border-radius: 5px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted);
+  font: 700 11px/1 var(--font-sans); padding: 0; }
+.strip .mb[aria-pressed=true] { background: var(--warn); border-color: var(--warn); color: #1a1205; }
+.strip .mb.none { visibility: hidden; }
+.strip.off .fz, .strip.off .pn { opacity: .45; }
+.strip .nm { width: 100%; padding: 4px 4px; border-radius: 5px; background: var(--raised); text-align: center; min-width: 0; }
+.strip .nm b { display: block; font-size: 11.5px; white-space: nowrap; }
+.strip .nm small { display: block; font-size: 9.5px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lkgap { flex: none; width: 26px; display: flex; justify-content: center; padding-top: 8px; }
+.lkbtn { width: 24px; height: 22px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--subtle); display: grid; place-items: center; padding: 0; }
+.lkbtn svg.ic { width: 15px; height: 15px; }
+.lkbtn:hover { color: var(--text); border-color: var(--line-strong); }
+.lkbtn[aria-pressed=true] { color: var(--string-light); border-color: var(--string); background: color-mix(in srgb, var(--string) 14%, transparent); }
 .menu { display: flex; flex-direction: column; }
 .menu button { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 9px 8px; border-radius: 10px; text-align: left; }
 .menu button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, transparent); }
@@ -406,11 +440,10 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     <button class="pill" type="button" id="inputsBtn" data-pop="inputs" data-anchor="micBtn" aria-expanded="false" hidden>Inputs…</button>
     <hr class="t-only"><div class="advgrid t-only" style="margin:0"><button class="pill" type="button" data-act="effects">Reverb…</button></div>
   </div>
-  <div class="pop wide" id="pop-inputs" role="dialog" aria-label="Inputs">
-    <h3>Inputs</h3>
-    <p>Every input that's on is mixed into one stereo sound: what you hear, and what the others hear.</p>
-    <div class="inlist" id="inList"></div>
-    <div class="acts"><button class="pill" type="button" data-pop="mic" data-anchor="micBtn">Back</button></div>
+  <div class="pop mixer" id="pop-inputs" role="dialog" aria-label="Inputs">
+    <div class="mhead"><h3>Inputs</h3><p>Every input that's on, mixed into one stereo sound: what you hear, and what the others hear. Link two neighbours for a stereo source.</p>
+      <button class="xbtn" type="button" data-act="closepop" aria-label="Close inputs"><i data-i="x"></i></button></div>
+    <div class="console" id="inList"></div>
   </div>
   <div class="pop" id="pop-cam" role="dialog" aria-label="Your camera">
     <h3>Your camera</h3>
@@ -502,6 +535,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.1 1-1.1 1.7M12 17h.01"/>',
     flip: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
     volume: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>', check: '<path d="m5 12 5 5 9-10"/>', dot: '<circle cx="12" cy="12" r="3"/>',
     flag: '<path d="M4 22V4s1-1 4-1 5 2 8 2 4-1 4-1v11s-1 1-4 1-5-2-8-2-4 1-4 1"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>'
@@ -935,7 +969,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (id === "mark") { $("#markIn").value = ""; send({ t: "mark", a: "start" }); }
     pop.classList.add("open"); btn.setAttribute("aria-expanded", "true");
     popOpener = btn;
-    if (pop.parentElement.id === "bar") {
+    if (pop.parentElement.id === "bar" && !pop.classList.contains("mixer")) {
       const bar = $("#bar").getBoundingClientRect();
       const anchor = btn.dataset.anchor ? ($("#" + btn.dataset.anchor) || btn) : btn;
       const r = (anchor.offsetParent ? anchor : btn).getBoundingClientRect();
@@ -1026,40 +1060,58 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   });
 
   // ---- messages from the app ----
-  // ---- the input mixer (T-077) ----
+  // ---- the input mixer (T-077): one channel strip per input, a link button between neighbours ----
   let inputs = [];
   let inLayout = "";
   const inBusyUntil = {};
   const inQueue = {};
+  const FH = 168;   // fader height (px), as --fh
+  const faderY = (pos) => 6.5 + (1 - pos) * (FH - 13);   // the cap's centre, top to bottom
+  const panShort = (v) => Math.abs(v) < 0.005 ? "C" : (v < 0 ? "L" : "R") + Math.round(Math.abs(v) * 100);
+  const dbShort = (g) => g <= 0.0001 ? "-∞" : (20 * Math.log10(g)).toFixed(1);
   function sendInput(i, k, v) {
     inBusyUntil[i] = performance.now() + 700;
     const key = i + ":" + k, firstOne = !inQueue[key];
     inQueue[key] = { t: "input", i, k, v };
     if (firstOne) setTimeout(() => { send(inQueue[key]); delete inQueue[key]; }, 33);
   }
-  function inputRow(r, next) {
-    const row = document.createElement("div");
-    row.className = "inrow"; row.dataset.i = r.i;
-    row.innerHTML = `<div class="top"><span class="nm"><b></b><small></small></span>
-        <button class="pill mute" type="button" aria-pressed="false">Mute</button></div>
-      <div class="meter"><i></i></div>
-      <div class="ctrls"><span>Level</span><input type="range" class="g" min="0" max="1" step="0.001"><output class="gO"></output>
-        <span class="pl"></span><input type="range" class="p" min="-1" max="1" step="0.01"><output class="pO"></output></div>
-      <label class="pairl" hidden><span></span><input type="checkbox" class="sw pair"></label>`;
-    row.querySelector(".nm b").textContent = r.label || "Input";
-    row.querySelector(".nm small").textContent = r.name || "";
-    row.querySelector(".nm small").hidden = !r.name;
-    row.querySelector(".pl").textContent = r.stereo ? "Position" : "Pan";
-    row.querySelector(".g").setAttribute("aria-label", (r.label || "Input") + " level");
-    row.querySelector(".p").setAttribute("aria-label", (r.label || "Input") + (r.stereo ? " position" : " pan"));
-    const pl = row.querySelector(".pairl");
-    if (r.stereo || (r.canPair && next)) {
-      pl.hidden = false;
-      pl.querySelector("span").textContent = r.stereo ? "Stereo pair" : "Stereo pair with " + next.label;
-      pl.querySelector(".pair").checked = !!r.stereo;
-      pl.querySelector(".pair").setAttribute("aria-label", pl.querySelector("span").textContent);
-    }
-    return row;
+  function scaleHtml() {
+    return [12, 6, 0, -6, -12, -24, -40].map((db) => {
+      const y = faderY(inGainToPos(Math.pow(10, db / 20)));
+      return `<span style="top:${y.toFixed(1)}px">${db > 0 ? "+" + db : db}</span>`;
+    }).join("");
+  }
+  function stripEl(r, master) {
+    const el = document.createElement("div");
+    el.className = "strip" + (r.stereo ? " st" : "") + (master ? " master" : "");
+    if (!master) el.dataset.i = r.i;
+    const bars = master ? 1 : (r.stereo ? 2 : 1);
+    el.innerHTML = `<div class="lk"></div>
+      <div class="pn${master ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
+      <div class="fz"><div class="scale">${scaleHtml()}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
+        <div class="mt">${'<span class="vu"><i></i></span>'.repeat(bars)}</div></div>
+      <output class="gO"></output>
+      <button class="mb${master ? " none" : ""}" type="button" aria-pressed="false" title="Mute">M</button>
+      <div class="nm"><b></b><small></small></div>`;
+    const label = master ? "Master" : (r.label || "Input");
+    el.querySelector(".nm b").textContent = label;
+    el.querySelector(".nm small").textContent = master ? "Mic level" : (r.name || " ");
+    el.querySelector(".nm").title = master ? "All inputs together" : (r.name || label);
+    el.querySelector(".g").setAttribute("aria-label", label + " level");
+    el.querySelector(".p").setAttribute("aria-label", label + (r.stereo ? " position" : " pan"));
+    el.querySelector(".mb").setAttribute("aria-label", "Mute " + label);
+    if (r.stereo) el.querySelector(".lk").append(linkBtn(r.i, true, label));
+    return el;
+  }
+  function linkBtn(i, on, label) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "lkbtn"; b.dataset.i = i;
+    b.setAttribute("aria-pressed", String(on));
+    b.title = on ? "Unlink " + label + " into two inputs" : "Link " + label + " as one stereo input";
+    b.setAttribute("aria-label", b.title);
+    b.innerHTML = '<i data-i="link"></i>';
+    icons(b);
+    return b;
   }
   function renderInputs() {
     $("#inputsBtn").hidden = inputs.length === 0;
@@ -1069,43 +1121,67 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (layout !== inLayout) {
       inLayout = layout;
       list.textContent = "";
-      inputs.forEach((r, k) => list.append(inputRow(r, inputs[k + 1])));
+      inputs.forEach((r, k) => {
+        list.append(stripEl(r, false));
+        const next = inputs[k + 1];
+        if (!next) return;
+        // between two neighbours: a link button only when both are single inputs side by side
+        const gap = document.createElement("div");
+        gap.className = "lkgap";
+        if (r.canPair) gap.append(linkBtn(r.i, false, r.label + " and " + next.label));
+        list.append(gap);
+      });
+      list.append(stripEl({ i: -1 }, true));
     }
     const now = performance.now();
     for (const r of inputs) {
-      const row = list.querySelector(`.inrow[data-i="${r.i}"]`);
-      if (!row) continue;
-      const lvl = r.muted ? 0 : Math.max(0, Math.min(1, r.level || 0));
-      row.querySelector(".meter i").style.transform = `scaleX(${lvl})`;
-      row.classList.toggle("off", !!r.muted);
+      const el = list.querySelector(`.strip[data-i="${r.i}"]`);
+      if (!el) continue;
+      const lv = Array.isArray(r.levels) && r.levels.length ? r.levels : [r.level || 0];
+      el.querySelectorAll(".vu i").forEach((b, k) => {
+        const l = r.muted ? 0 : Math.max(0, Math.min(1, +lv[Math.min(k, lv.length - 1)] || 0));
+        b.style.clipPath = `inset(${(100 - l * 100).toFixed(1)}% 0 0 0)`;
+      });
+      el.classList.toggle("off", !!r.muted);
       if (inBusyUntil[r.i] > now) continue;
-      row.querySelector(".g").value = inGainToPos(r.gain); row.querySelector(".gO").textContent = dbText(r.gain);
-      row.querySelector(".p").value = r.pan || 0; row.querySelector(".pO").textContent = panText(r.pan || 0);
-      const mb = row.querySelector(".mute");
-      mb.setAttribute("aria-pressed", String(!!r.muted)); mb.textContent = r.muted ? "Muted" : "Mute";
+      el.querySelector(".g").value = inGainToPos(r.gain); el.querySelector(".gO").textContent = dbShort(r.gain);
+      el.querySelector(".p").value = r.pan || 0; el.querySelector(".pn output").textContent = panShort(r.pan || 0);
+      el.querySelector(".mb").setAttribute("aria-pressed", String(!!r.muted));
+    }
+    const m = list.querySelector(".strip.master");
+    if (m) {
+      const l = me.micOff ? 0 : Math.max(0, Math.min(1, me.level || 0));
+      m.querySelector(".vu i").style.clipPath = `inset(${(100 - l * 100).toFixed(1)}% 0 0 0)`;
+      if (performance.now() > meBusyUntil) { m.querySelector(".g").value = inGainToPos(me.inGain); m.querySelector(".gO").textContent = dbShort(me.inGain); }
     }
   }
   $("#inList").addEventListener("input", (e) => {
-    const row = e.target.closest(".inrow"); if (!row) return;
-    const i = +row.dataset.i;
-    if (e.target.classList.contains("g")) { const g = inPosToGain(+e.target.value); row.querySelector(".gO").textContent = dbText(g); sendInput(i, "gain", g); }
-    if (e.target.classList.contains("p")) { const v = +e.target.value; row.querySelector(".pO").textContent = panText(v); sendInput(i, "pan", v); }
+    const el = e.target.closest(".strip"); if (!el) return;
+    if (el.classList.contains("master")) {
+      if (!e.target.classList.contains("g")) return;
+      meBusy(); const g = inPosToGain(+e.target.value);
+      el.querySelector(".gO").textContent = dbShort(g); $("#inGain").value = e.target.value; $("#inGainO").textContent = dbText(g);
+      sendSoon({ t: "inGain", v: g });
+      return;
+    }
+    const i = +el.dataset.i;
+    if (e.target.classList.contains("g")) { const g = inPosToGain(+e.target.value); el.querySelector(".gO").textContent = dbShort(g); sendInput(i, "gain", g); }
+    if (e.target.classList.contains("p")) { const v = +e.target.value; el.querySelector(".pn output").textContent = panShort(v); sendInput(i, "pan", v); }
   });
   $("#inList").addEventListener("dblclick", (e) => {
     if (e.target.classList.contains("g")) { e.target.value = inGainToPos(1); e.target.dispatchEvent(new Event("input", { bubbles: true })); }
     if (e.target.classList.contains("p")) { e.target.value = 0; e.target.dispatchEvent(new Event("input", { bubbles: true })); }
   });
   $("#inList").addEventListener("click", (e) => {
-    const b = e.target.closest(".mute"); if (!b) return;
-    const row = b.closest(".inrow"), muted = b.getAttribute("aria-pressed") !== "true";
-    b.setAttribute("aria-pressed", String(muted)); b.textContent = muted ? "Muted" : "Mute";
-    row.classList.toggle("off", muted);
-    sendInput(+row.dataset.i, "mute", muted);
-  });
-  $("#inList").addEventListener("change", (e) => {
-    if (!e.target.classList.contains("pair")) return;
-    const row = e.target.closest(".inrow");
-    send({ t: "input", i: +row.dataset.i, k: "pair", v: e.target.checked });
+    const mb = e.target.closest(".mb");
+    if (mb) {
+      const el = mb.closest(".strip"), muted = mb.getAttribute("aria-pressed") !== "true";
+      mb.setAttribute("aria-pressed", String(muted)); el.classList.toggle("off", muted);
+      sendInput(+el.dataset.i, "mute", muted);
+      return;
+    }
+    const lk = e.target.closest(".lkbtn");
+    if (lk) send({ t: "input", i: +lk.dataset.i, k: "pair", v: lk.getAttribute("aria-pressed") !== "true" });
   });
 
   function onState(m) {
@@ -1334,7 +1410,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     inputs = [{ i: 0, label: "Input 1", name: "Mic/Line 1", stereo: false, canPair: true, gain: 1, pan: 0, muted: false, level: 0.1 },
               { i: 1, label: "Input 2", name: "Mic/Line 2", stereo: false, canPair: true, gain: 1, pan: 0, muted: true, level: 0 },
               { i: 2, label: "Input 3", name: "Mic/Line 3", stereo: false, canPair: false, gain: 1.4, pan: 0, muted: false, level: 0.6 },
-              { i: 3, label: "Input 5–6", name: "Line 5 / Line 6", stereo: true, canPair: false, gain: 1, pan: -0.2, muted: false, level: 0.45 }];
+              { i: 3, label: "Input 5–6", name: "Line 5 / Line 6", stereo: true, canPair: false, gain: 1, pan: -0.2, muted: false, level: 0.45, levels: [0.45, 0.38] }];
     renderInputs();
     conn = st === "problem" ? "lost" : "connected";
     lessonInfo = { title: "Piano with Mia", startsAt: Date.now() - 12 * 60000, endsAt: Date.now() + 18 * 60000, joinedAt: Date.now() - 11 * 60000 };

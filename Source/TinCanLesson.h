@@ -23,7 +23,7 @@
 // borderless child window (created after the web view, so it sits above it).
 //
 // Messages (JSON, WebView2 postMessage):
-//   app  -> page  {"t":"state","me":{…},"inputs":[{"i","label","name","stereo","canPair","gain","pan","muted","level"}],"conn":"connecting|connected|lost","lesson":{…},
+//   app  -> page  {"t":"state","me":{…},"inputs":[{"i","label","name","stereo","canPair","gain","pan","muted","level","levels"}],"conn":"connecting|connected|lost","lesson":{…},
 //                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board"}}      ~10 a second
 //                 {"t":"chat","items":[{"from","text","me","sys"}]}                    new messages
 //                 {"t":"toast","text","ms"}                                           a short notice
