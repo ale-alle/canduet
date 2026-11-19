@@ -5,6 +5,8 @@
 #include "TinCanLessonRules.h"
 #include "TinCanTheme.h"
 #include "TinCanVideo.h"
+#include "TinCanPaths.h"   // DIAG (temporary, T-077)
+namespace TinCan { static float meterLevel(foleys::LevelMeterSource * meter); }   // DIAG (temporary, T-077)
 
 #include <cmath>
 
@@ -194,6 +196,36 @@ void LessonView::timerCallback()
     }
     sendState();
     sendNewChat();
+
+    // DIAG (temporary, T-077): once a second, where the monitored sound goes, to monitor-diag.txt
+    if (++diagTicks >= 10) {
+        diagTicks = 0;
+        int gs = -1, gc = -1;
+        processor.getInputGroupChannelStartAndCount(0, gs, gc);
+        String line;
+        line << Time::getCurrentTime().toString(false, true, true, true)
+             << " in=" << meterLevel(&processor.getInputMeterSource())
+             << " postIn=" << meterLevel(&processor.getPostInputMeterSource())
+             << " out=" << meterLevel(&processor.getOutputMeterSource())
+             << " dry=" << getParam(SonobusAudioProcessor::paramDry)
+             << " wet=" << getParam(SonobusAudioProcessor::paramWet)
+             << " inGain=" << getParam(SonobusAudioProcessor::paramInGain)
+             << " inMute=" << getParam(SonobusAudioProcessor::paramMainInMute)
+             << " sendMute=" << getParam(SonobusAudioProcessor::paramMainSendMute)
+             << " recvMute=" << getParam(SonobusAudioProcessor::paramMainRecvMute)
+             << " monSolo=" << getParam(SonobusAudioProcessor::paramMainMonitorSolo)
+             << " anySolo=" << (int) processor.isAnythingSoloed()
+             << " groups=" << processor.getInputGroupCount()
+             << " g0start=" << gs << " g0count=" << gc
+             << " g0mon=" << processor.getInputMonitor(0)
+             << " g0muted=" << (int) processor.getInputGroupMuted(0)
+             << " totIn=" << processor.getTotalNumInputChannels()
+             << " totOut=" << processor.getTotalNumOutputChannels()
+             << " mainOut=" << processor.getMainBusNumOutputChannels()
+             << " peers=" << processor.getNumberRemotePeers()
+             << "\n";
+        TinCan::getDataFolder().getChildFile("monitor-diag.txt").appendText(line);
+    }
     placeTools();   // the main window may have moved or changed size
 }
 
