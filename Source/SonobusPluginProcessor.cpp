@@ -7056,43 +7056,111 @@ void SonobusAudioProcessor::changeProgramName (int index, const String& newName)
 
 //==============================================================================
 // CanDuet (T-077): every input the audio setup has on is heard and sent, mixed down to stereo, so
-// nobody has to say which input their microphone or instrument is in. One mono input per channel,
-// panned centre (a lone mic in input 1 isn't stuck in the left ear), sent as stereo. A layout that
-// already matches is kept, so level or pan changes made later stay; new inputs copy input 1's
-// settings (level, limiter, ...). Called from prepareToPlay, so it runs again on every device change.
+// nobody has to say which input their microphone or instrument is in. By default one mono input per
+// channel, panned centre (a lone mic in input 1 isn't stuck in the left ear), sent as stereo. The
+// lesson window's input mixer can join neighbours into stereo pairs (5-6 for a keyboard) and set each
+// one's level, pan and mute; those are kept. Inputs CanDuet laid out are named kCanDuetInputTag, so an
+// old SonoBus layout (one stereo group on inputs 1-2, from before CanDuet) isn't mistaken for a choice.
+// Called from prepareToPlay, so it runs again on every device change.
+static const char * kCanDuetInputTag = "canduet";
+
+static void setLessonInputDefaults(ChannelGroupParams & p, int outchannels)
+{
+    p.soloed = false;
+    p.name = kCanDuetInputTag;
+    p.monDestStartIndex = 0;
+    p.monDestChannels = jmin(2, outchannels);
+    p.panDestStartIndex = 0;
+    p.panDestChannels = 2;
+}
+
 void SonobusAudioProcessor::arrangeInputsForLessons(int inchannels, int outchannels)
 {
-    const int want = jmin(MAX_CHANGROUPS, jmin(inchannels, MAX_CHANNELS));
+    const int inch = jmin(inchannels, MAX_CHANNELS);
 
-    bool matches = mInputChannelGroupCount == want;
-    for (int i = 0; matches && i < want; ++i) {
-        matches = mInputChannelGroups[i].params.chanStartIndex == i && mInputChannelGroups[i].params.numChannels == 1;
+    // already right: every input once, in order, mono or a stereo pair, all laid out by CanDuet
+    bool matches = mInputChannelGroupCount > 0;
+    int ch = 0;
+    for (int i = 0; matches && i < mInputChannelGroupCount; ++i) {
+        const auto & p = mInputChannelGroups[i].params;
+        matches = p.name == kCanDuetInputTag && p.chanStartIndex == ch
+               && (p.numChannels == 1 || (p.numChannels == 2 && ch + 1 < inch));
+        ch += p.numChannels;
     }
+    matches = matches && ch == inch;
 
     if (!matches) {
-        const ChannelGroupParams first = mInputChannelGroups[0].params;
-        for (int i = 0; i < want; ++i) {
-            auto & p = mInputChannelGroups[i].params;
-            if (i >= mInputChannelGroupCount) p = first;
-            p.chanStartIndex = i;
-            p.numChannels = 1;
-            p.pan[0] = 0.0f;
-            p.muted = false;
-            p.soloed = false;
-            p.name = String();
-            p.monDestStartIndex = 0;
-            p.monDestChannels = jmin(2, outchannels);
-            p.panDestStartIndex = 0;
-            p.panDestChannels = 2;
-            mInputChannelGroups[i].commitMonitorDelayParams();
+        std::vector<ChannelGroupParams> old;
+        for (int i = 0; i < mInputChannelGroupCount && i < MAX_CHANGROUPS; ++i) old.push_back(mInputChannelGroups[i].params);
+        ChannelGroupParams fresh = old.empty() ? ChannelGroupParams() : old[0];   // level, limiter, ... of input 1
+        fresh.pan[0] = 0.0f;
+        fresh.panStereo[0] = -1.0f;
+        fresh.panStereo[1] = 1.0f;
+        fresh.muted = false;
+
+        int g = 0;
+        ch = 0;
+        while (ch < inch && g < MAX_CHANGROUPS) {
+            const ChannelGroupParams * prev = nullptr;
+            for (const auto & o : old) {
+                if (o.chanStartIndex == ch && o.name == kCanDuetInputTag) { prev = &o; break; }
+            }
+            ChannelGroupParams p = prev ? *prev : fresh;
+            const bool pair = prev && prev->numChannels == 2 && ch + 1 < inch;
+            if (prev && !pair && prev->numChannels != 1) p.pan[0] = 0.0f;
+            p.chanStartIndex = ch;
+            p.numChannels = pair ? 2 : 1;
+            setLessonInputDefaults(p, outchannels);
+            mInputChannelGroups[g].params = p;
+            mInputChannelGroups[g].commitMonitorDelayParams();
+            ++g;
+            ch += p.numChannels;
         }
-        mInputChannelGroupCount = want;
+        mInputChannelGroupCount = g;
     }
 
     if (mSendChannels.get() != 2) {
         if (auto * prm = mState.getParameter(paramSendChannels)) prm->setValueNotifyingHost(prm->convertTo0to1(2.0f));
         mSendChannels = 2;
     }
+}
+
+// The lesson window's input mixer (T-077): join input group changroup with the next one into a stereo
+// pair (both must be single neighbouring inputs), or split a stereo pair back into two centred inputs.
+bool SonobusAudioProcessor::setInputGroupStereoPair(int changroup, bool pair)
+{
+    if (changroup < 0 || changroup >= mInputChannelGroupCount) return false;
+    auto & p = mInputChannelGroups[changroup].params;
+    const int outs = jmax(1, getMainBusNumOutputChannels());
+
+    if (pair) {
+        if (p.numChannels != 1 || changroup + 1 >= mInputChannelGroupCount) return false;
+        const auto & next = mInputChannelGroups[changroup + 1].params;
+        if (next.numChannels != 1 || next.chanStartIndex != p.chanStartIndex + 1) return false;
+        removeInputChannelGroup(changroup + 1);
+        mInputChannelGroupCount = mInputChannelGroupCount - 1;
+        p.numChannels = 2;
+        p.panStereo[0] = -1.0f;
+        p.panStereo[1] = 1.0f;
+        setLessonInputDefaults(p, outs);
+        mInputChannelGroups[changroup].commitMonitorDelayParams();
+    }
+    else {
+        if (p.numChannels != 2 || mInputChannelGroupCount >= MAX_CHANGROUPS) return false;
+        const int start = p.chanStartIndex;
+        insertInputChannelGroup(changroup + 1, start + 1, 1);   // copies this one's settings first
+        mInputChannelGroupCount = mInputChannelGroupCount + 1;
+        for (int i : { changroup, changroup + 1 }) {
+            auto & q = mInputChannelGroups[i].params;
+            q.numChannels = 1;
+            q.chanStartIndex = start + (i - changroup);
+            q.pan[0] = 0.0f;
+            setLessonInputDefaults(q, outs);
+            mInputChannelGroups[i].commitMonitorDelayParams();
+        }
+    }
+    updateRemotePeerUserFormat();
+    return true;
 }
 
 void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)

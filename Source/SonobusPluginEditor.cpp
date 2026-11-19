@@ -3639,6 +3639,17 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
              + "% buf=" + String(dev->getCurrentBufferSizeSamples()) + " budgetMs="
              + String(1000.0 * dev->getCurrentBufferSizeSamples() / jmax(1.0, dev->getCurrentSampleRate()), 2);
     };
+    h.inputChannels = [safeThis](Array<int> & numbers, StringArray & names) {
+        if (!safeThis || !safeThis->getAudioDeviceManager) return;
+        auto * dm = safeThis->getAudioDeviceManager();
+        auto * dev = dm ? dm->getCurrentAudioDevice() : nullptr;
+        if (!dev) return;
+        auto all = dev->getInputChannelNames();
+        auto on = dev->getActiveInputChannels();
+        for (int b = 0; b < all.size(); ++b) {
+            if (on[b]) { numbers.add(b); names.add(all[b]); }
+        }
+    };
     h.noteShare = &getNoteShare();
     h.makeTools = [safeThis]() -> std::unique_ptr<TinCan::ToolsPanel> {
         if (!safeThis) return nullptr;

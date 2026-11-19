@@ -273,6 +273,55 @@ static float meterLevel(foleys::LevelMeterSource * meter)
 
 static float round1(float v) { return std::round(v * 10.0f) / 10.0f; }
 
+// the input mixer's rows (T-077): one per input group, in order. Its meter channels are the groups'
+// channels laid end to end, after each input's level (and the microphone level over them all).
+var LessonView::inputsState()
+{
+    Array<int> numbers;
+    StringArray names;
+    if (hooks.inputChannels) hooks.inputChannels(numbers, names);
+
+    auto & meter = processor.getPostInputMeterSource();
+    Array<var> rows;
+    int meterCh = 0;
+    for (int g = 0; g < processor.getInputGroupCount(); ++g) {
+        int start = 0, count = 1;
+        processor.getInputGroupChannelStartAndCount(g, start, count);
+        auto number = [&](int ch) { return (ch >= 0 && ch < numbers.size() ? numbers[ch] : ch) + 1; };
+        auto name = [&](int ch) { return ch >= 0 && ch < names.size() ? names[ch].substring(0, 60) : String(); };
+        const bool stereo = count == 2;
+
+        DynamicObject::Ptr r = new DynamicObject();
+        r->setProperty("i", g);
+        r->setProperty("label", stereo ? "Input " + String(number(start)) + "–" + String(number(start + 1))
+                                       : "Input " + String(number(start)));
+        String nm = name(start);
+        if (stereo && name(start + 1).isNotEmpty() && name(start + 1) != nm) nm << " / " << name(start + 1);
+        r->setProperty("name", nm);
+        r->setProperty("stereo", stereo);
+        // a single input can pair with the next one when that is a single input too
+        int ns = 0, nc = 0;
+        r->setProperty("canPair", !stereo && g + 1 < processor.getInputGroupCount()
+                                  && processor.getInputGroupChannelStartAndCount(g + 1, ns, nc) && nc == 1 && ns == start + 1);
+        r->setProperty("gain", processor.getInputGroupGain(g));
+        // a pair's position, as set by "pan" below: the side that isn't at the edge, back from it
+        float pan = processor.getInputChannelPan(g, 0);
+        if (stereo) {
+            float right = processor.getInputChannelPan(g, 1);
+            pan = right < 0.999f ? right - 1.0f : pan + 1.0f;
+        }
+        r->setProperty("pan", round1(pan * 10.0f) / 10.0f);
+        r->setProperty("muted", processor.getInputGroupMuted(g));
+        float rms = 0.0f;
+        for (int c = meterCh; c < meterCh + count && c < meter.getNumChannels(); ++c) rms = jmax(rms, meter.getRMSLevel(c));
+        float level = jlimit(0.0f, 1.0f, (Decibels::gainToDecibels(rms, -60.0f) + 60.0f) / 60.0f);
+        r->setProperty("level", std::round(level * 100.0f) / 100.0f);
+        meterCh += count;
+        rows.add(var(r.get()));
+    }
+    return rows;
+}
+
 void LessonView::sendState()
 {
     using namespace LessonRules;
@@ -367,6 +416,7 @@ void LessonView::sendState()
     DynamicObject::Ptr msg = new DynamicObject();
     msg->setProperty("t", "state");
     msg->setProperty("me", var(me.get()));
+    msg->setProperty("inputs", inputsState());
     msg->setProperty("conn", conn);
     msg->setProperty("lesson", var(lesson.get()));
     msg->setProperty("peers", peers);
@@ -470,6 +520,35 @@ void LessonView::handleMessage(const var & message)
             if (now > 0.001f) monitorLevel = now;
             setParam(SonobusAudioProcessor::paramDry, 0.0f);
         }
+    }
+    else if (type == "input") {
+        // the input mixer (T-077): one input's level (0..4), pan or a pair's position (-1..1), mute, pair
+        const var iv = message.getProperty("i", var());
+        if (!(iv.isInt() || iv.isDouble())) return;
+        const int g = (int) iv;
+        if (g < 0 || g >= processor.getInputGroupCount()) return;
+        const auto k = message.getProperty("k", var()).toString();
+        int start = 0, count = 1;
+        processor.getInputGroupChannelStartAndCount(g, start, count);
+        if (k == "gain" && isNumber) {
+            processor.setInputGroupGain(g, jlimit(0.0f, 4.0f, (float) value));
+        }
+        else if (k == "pan" && isNumber) {
+            float p = jlimit(-1.0f, 1.0f, (float) value);
+            if (count == 2) {
+                // keep the pair full width and move it: right of centre narrows the left side, and back
+                processor.setInputChannelPan(g, 0, jlimit(-1.0f, 1.0f, p - 1.0f));
+                processor.setInputChannelPan(g, 1, jlimit(-1.0f, 1.0f, p + 1.0f));
+            }
+            else processor.setInputChannelPan(g, 0, p);
+        }
+        else if (k == "mute") {
+            processor.setInputGroupMuted(g, (bool) value);
+        }
+        else if (k == "pair") {
+            processor.setInputGroupStereoPair(g, (bool) value);
+        }
+        sendState();
     }
     else if (type == "monitorLevel" && isNumber) {
         // the "Hear myself" slider: 0 is off

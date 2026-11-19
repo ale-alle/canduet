@@ -564,6 +564,7 @@ public:
     // pushes existing groups around
     bool insertInputChannelGroup(int atgroup, int chstart, int chcount);
     bool removeInputChannelGroup(int atgroup);
+    bool setInputGroupStereoPair(int changroup, bool pair);   // CanDuet input mixer (T-077)
     bool moveInputChannelGroupTo(int atgroup, int togroup);
 
     void setInputGroupName(int changroup, const String & name);

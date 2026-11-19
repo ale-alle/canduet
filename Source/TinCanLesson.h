@@ -23,7 +23,7 @@
 // borderless child window (created after the web view, so it sits above it).
 //
 // Messages (JSON, WebView2 postMessage):
-//   app  -> page  {"t":"state","me":{…},"conn":"connecting|connected|lost","lesson":{…},
+//   app  -> page  {"t":"state","me":{…},"inputs":[{"i","label","name","stereo","canPair","gain","pan","muted","level"}],"conn":"connecting|connected|lost","lesson":{…},
 //                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board"}}      ~10 a second
 //                 {"t":"chat","items":[{"from","text","me","sys"}]}                    new messages
 //                 {"t":"toast","text","ms"}                                           a short notice
@@ -31,6 +31,7 @@
 //                 {"t":"gain"|"pan","id","v"}                    a person's volume (0..2) or pan (-1..1)
 //                 {"t":"peer","id","k":"mute|solo|quality|buffer|resetBuffer|remove","v"}
 //                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"monitorLevel","v"} {"t":"recvMute","v"}
+//                 {"t":"input","i","k":"gain|pan|mute|pair","v"}   one input in the input mixer (T-077)
 //                 {"t":"tools"} {"t":"board"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
 //                 {"t":"chat","text"}
@@ -68,6 +69,8 @@ public:
         std::function<bool()> boardOpen;
         std::function<void(String & in, String & out)> deviceNames;
         std::function<String()> diagDevice;   // DIAG (temporary, T-077): xruns, CPU, buffer
+        // the audio interface's inputs that are on, in order: device channel numbers (0-based) and names
+        std::function<void(Array<int> & numbers, StringArray & names)> inputChannels;
         std::function<std::unique_ptr<ToolsPanel>()> makeTools;
         NoteShare * noteShare = nullptr;   // MIDI notes go to the page too, for lesson modules (T-075)
     };
@@ -100,6 +103,7 @@ private:
     void handleMessage(const var & message);
     void handlePeerMessage(int index, const String & kind, const var & value);
     void sendState();
+    var inputsState();
     void sendNewChat();
     void placeTools();
     void setParam(const String & id, float value);
