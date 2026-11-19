@@ -7053,6 +7053,46 @@ void SonobusAudioProcessor::changeProgramName (int index, const String& newName)
 }
 
 //==============================================================================
+// CanDuet (T-077): every input the audio setup has on is heard and sent, mixed down to stereo, so
+// nobody has to say which input their microphone or instrument is in. One mono input per channel,
+// panned centre (a lone mic in input 1 isn't stuck in the left ear), sent as stereo. A layout that
+// already matches is kept, so level or pan changes made later stay; new inputs copy input 1's
+// settings (level, limiter, ...). Called from prepareToPlay, so it runs again on every device change.
+void SonobusAudioProcessor::arrangeInputsForLessons(int inchannels, int outchannels)
+{
+    const int want = jmin(MAX_CHANGROUPS, jmin(inchannels, MAX_CHANNELS));
+
+    bool matches = mInputChannelGroupCount == want;
+    for (int i = 0; matches && i < want; ++i) {
+        matches = mInputChannelGroups[i].params.chanStartIndex == i && mInputChannelGroups[i].params.numChannels == 1;
+    }
+
+    if (!matches) {
+        const ChannelGroupParams first = mInputChannelGroups[0].params;
+        for (int i = 0; i < want; ++i) {
+            auto & p = mInputChannelGroups[i].params;
+            if (i >= mInputChannelGroupCount) p = first;
+            p.chanStartIndex = i;
+            p.numChannels = 1;
+            p.pan[0] = 0.0f;
+            p.muted = false;
+            p.soloed = false;
+            p.name = String();
+            p.monDestStartIndex = 0;
+            p.monDestChannels = jmin(2, outchannels);
+            p.panDestStartIndex = 0;
+            p.panDestChannels = 2;
+            mInputChannelGroups[i].commitMonitorDelayParams();
+        }
+        mInputChannelGroupCount = want;
+    }
+
+    if (mSendChannels.get() != 2) {
+        if (auto * prm = mState.getParameter(paramSendChannels)) prm->setValueNotifyingHost(prm->convertTo0to1(2.0f));
+        mSendChannels = 2;
+    }
+}
+
 void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
@@ -7162,6 +7202,10 @@ void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     // can't be more than number of inchannels
     //mInputChannelGroupCount = jmin(inchannels, mInputChannelGroupCount);
     mInputChannelGroupCount = jmin(MAX_CHANGROUPS, mInputChannelGroupCount);
+
+    if (TinCan::isLessonOnly() && inchannels > 0) {
+        arrangeInputsForLessons(inchannels, outchannels);
+    }
 
 
     for (int i=0; /*i < mInputChannelGroupCount && */ i < MAX_CHANGROUPS; ++i) {

@@ -957,6 +957,7 @@ private:
 
     void commitInputEqParams(int changroup);
     void commitInputMonitoringParams(int changroup);
+    void arrangeInputsForLessons(int inchannels, int outchannels);
 
     void updateDynamicResampling();
 
