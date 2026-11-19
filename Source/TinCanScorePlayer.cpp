@@ -46,7 +46,7 @@ bool ScorePlayer::load()
         return false;
     }
     // voices are made now so the audio thread never allocates; extra notes take over the oldest
-    tsf_set_max_voices(f, 128);
+    tsf_set_max_voices(f, 64);   // T-077: plenty for a score, and a bounded cost on the audio thread
     tsf_set_output(f, TSF_STEREO_INTERLEAVED, (int) sampleRate, -4.0f);
     {
         const SpinLock::ScopedLockType sl(lock);

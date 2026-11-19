@@ -27,6 +27,7 @@
 #include "LatencyMeasurer.h"
 #include "Metronome.h"
 #include "TinCanScorePlayer.h"
+#include "CrossPlatformUtils.h"
 
 using namespace SonoAudio;
 
@@ -7131,6 +7132,16 @@ void SonobusAudioProcessor::arrangeInputsForLessons(int inchannels, int outchann
 // pair (both must be single neighbouring inputs), or split a stereo pair back into two centred inputs.
 bool SonobusAudioProcessor::setInputGroupStereoPair(int changroup, bool pair)
 {
+    if (!changeInputGroupPairing(changroup, pair)) return false;
+    updateRemotePeerUserFormat();
+    return true;
+}
+
+// the layout change itself, between audio blocks: the callback lock keeps processBlock from reading
+// half-moved groups (held for a few copies only, never across anything that waits)
+bool SonobusAudioProcessor::changeInputGroupPairing(int changroup, bool pair)
+{
+    const ScopedLock audioLock(getCallbackLock());
     if (changroup < 0 || changroup >= mInputChannelGroupCount) return false;
     auto & p = mInputChannelGroups[changroup].params;
     const int outs = jmax(1, getMainBusNumOutputChannels());
@@ -7161,7 +7172,6 @@ bool SonobusAudioProcessor::setInputGroupStereoPair(int changroup, bool pair)
             mInputChannelGroups[i].commitMonitorDelayParams();
         }
     }
-    updateRemotePeerUserFormat();
     return true;
 }
 
@@ -7598,12 +7608,14 @@ void SonobusAudioProcessor::ensureBuffers(int numSamples)
 
 void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& midiMessages)
 {
-    // DIAG (temporary, T-077): the slowest block since the log last asked
-    struct DiagBlockTimer {
-        std::atomic<int64> & maxTicks; int64 start = Time::getHighResolutionTicks();
-        ~DiagBlockTimer() { int64 d = Time::getHighResolutionTicks() - start, prev = maxTicks.load();
-                            while (d > prev && !maxTicks.compare_exchange_weak(prev, d)) {} }
-    } diagTimer { mDiagMaxBlockTicks };
+#if JUCE_WINDOWS
+    // CanDuet (T-077): once per audio thread (a device change can bring a new one), "Pro Audio"
+    // scheduling and no power throttling, so Windows doesn't park this thread on a slow core
+    {
+        thread_local bool marked = false;
+        if (!marked) { marked = true; markAudioThreadForProAudio(); }
+    }
+#endif
     ScopedNoDenormals noDenormals;
 
     if (mNoteTapEnabled.load(std::memory_order_relaxed) && !midiMessages.isEmpty()) {

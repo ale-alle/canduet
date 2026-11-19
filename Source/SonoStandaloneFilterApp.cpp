@@ -610,6 +610,8 @@ public:
 
 #if JUCE_MAC
         disableAppNap();
+#elif JUCE_WINDOWS
+        reduceWindowsAudioInterference();   // T-077: no power throttling, higher priority, MMCSS ready
 #endif
 
     }

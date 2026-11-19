@@ -570,6 +570,9 @@ public:
     bool insertInputChannelGroup(int atgroup, int chstart, int chcount);
     bool removeInputChannelGroup(int atgroup);
     bool setInputGroupStereoPair(int changroup, bool pair);   // CanDuet input mixer (T-077)
+private:
+    bool changeInputGroupPairing(int changroup, bool pair);
+public:
     bool moveInputChannelGroupTo(int atgroup, int togroup);
 
     void setInputGroupName(int changroup, const String & name);
@@ -964,11 +967,6 @@ private:
     void commitInputEqParams(int changroup);
     void commitInputMonitoringParams(int changroup);
     void arrangeInputsForLessons(int inchannels, int outchannels);
-public:
-    // DIAG (temporary, T-077): slowest processBlock since the last call, in ms
-    double takeDiagMaxBlockMs() { return Time::highResolutionTicksToSeconds(mDiagMaxBlockTicks.exchange(0)) * 1000.0; }
-private:
-    std::atomic<int64> mDiagMaxBlockTicks { 0 };
 
     void updateDynamicResampling();
 
