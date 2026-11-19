@@ -298,6 +298,7 @@ void LessonView::sendState()
     me->setProperty("micOff", getParam(SonobusAudioProcessor::paramMainSendMute) > 0.5f);
     me->setProperty("inGain", getParam(SonobusAudioProcessor::paramInGain));
     me->setProperty("monitor", getParam(SonobusAudioProcessor::paramDry) > 0.001f);
+    me->setProperty("monitorLevel", getParam(SonobusAudioProcessor::paramDry));   // 0..1; pages with the slider use this
     me->setProperty("recvMute", getParam(SonobusAudioProcessor::paramMainRecvMute) > 0.5f);
     me->setProperty("volume", getParam(SonobusAudioProcessor::paramWet));
     me->setProperty("level", meterLevel(&processor.getInputMeterSource()));
@@ -435,6 +436,12 @@ void LessonView::handleMessage(const var & message)
             if (now > 0.001f) monitorLevel = now;
             setParam(SonobusAudioProcessor::paramDry, 0.0f);
         }
+    }
+    else if (type == "monitorLevel" && isNumber) {
+        // the "Hear myself" slider: 0 is off
+        float v = jlimit(0.0f, 1.0f, (float) value);
+        if (v > 0.001f) monitorLevel = v;
+        setParam(SonobusAudioProcessor::paramDry, v);
     }
     else if (type == "recvMute") {
         setParam(SonobusAudioProcessor::paramMainRecvMute, (bool) value ? 1.0f : 0.0f);

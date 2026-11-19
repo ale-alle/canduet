@@ -387,7 +387,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     <h3>Your microphone</h3>
     <div class="meter"><i data-meter="me"></i></div>
     <div class="opt"><div class="lab">Microphone level <output id="inGainO"></output></div><input type="range" min="0" max="1" step="0.001" id="inGain" aria-label="Microphone level"></div>
-    <div class="line"><span>Hear myself<small>Your own sound in your headphones</small></span><input type="checkbox" class="sw" id="monitor" aria-label="Hear myself"></div>
+    <div class="opt" id="monLevelRow"><div class="lab">Hear myself <output id="monO"></output></div><input type="range" min="0" max="1" step="0.001" id="monLevel" aria-label="Hear myself level"><p class="hint">Your own sound in your headphones. All the way left is off.</p></div>
+    <div class="line" id="monSwitchRow" hidden><span>Hear myself<small>Your own sound in your headphones</small></span><input type="checkbox" class="sw" id="monitor" aria-label="Hear myself"></div>
     <div class="dev"><span id="inDev"></span><button class="link" type="button" data-act="setup">Change…</button></div>
     <hr class="t-only"><div class="advgrid t-only" style="margin:0"><button class="pill" type="button" data-act="effects">Reverb…</button></div>
   </div>
@@ -498,6 +499,9 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   const gainToPos = (g) => Math.sqrt(Math.max(0, Math.min(2, g)) / 2);
   const inPosToGain = (p) => 4 * Math.pow(p, 1 / 0.33);                 // microphone level: 0..4, skew 0.33
   const inGainToPos = (g) => Math.pow(Math.max(0, Math.min(4, g)) / 4, 0.33);
+  const monPosToGain = (p) => p * p;                                    // hear myself: 0..1, skew 0.5 (as the app's "dry" level)
+  const monGainToPos = (g) => Math.sqrt(Math.max(0, Math.min(1, g)));
+  const monText = (g) => g <= 0.001 ? "Off" : dbText(g);
   const dbText = (g) => g <= 0.0001 ? "-∞ dB" : (20 * Math.log10(g)).toFixed(1) + " dB";
   const panText = (v) => Math.abs(v) < 0.01 ? "Centre" : (v < 0 ? "Left " : "Right ") + Math.round(Math.abs(v) * 100);
   const mmss = (s) => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
@@ -511,7 +515,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   }
 
   // ---- what the app tells us ----
-  let me = { name: myName, role: "learner", micOff: false, inGain: 1, monitor: false, recvMute: false, volume: 1, level: 0, inDevice: "", outDevice: "" };
+  let me = { name: myName, role: "learner", micOff: false, inGain: 1, monitor: false, monitorLevel: 0, recvMute: false, volume: 1, level: 0, inDevice: "", outDevice: "" };
   let conn = "connecting", lessonInfo = { title: "", startsAt: 0, endsAt: 0, joinedAt: Date.now() };
   let audioPeers = [], rec = { phase: "idle", secs: 0 }, docks = { tools: false, board: false };
 
@@ -831,9 +835,14 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (performance.now() > meBusyUntil) {
       $("#inGain").value = inGainToPos(me.inGain); $("#inGainO").textContent = dbText(me.inGain);
       $("#monitor").checked = !!me.monitor;
+      $("#monLevel").value = monGainToPos(me.monitorLevel || 0); $("#monO").textContent = monText(me.monitorLevel || 0);
       $("#vol").value = gainToPos(me.volume); $("#volO").textContent = dbText(me.volume);
       $("#recvMute").checked = !!me.recvMute;
     }
+    // older apps don't report a level: show their on/off switch instead of the slider
+    const hasLevel = typeof me.monitorLevel === "number";
+    $("#monLevelRow").hidden = !hasLevel;
+    $("#monSwitchRow").hidden = hasLevel;
     $("#inDev").textContent = me.inDevice ? "Microphone: " + me.inDevice : "Microphone";
     $("#outDev").textContent = me.outDevice ? "Sound out: " + me.outDevice : "Headphones or speakers";
   }
@@ -849,6 +858,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   $("#inGain").addEventListener("dblclick", (e) => { e.target.value = inGainToPos(1); e.target.dispatchEvent(new Event("input")); });
   $("#vol").addEventListener("input", (e) => { meBusy(); const g = posToGain(+e.target.value); $("#volO").textContent = dbText(g); sendSoon({ t: "volume", v: g }); });
   $("#vol").addEventListener("dblclick", (e) => { e.target.value = gainToPos(1); e.target.dispatchEvent(new Event("input")); });
+  $("#monLevel").addEventListener("input", (e) => { meBusy(); const g = monPosToGain(+e.target.value); $("#monO").textContent = monText(g); sendSoon({ t: "monitorLevel", v: g }); });
+  $("#monLevel").addEventListener("dblclick", (e) => { e.target.value = 1; e.target.dispatchEvent(new Event("input")); });
   $("#monitor").addEventListener("change", (e) => { meBusy(); send({ t: "monitor", v: e.target.checked }); });
   $("#recvMute").addEventListener("change", (e) => { meBusy(); send({ t: "recvMute", v: e.target.checked }); });
   $("#labels").addEventListener("change", (e) => { body.classList.toggle("nolabels", !e.target.checked); try { localStorage.setItem("canduet.labels", e.target.checked ? "1" : "0"); } catch (_) {} });
@@ -1215,7 +1226,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const n = Math.max(0, Math.min(4, +(params.get("people") || 1)));
     const names = ["Mia Chen", "Sam", "Alex", "Jordan"];
     const st = params.get("state") || "live";
-    me = Object.assign(me, { name: "Ms. Rivera", role: params.get("role") === "learner" ? "learner" : "teacher", inGain: 1, volume: 1, monitor: false,
+    me = Object.assign(me, { name: "Ms. Rivera", role: params.get("role") === "learner" ? "learner" : "teacher", inGain: 1, volume: 1, monitor: false, monitorLevel: 0,
                              inDevice: "Scarlett 2i2 · Input 1", outDevice: "Scarlett 2i2 · Headphones" });
     conn = st === "problem" ? "lost" : "connected";
     lessonInfo = { title: "Piano with Mia", startsAt: Date.now() - 12 * 60000, endsAt: Date.now() + 18 * 60000, joinedAt: Date.now() - 11 * 60000 };

@@ -30,7 +30,7 @@
 //   page -> app   {"t":"ready"}
 //                 {"t":"gain"|"pan","id","v"}                    a person's volume (0..2) or pan (-1..1)
 //                 {"t":"peer","id","k":"mute|solo|quality|buffer|resetBuffer|remove","v"}
-//                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"recvMute","v"}
+//                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"monitorLevel","v"} {"t":"recvMute","v"}
 //                 {"t":"tools"} {"t":"board"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
 //                 {"t":"chat","text"}
