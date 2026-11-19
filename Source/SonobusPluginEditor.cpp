@@ -3630,6 +3630,15 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
             out = setup.outputDeviceName;
         }
     };
+    h.diagDevice = [safeThis]() -> String {   // DIAG (temporary, T-077)
+        if (!safeThis || !safeThis->getAudioDeviceManager) return {};
+        auto * dm = safeThis->getAudioDeviceManager();
+        auto * dev = dm ? dm->getCurrentAudioDevice() : nullptr;
+        if (!dev) return {};
+        return " xruns=" + String(dev->getXRunCount()) + " cpu=" + String(dm->getCpuUsage() * 100.0, 1)
+             + "% buf=" + String(dev->getCurrentBufferSizeSamples()) + " budgetMs="
+             + String(1000.0 * dev->getCurrentBufferSizeSamples() / jmax(1.0, dev->getCurrentSampleRate()), 2);
+    };
     h.noteShare = &getNoteShare();
     h.makeTools = [safeThis]() -> std::unique_ptr<TinCan::ToolsPanel> {
         if (!safeThis) return nullptr;

@@ -67,6 +67,7 @@ public:
         std::function<double()> recordSeconds;
         std::function<bool()> boardOpen;
         std::function<void(String & in, String & out)> deviceNames;
+        std::function<String()> diagDevice;   // DIAG (temporary, T-077): xruns, CPU, buffer
         std::function<std::unique_ptr<ToolsPanel>()> makeTools;
         NoteShare * noteShare = nullptr;   // MIDI notes go to the page too, for lesson modules (T-075)
     };

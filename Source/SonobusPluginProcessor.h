@@ -958,6 +958,11 @@ private:
     void commitInputEqParams(int changroup);
     void commitInputMonitoringParams(int changroup);
     void arrangeInputsForLessons(int inchannels, int outchannels);
+public:
+    // DIAG (temporary, T-077): slowest processBlock since the last call, in ms
+    double takeDiagMaxBlockMs() { return Time::highResolutionTicksToSeconds(mDiagMaxBlockTicks.exchange(0)) * 1000.0; }
+private:
+    std::atomic<int64> mDiagMaxBlockTicks { 0 };
 
     void updateDynamicResampling();
 

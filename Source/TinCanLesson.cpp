@@ -223,6 +223,8 @@ void LessonView::timerCallback()
              << " totOut=" << processor.getTotalNumOutputChannels()
              << " mainOut=" << processor.getMainBusNumOutputChannels()
              << " peers=" << processor.getNumberRemotePeers()
+             << " maxBlockMs=" << String(processor.takeDiagMaxBlockMs(), 2)
+             << (hooks.diagDevice ? hooks.diagDevice() : String())
              << "\n";
         TinCan::getDataFolder().getChildFile("monitor-diag.txt").appendText(line);
     }
@@ -333,7 +335,7 @@ void LessonView::sendState()
     me->setProperty("monitorLevel", getParam(SonobusAudioProcessor::paramDry));   // 0..1; pages with the slider use this
     me->setProperty("recvMute", getParam(SonobusAudioProcessor::paramMainRecvMute) > 0.5f);
     me->setProperty("volume", getParam(SonobusAudioProcessor::paramWet));
-    me->setProperty("level", meterLevel(&processor.getInputMeterSource()));
+    me->setProperty("level", meterLevel(&processor.getPostInputMeterSource()));   // after the microphone level (T-077)
     if (hooks.deviceNames) {
         String in, out;
         hooks.deviceNames(in, out);

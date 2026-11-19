@@ -6711,7 +6711,9 @@ void SonobusAudioProcessor::parameterChanged (const String &parameterID, float n
         mDry = newValue;
     }
     else if (parameterID == paramInGain) {
-        //mInGain = newValue; // NO LONGER USE GLOBAL mInGain
+        // CanDuet (T-077): the lesson window's microphone level, a master over every input (SonoBus had
+        // stopped using it in favour of per-input levels, so the lesson slider did nothing)
+        mInGain = newValue;
 
         // for now just apply it to the first input channel group
         //mInputChannelGroups[0].gain = newValue;
@@ -7525,6 +7527,12 @@ void SonobusAudioProcessor::ensureBuffers(int numSamples)
 
 void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& midiMessages)
 {
+    // DIAG (temporary, T-077): the slowest block since the log last asked
+    struct DiagBlockTimer {
+        std::atomic<int64> & maxTicks; int64 start = Time::getHighResolutionTicks();
+        ~DiagBlockTimer() { int64 d = Time::getHighResolutionTicks() - start, prev = maxTicks.load();
+                            while (d > prev && !maxTicks.compare_exchange_weak(prev, d)) {} }
+    } diagTimer { mDiagMaxBlockTicks };
     ScopedNoDenormals noDenormals;
 
     if (mNoteTapEnabled.load(std::memory_order_relaxed) && !midiMessages.isEmpty()) {
