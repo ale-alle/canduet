@@ -15,6 +15,7 @@ void runAudioCheckTests();
 void runLessonRulesTests();
 void runNoteWireTests();
 void runChordsTests();
+void runScoreCoreTests();
 
 int main()
 {
@@ -28,6 +29,7 @@ int main()
     runLessonRulesTests();
     runNoteWireTests();
     runChordsTests();
+    runScoreCoreTests();
 
     if (failures == 0) {
         std::printf("TinCanTests: all checks passed\n");

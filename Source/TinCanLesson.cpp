@@ -422,6 +422,7 @@ void LessonView::sendState()
     DynamicObject::Ptr docks = new DynamicObject();
     docks->setProperty("tools", toolsOpen);
     docks->setProperty("board", hooks.boardOpen && hooks.boardOpen());
+    docks->setProperty("score", hooks.scoreOpen && hooks.scoreOpen());
 
     DynamicObject::Ptr msg = new DynamicObject();
     msg->setProperty("t", "state");
@@ -619,6 +620,7 @@ void LessonView::handleMessage(const var & message)
         if (a == "save" && hooks.markSave) hooks.markSave(message.getProperty("label", var()).toString().trim().substring(0, 80));
     }
     else if (type == "board")    { if (hooks.toggleBoard) hooks.toggleBoard(); }
+    else if (type == "score")    { if (hooks.toggleScore) hooks.toggleScore(); }
     else if (type == "setup")    { if (hooks.openSetup) hooks.openSetup(); }
     else if (type == "settings") { if (hooks.openSettings) hooks.openSettings(); }
     else if (type == "effects")  { if (info.teacher && hooks.openEffects) hooks.openEffects(); }

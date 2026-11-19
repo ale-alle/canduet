@@ -26,6 +26,7 @@
 
 #include "LatencyMeasurer.h"
 #include "Metronome.h"
+#include "TinCanScorePlayer.h"
 
 using namespace SonoAudio;
 
@@ -848,6 +849,7 @@ mState (*this, &mUndoManager, "SonoBusAoO",
     mTempoParameter = mState.getParameter(paramMetTempo);
     
     mMetronome = std::make_unique<SonoAudio::Metronome>();
+    mScorePlayer = std::make_unique<TinCan::ScorePlayer>();
     
     mMetronome->loadBarSoundFromBinaryData(BinaryData::bar_click_wav, BinaryData::bar_click_wavSize);
     mMetronome->loadBeatSoundFromBinaryData(BinaryData::beat_click_wav, BinaryData::beat_click_wavSize);
@@ -7181,6 +7183,7 @@ void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     const ScopedReadLock sl (mCoreLock);        
     
     mMetronome->setSampleRate(sampleRate);
+    mScorePlayer->prepare(sampleRate, samplesPerBlock);
     mMainReverb->setSampleRate(sampleRate);
     mMReverb.setSampleRate(sampleRate);
     mInputReverb.setSampleRate(sampleRate);
@@ -7605,8 +7608,13 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 
     if (mNoteTapEnabled.load(std::memory_order_relaxed) && !midiMessages.isEmpty()) {
         TinCan::NoteEvent nev;
+        // the metronome's beat count at the start of this block (it's advanced later in the block)
+        const double metBeatNow = mMetronome->getCurrBeatPos();
+        const double tempoNow = mMetTempo.get();
+        const bool metOn = mMetEnabled.get();
         for (const auto meta : midiMessages) {
             if (TinCan::decodeMidi(meta.data, meta.numBytes, TinCan::NoteSource::Midi, nev)) {
+                nev.beat = mScorePlayer->beatAt(meta.samplePosition, metBeatNow, tempoNow, metOn);  // T-080 recording
                 mNoteQueue.push(nev);  // dropped if the UI fell far behind
             }
         }
@@ -8002,6 +8010,11 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
             mMetronome->setGain(0.0f);
         }
     }
+    // where the metronome's own clock is at the start of this block, for the score (T-080)
+    const bool metRunningOwnClock = metenabled && !syncmet;
+    const double metBlockStartBeat = mMetronome->getCurrBeatPos();
+    const double metBlockCountIn = mMetronome->getCountInRemaining();
+
     if (mLastMetEnabled || metenabled) {
         metBuffer.clear(0, numSamples);
         mMetronome->setGain(metgain);
@@ -8538,6 +8551,12 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 
         // process the monitor part of the metchannelgroup
         mMetChannelGroup.processMonitor(metBuffer, 0, buffer, dstch, dstcnt, numSamples, fgain);
+    }
+
+    // the shared score (T-080): this computer's output only, never sent to the others
+    if (mainBusOutputChannels > 0) {
+        mScorePlayer->process(buffer, jmin(2, mainBusOutputChannels), numSamples, mettempo,
+                              metRunningOwnClock, metBlockStartBeat, metBlockCountIn, mMetBeatsPerBar.get());
     }
 
 

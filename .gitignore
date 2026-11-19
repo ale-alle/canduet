@@ -15,4 +15,5 @@ release/CanDuet/
 release/instoutput/
 build*.log
 build-staging
+build-score
 release/instoutput-staging/

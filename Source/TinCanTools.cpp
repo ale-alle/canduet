@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Tin Can Studios
 
 #include "TinCanTools.h"
+#include "TinCanPaths.h"
+#include <map>
 #include "TinCanTheme.h"
 #include "TinCanChords.h"
 #include "TinCanPracticeTools.h"
@@ -132,7 +134,17 @@ void FretboardView::setNaming(const NoteNaming & newNaming)
 juce::Rectangle<float> FretboardView::neckArea() const
 {
     // left margin holds the open-string names and open-string notes
-    return getLocalBounds().toFloat().withTrimmedLeft(52.0f).withTrimmedRight(10.0f).reduced(0, 14.0f);
+    auto area = getLocalBounds().toFloat().withTrimmedLeft(52.0f).withTrimmedRight(10.0f).reduced(0, 14.0f);
+    // A real neck's shape: its length to the last fret against the width of its strings
+    // (guitar: 648 mm scale, strings about 8.5 mm apart; bass: 864 mm, about 14 mm). Never
+    // stretched: as big as fits, centred.
+    const bool bass = !strings.empty() && strings.front() < 36;
+    const double scale = bass ? 864.0 : 648.0, spacing = bass ? 14.0 : 8.5;
+    const double length = scale * (1.0 - std::pow(2.0, -frets / 12.0));
+    const float aspect = (float) (length / (spacing * jmax<size_t>(1, strings.size())));
+    float w = area.getWidth(), h = area.getHeight();
+    if (w / h > aspect) w = h * aspect; else h = w / aspect;
+    return juce::Rectangle<float>(w, h).withCentre(area.getCentre());
 }
 
 float FretboardView::fretX(int fret) const
@@ -224,7 +236,7 @@ void FretboardView::paint(Graphics & g)
         g.fillRect(neck.getX(), y - thick * 0.5f, neck.getWidth(), thick);
         g.setColour(Colour(0xccffffff));
         g.setFont(Font(12.0f));
-        g.drawText(naming.label(strings[(size_t) s]), juce::Rectangle<float>(2, y - 8, 30, 16), Justification::centredLeft);
+        g.drawText(naming.label(strings[(size_t) s]), juce::Rectangle<float>(neck.getX() - 50.0f, y - 8, 30, 16), Justification::centredLeft);
     }
 
     // sounding notes, every place they can be played
@@ -283,38 +295,60 @@ InstrumentPanel::InstrumentPanel(SonobusAudioProcessor & proc, std::function<Aud
     mouseState.addListener(this);
     fretboard.onMousePlay = [this](int note, bool on) { playLocal(note, on, 1, 0.8f); };
 
-    int id = 1;
-    for (auto & inst : getInstruments()) instrumentChoice.addItem(TRANS(String(inst.name)), id++);
-    instrumentChoice.setTitle(TRANS("Instrument"));
-    instrumentChoice.setTooltip(TRANS("Instrument to show. The MIDI input stays connected when you switch."));
-    instrumentChoice.onChange = [this]() { selectInstrument(instrumentChoice.getSelectedId() - 1); };
-    addAndMakeVisible(instrumentChoice);
+    // the instrument: a circle that opens to the others on hover
+    {
+        std::vector<IconPicker::Option> opts;
+        auto & list = getInstruments();
+        for (int i = 0; i < (int) list.size(); ++i) {
+            IconPicker::Option o;
+            o.id = i;
+            const bool keys = list[(size_t) i].kind == InstrumentDef::Keyboard;
+            o.icon = keys ? Icons::piano() : Icons::guitar();
+            const auto n = list[(size_t) i].tunings.empty() ? 0 : list[(size_t) i].tunings[0].strings.size();
+            if (!keys && n != 6) o.badge = String((int) n);   // basses: their string count
+            o.tip = TRANS(String(list[(size_t) i].name));
+            opts.push_back(o);
+        }
+        instrumentPicker.setOptions(opts, 0);
+        instrumentPicker.onChange = [this](int id) { selectInstrument(id); saveSettings(); };
+        addAndMakeVisible(instrumentPicker);
+    }
 
-    id = 1;
-    for (auto & p : rangePresets) rangeChoice.addItem(TRANS(p.name), id++);
-    rangeChoice.setSelectedId(2, dontSendNotification);
-    rangeChoice.setTitle(TRANS("Keys"));
-    rangeChoice.setTooltip(TRANS("How many keys to show"));
-    rangeChoice.onChange = [this]() {
-        auto & p = rangePresets[jlimit(0, (int) std::size(rangePresets) - 1, rangeChoice.getSelectedId() - 1)];
-        lowNote = p.low;
-        numKeys = p.keys;
-        updateRange();
+    // piano: how many keys, and octave down/up
+    {
+        std::vector<IconPicker::Option> opts;
+        for (int i = 0; i < (int) std::size(rangePresets); ++i) {
+            IconPicker::Option o;
+            o.id = i;
+            o.text = String(rangePresets[i].keys);
+            o.tip = TRANS(rangePresets[i].name);
+            opts.push_back(o);
+        }
+        rangePicker.setOptions(opts, rangeIndex);
+        rangePicker.onChange = [this](int id) { selectRange(id); saveSettings(); };
+        addAndMakeVisible(rangePicker);
+    }
+    // what an open picker covers fades out until it closes
+    // (set straight, not animated: an animation on a hidden control can leave it see-through
+    // when it's shown again for another instrument)
+    auto fade = [](std::initializer_list<Component *> list, bool hide) {
+        for (auto * c : list) c->setAlpha(hide ? 0.0f : 1.0f);
     };
-    addAndMakeVisible(rangeChoice);
-
-    octaveDown.setTooltip(TRANS("Octave down"));
-    octaveUp.setTooltip(TRANS("Octave up"));
-    octaveDown.onClick = [this]() { lowNote -= 12; updateRange(); };
-    octaveUp.onClick = [this]() { lowNote += 12; updateRange(); };
+    instrumentPicker.onOpenChanged = [this, fade](bool o) { fade({ &rangePicker, &octaveDown, &octaveUp, &tuningCircle, &tuningEditor }, o); };
+    rangePicker.onOpenChanged = [this, fade](bool o) { fade({ &octaveDown, &octaveUp }, o); };
+    octaveDown.setIcon(Icons::chevronLeft());
+    octaveUp.setIcon(Icons::chevronRight());
+    octaveDown.setTooltip(TRANS("Octave down")); octaveDown.setTitle(TRANS("Octave down"));
+    octaveUp.setTooltip(TRANS("Octave up")); octaveUp.setTitle(TRANS("Octave up"));
+    octaveDown.onClick = [this]() { lowNote -= 12; updateRange(); saveSettings(); };
+    octaveUp.onClick = [this]() { lowNote += 12; updateRange(); saveSettings(); };
     addAndMakeVisible(octaveDown);
     addAndMakeVisible(octaveUp);
 
-    tuningChoice.setTitle(TRANS("Tuning"));
-    tuningChoice.setTooltip(TRANS("Tuning"));
-    tuningChoice.onChange = [this]() { selectTuning(tuningChoice.getSelectedId() - 1); };
-    addChildComponent(tuningChoice);
-
+    // guitar and bass: a tuning menu; the text field only for a custom tuning
+    tuningCircle.setTitle(TRANS("Tuning"));
+    tuningCircle.onClick = [this]() { showTuningMenu(); };
+    addChildComponent(tuningCircle);
     tuningEditor.setTooltip(TRANS("Open strings from lowest to highest, e.g. D2 A2 D3 G3 B3 E4 (middle C = C4). Press Enter to use it."));
     tuningEditor.setTitle(TRANS("Custom tuning"));
     tuningEditor.onTextChange = [this]() { showTuningValidity(); };  // red while it isn't a tuning
@@ -322,36 +356,35 @@ InstrumentPanel::InstrumentPanel(SonobusAudioProcessor & proc, std::function<Aud
     tuningEditor.onFocusLost = [this]() { applyCustomTuning(); };
     addChildComponent(tuningEditor);
 
-    id = 1;
-    for (auto & t : getTranspositions()) transposeChoice.addItem(TRANS(String(t.name)), id++);
-    transposeChoice.setSelectedId(1, dontSendNotification);
-    transposeChoice.setTitle(TRANS("Note names"));
-    transposeChoice.setTooltip(TRANS("Name notes at concert pitch, or at written pitch for a transposing instrument"));
-    transposeChoice.onChange = [this]() { updateNaming(); };
-    addAndMakeVisible(transposeChoice);
+    // note names: all names, flats, octave numbering, transposition
+    namesCircle.setText("ABC");
+    namesCircle.setClickingTogglesState(true);
+    namesCircle.setTooltip(TRANS("Name every note, not only the ones played")); namesCircle.setTitle(TRANS("All note names"));
+    flatsCircle.setText(String::fromUTF8("\xe2\x99\xad"));   // flat sign
+    flatsCircle.setClickingTogglesState(true);
+    flatsCircle.setTooltip(TRANS("Name notes with flats (Bb) instead of sharps (A#)")); flatsCircle.setTitle(TRANS("Flats"));
+    middleCCircle.setTitle(TRANS("Octave numbering"));
+    middleCCircle.onClick = [this]() { naming.middleCOctave = naming.middleCOctave == 4 ? 3 : 4; updateNaming(); saveSettings(); };
+    transposeCircle.setTitle(TRANS("Note names for a transposing instrument"));
+    transposeCircle.onClick = [this]() { showTransposeMenu(); };
+    namesCircle.onClick = [this]() { updateNaming(); saveSettings(); };
+    flatsCircle.onClick = [this]() { updateNaming(); saveSettings(); };
+    for (auto * c : { &namesCircle, &flatsCircle, &middleCCircle, &transposeCircle }) addAndMakeVisible(c);
 
-    namesToggle.onClick = [this]() { updateNaming(); };
-    flatsToggle.onClick = [this]() { updateNaming(); };
-    addAndMakeVisible(namesToggle);
-    addAndMakeVisible(flatsToggle);
+    // sharing keys in a lesson (T-074), and the MIDI input
+    shareCircle.setIcon(Icons::cast());
+    shareCircle.setTitle(TRANS("Share my keys"));
+    shareCircle.onClick = [this]() { noteShare.setSharing(!noteShare.isSharing()); updateShareControls(); };
+    showCircle.setIcon(Icons::eye());
+    showCircle.setTitle(TRANS("Show the other person's keys"));
+    showCircle.onClick = [this]() { noteShare.setShowingRemote(!noteShare.isShowingRemote()); updateShareControls(); };
+    midiCircle.setIcon(Icons::midi());
+    midiCircle.setTitle(TRANS("MIDI input"));
+    midiCircle.onClick = [this]() { updateMidiStatus(); };
+    for (auto * c : { &shareCircle, &showCircle, &midiCircle }) addAndMakeVisible(c);
 
-    middleCChoice.addItem(TRANS("Middle C = C4"), 4);
-    middleCChoice.addItem(TRANS("Middle C = C3"), 3);
-    middleCChoice.setSelectedId(4, dontSendNotification);
-    middleCChoice.setTitle(TRANS("Octave numbering"));
-    middleCChoice.setTooltip(TRANS("Octave numbering"));
-    middleCChoice.onChange = [this]() { updateNaming(); };
-    addAndMakeVisible(middleCChoice);
-
-    shareToggle.setTooltip(TRANS("Light up your keys on the others' screens while you play. They hear you as usual; this only shows which keys."));
-    shareToggle.onClick = [this]() { noteShare.setSharing(shareToggle.getToggleState()); updateShareControls(); };
-    addAndMakeVisible(shareToggle);
-    showToggle.setTooltip(TRANS("Show the keys someone in the lesson is sharing, in their own colour"));
-    showToggle.onClick = [this]() { noteShare.setShowingRemote(showToggle.getToggleState()); };
-    addAndMakeVisible(showToggle);
-
-    midiStatus.setFont(Font(13.0f));
-    midiStatus.setColour(Label::textColourId, Colour(0xccffffff));
+    midiStatus.setFont(Font(12.5f));
+    midiStatus.setColour(Label::textColourId, Colour(0xb3ffffff));
     addAndMakeVisible(midiStatus);
 
     chordLabel.setFont(Font(18.0f, Font::bold));
@@ -367,8 +400,9 @@ InstrumentPanel::InstrumentPanel(SonobusAudioProcessor & proc, std::function<Aud
 
     if (auto * dm = getDeviceManager ? getDeviceManager() : nullptr) dm->addChangeListener(this);
     updateMidiStatus();
-    instrumentChoice.setSelectedId(1, dontSendNotification);
-    selectInstrument(0);
+
+    // piano with 61 keys the first time; after that, what was chosen last
+    loadSettings();
 
     // MIDI input and the others' keys arrive through the note share (T-074)
     noteShare.addListener(this);
@@ -399,6 +433,62 @@ InstrumentPanel::~InstrumentPanel()
     mouseState.removeListener(this);
 }
 
+static File instrumentSettingsFile() { return TinCan::getDataFolder().getChildFile("instrument.json"); }
+
+void InstrumentPanel::loadSettings()
+{
+    loading = true;
+    var s;
+    auto file = instrumentSettingsFile();
+    if (file.existsAsFile() && file.getSize() < 64 * 1024) s = JSON::parse(file.loadFileAsString());
+    auto num = [&](const char * key, int fallback) { return s.isObject() && s.hasProperty(key) ? (int) s.getProperty(key, fallback) : fallback; };
+
+    naming.allNames = num("names", 0) != 0;
+    naming.useFlats = num("flats", 0) != 0;
+    naming.middleCOctave = num("middleC", 4) == 3 ? 3 : 4;
+    transposeIndex = jlimit(0, (int) getTranspositions().size() - 1, num("transpose", 0));
+    namesCircle.setOn(naming.allNames);
+    flatsCircle.setOn(naming.useFlats);
+
+    rangeIndex = jlimit(0, (int) std::size(rangePresets) - 1, num("range", 3));
+    lowNote = rangePresets[rangeIndex].low;
+    numKeys = rangePresets[rangeIndex].keys;
+    lowNote = num("low", lowNote);
+    rangePicker.setSelected(rangeIndex);
+
+    selectInstrument(jlimit(0, (int) getInstruments().size() - 1, num("instrument", 0)));
+    instrumentPicker.setSelected(instrumentIndex);
+    if (isFretted()) {
+        const int t = num("tuning", 0);
+        auto custom = s.isObject() ? s.getProperty("custom", var()).toString() : String();
+        if (t < 0 && parseTuning(custom.toStdString()).size() > 0) {
+            tuningEditor.setText(custom, dontSendNotification);
+            tuningIndex = -1;
+            applyCustomTuning();
+        }
+        else selectTuning(jmax(0, t));
+    }
+    updateRange();
+    updateNaming();
+    loading = false;
+}
+
+void InstrumentPanel::saveSettings() const
+{
+    if (loading) return;
+    DynamicObject::Ptr s = new DynamicObject();
+    s->setProperty("instrument", instrumentIndex);
+    s->setProperty("range", rangeIndex);
+    s->setProperty("low", lowNote);
+    s->setProperty("tuning", tuningIndex);
+    if (tuningIndex < 0) s->setProperty("custom", tuningEditor.getText().substring(0, 200));
+    s->setProperty("names", naming.allNames ? 1 : 0);
+    s->setProperty("flats", naming.useFlats ? 1 : 0);
+    s->setProperty("middleC", naming.middleCOctave);
+    s->setProperty("transpose", transposeIndex);
+    instrumentSettingsFile().replaceWithText(JSON::toString(var(s.get())));
+}
+
 bool InstrumentPanel::isFretted() const
 {
     return getInstruments()[(size_t) instrumentIndex].kind == InstrumentDef::Fretted;
@@ -408,41 +498,97 @@ void InstrumentPanel::selectInstrument(int index)
 {
     auto & list = getInstruments();
     instrumentIndex = jlimit(0, (int) list.size() - 1, index);
-    auto & inst = list[(size_t) instrumentIndex];
-    bool fretted = inst.kind == InstrumentDef::Fretted;
+    bool fretted = isFretted();
 
     // only the view changes: the note state and the MIDI queue carry on
     keyboard.setVisible(!fretted);
-    rangeChoice.setVisible(!fretted);
+    rangePicker.setVisible(!fretted);
     octaveDown.setVisible(!fretted);
     octaveUp.setVisible(!fretted);
     fretboard.setVisible(fretted);
-    tuningChoice.setVisible(fretted);
-    tuningEditor.setVisible(fretted);
-
-    if (fretted) {
-        tuningChoice.clear(dontSendNotification);
-        int id = 1;
-        for (auto & t : inst.tunings) tuningChoice.addItem(TRANS(String(t.name)), id++);
-        tuningChoice.addItem(TRANS("Custom"), customTuningId);
-        tuningChoice.setSelectedId(1, dontSendNotification);
-        selectTuning(0);
-    }
+    tuningCircle.setVisible(fretted);
+    if (fretted) selectTuning(0);
+    else tuningEditor.setVisible(false);
     resized();
+}
+
+void InstrumentPanel::selectRange(int presetIndex)
+{
+    rangeIndex = jlimit(0, (int) std::size(rangePresets) - 1, presetIndex);
+    lowNote = rangePresets[rangeIndex].low;
+    numKeys = rangePresets[rangeIndex].keys;
+    updateRange();
 }
 
 void InstrumentPanel::selectTuning(int index)
 {
     auto & inst = getInstruments()[(size_t) instrumentIndex];
     if (index < 0 || index >= (int) inst.tunings.size()) {
-        // "Custom": keep the current strings and let the text field change them
+        // custom: the text field, starting from the strings shown now
+        tuningIndex = -1;
+        tuningEditor.setVisible(true);
+        resized();
         tuningEditor.grabKeyboardFocus();
+        tuningEditor.selectAll();
+        updateTuningCircle();
         return;
     }
+    tuningIndex = index;
     auto & strings = inst.tunings[(size_t) index].strings;
     fretboard.setInstrument(strings, inst.frets);
     tuningEditor.setText(String(formatTuning(strings, naming.useFlats)), dontSendNotification);
+    tuningEditor.setVisible(false);
     showTuningValidity();
+    updateTuningCircle();
+    resized();
+}
+
+// the circle shows a short name for the tuning; the menu and its tip the full one
+void InstrumentPanel::updateTuningCircle()
+{
+    auto & inst = getInstruments()[(size_t) instrumentIndex];
+    String full = tuningIndex >= 0 && tuningIndex < (int) inst.tunings.size() ? TRANS(String(inst.tunings[(size_t) tuningIndex].name)) : TRANS("Custom tuning");
+    String shortName;
+    if (tuningIndex < 0) shortName = String::fromUTF8("\xe2\x80\xa2\xe2\x80\xa2\xe2\x80\xa2");   // •••
+    else {
+        auto name = String(inst.tunings[(size_t) tuningIndex].name);
+        if (name.startsWith("Standard")) shortName = "Std";
+        else if (name.startsWith("Drop")) shortName = "Drop";
+        else if (name.startsWith("Half")) shortName = String::fromUTF8("E\xe2\x99\xad");
+        else if (name.startsWith("Open ")) shortName = name.substring(5, 6);
+        else shortName = name.substring(0, 3);
+    }
+    tuningCircle.setText(shortName);
+    tuningCircle.setTooltip(TRANS("Tuning:") + " " + full);
+}
+
+void InstrumentPanel::showTuningMenu()
+{
+    auto & inst = getInstruments()[(size_t) instrumentIndex];
+    PopupMenu m;
+    for (int i = 0; i < (int) inst.tunings.size(); ++i) m.addItem(i + 1, TRANS(String(inst.tunings[(size_t) i].name)), true, i == tuningIndex);
+    m.addSeparator();
+    m.addItem(customTuningId, TRANS("Custom..."), true, tuningIndex < 0);
+    SafePointer<InstrumentPanel> safe(this);
+    m.showMenuAsync(PopupMenu::Options().withTargetComponent(&tuningCircle), [safe](int r) {
+        if (!safe || r == 0) return;
+        safe->selectTuning(r == customTuningId ? -1 : r - 1);
+        safe->saveSettings();
+    });
+}
+
+void InstrumentPanel::showTransposeMenu()
+{
+    auto & list = getTranspositions();
+    PopupMenu m;
+    for (int i = 0; i < (int) list.size(); ++i) m.addItem(i + 1, TRANS(String(list[(size_t) i].name)), true, i == transposeIndex);
+    SafePointer<InstrumentPanel> safe(this);
+    m.showMenuAsync(PopupMenu::Options().withTargetComponent(&transposeCircle), [safe](int r) {
+        if (!safe || r == 0) return;
+        safe->transposeIndex = r - 1;
+        safe->updateNaming();
+        safe->saveSettings();
+    });
 }
 
 bool InstrumentPanel::showTuningValidity()
@@ -459,14 +605,15 @@ void InstrumentPanel::applyCustomTuning()
     if (!isFretted() || !showTuningValidity()) return;
     auto strings = parseTuning(tuningEditor.getText().toStdString());
 
-    // a preset typed by hand selects that preset; anything else is "Custom"
+    // a preset typed by hand selects that preset; anything else stays custom
     auto & inst = getInstruments()[(size_t) instrumentIndex];
-    int match = customTuningId;
     for (size_t i = 0; i < inst.tunings.size(); ++i) {
-        if (inst.tunings[i].strings == strings) match = (int) i + 1;
+        if (inst.tunings[i].strings == strings) { selectTuning((int) i); saveSettings(); return; }
     }
-    tuningChoice.setSelectedId(match, dontSendNotification);
+    tuningIndex = -1;
     fretboard.setInstrument(strings, inst.frets);
+    updateTuningCircle();
+    saveSettings();
 }
 
 void InstrumentPanel::paint(Graphics & g)
@@ -499,44 +646,69 @@ void InstrumentPanel::paint(Graphics & g)
 void InstrumentPanel::resized()
 {
     auto r = getLocalBounds().reduced(8);
+    const int d = IconCircle::size;
 
-    auto row = r.removeFromTop(26);
-    instrumentChoice.setBounds(row.removeFromLeft(150));
+    // icons: the instrument and its menus on the left, naming and sharing on the right, and the
+    // MIDI status, chord and last note in the middle of the same row (the keys get the room)
+    auto row = r.removeFromTop(d + 4);
+    auto place = [&](Component & c, int width) { c.setBounds(row.removeFromLeft(width).withSizeKeepingCentre(width, d)); row.removeFromLeft(6); };
+    auto placeRight = [&](Component & c) { c.setBounds(row.removeFromRight(d).withSizeKeepingCentre(d, d)); row.removeFromRight(6); };
+    // a picker is as wide as when it's open (it draws over its neighbours then), but takes only
+    // its closed width in the row
+    auto placePicker = [&](IconPicker & p) {
+        p.setBounds(row.getX(), row.getY() + (row.getHeight() - d - 4) / 2, p.getOpenWidth(), d + 4);
+        row.removeFromLeft(p.getClosedWidth() + 6);
+    };
+    placeRight(midiCircle);
+    placeRight(showCircle);
+    placeRight(shareCircle);
+    row.removeFromRight(10);
+    placeRight(transposeCircle);
+    placeRight(middleCCircle);
+    placeRight(flatsCircle);
+    placeRight(namesCircle);
+    placePicker(instrumentPicker);
     row.removeFromLeft(8);
     if (isFretted()) {
-        tuningChoice.setBounds(row.removeFromLeft(190));
-        row.removeFromLeft(4);
-        tuningEditor.setBounds(row.removeFromLeft(jmin(220, jmax(120, row.getWidth() - 260))));
+        place(tuningCircle, d);
+        if (tuningEditor.isVisible()) tuningEditor.setBounds(row.removeFromLeft(jmin(220, jmax(120, row.getWidth() - 8))).withSizeKeepingCentre(jmin(220, jmax(120, row.getWidth() - 8)), 26));
     }
     else {
-        rangeChoice.setBounds(row.removeFromLeft(100));
+        placePicker(rangePicker);
         row.removeFromLeft(4);
-        octaveDown.setBounds(row.removeFromLeft(28));
-        octaveUp.setBounds(row.removeFromLeft(28));
+        place(octaveDown, d);
+        place(octaveUp, d);
     }
-    lastNoteLabel.setBounds(row.removeFromRight(240));
-    row.removeFromRight(12);
-    chordLabel.setBounds(row.removeFromRight(jmin(320, jmax(0, row.getWidth()))));
+    // the open pickers draw over everything else
+    if (instrumentPicker.isOpen()) instrumentPicker.toFront(false);
+    if (rangePicker.isOpen()) rangePicker.toFront(false);
 
-    r.removeFromTop(6);
-    row = r.removeFromTop(26);
-    transposeChoice.setBounds(row.removeFromLeft(280));
-    row.removeFromLeft(8);
-    middleCChoice.setBounds(row.removeFromLeft(130));
-    row.removeFromLeft(8);
-    namesToggle.setBounds(row.removeFromLeft(124));
-    flatsToggle.setBounds(row.removeFromLeft(64));
+    {
+        auto info = row.withSizeKeepingCentre(row.getWidth(), 24);
+        info.removeFromLeft(10);
+        info.removeFromRight(10);
+        lastNoteLabel.setBounds(info.removeFromRight(jmin(200, info.getWidth() / 3)));
+        info.removeFromRight(8);
+        chordLabel.setBounds(info.removeFromRight(jmin(260, info.getWidth() / 2)));
+        midiStatus.setBounds(info);
+    }
+    r.removeFromTop(4);
 
-    r.removeFromTop(6);
-    auto status = r.removeFromBottom(22);
-    legendArea = status.removeFromRight(360);
-    showToggle.setBounds(status.removeFromRight(jmin(250, Font(14.0f).getStringWidth(showToggle.getButtonText()) + 34)));
-    status.removeFromRight(6);
-    shareToggle.setBounds(status.removeFromRight(126));
-    status.removeFromRight(10);
-    midiStatus.setBounds(status);
+    auto status = r.removeFromBottom(20);
+    legendArea = status.removeFromRight(jmin(360, status.getWidth()));
     r.removeFromBottom(4);
-    keyboard.setBounds(r);
+
+    // The keyboard keeps a real piano's proportions and one key size for every range: the size at
+    // which 88 keys span the screen's width less the window and panel edges (64 px; owner,
+    // 2026-11-17: "88 keys 1920 wide on a 1920 screen"). Smaller only when the room is smaller.
+    int whites = 0;
+    for (int n = lowNote; n < lowNote + numKeys; ++n) if (!MidiMessage::isMidiNoteBlack(n)) ++whites;
+    float screenW = 1920.0f;
+    if (auto * disp = Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds())) screenW = (float) disp->userArea.getWidth();
+    const float fullKeyW = (screenW - 64.0f) / 52.0f;   // 52 white keys on an 88-key piano
+    float keyW = jmin(fullKeyW, r.getWidth() / (float) jmax(1, whites), r.getHeight() / whiteKeyHeightPerWidth);
+    int kw = (int) std::floor(keyW * whites), kh = (int) std::floor(keyW * whiteKeyHeightPerWidth);
+    keyboard.setBounds(juce::Rectangle<int>(kw, kh).withCentre(r.getCentre()).withY(r.getY()));
     fretboard.setBounds(r);
 }
 
@@ -546,17 +718,27 @@ void InstrumentPanel::updateRange()
     bool full = numKeys >= 88;
     octaveDown.setEnabled(!full && lowNote - 12 >= 0);
     octaveUp.setEnabled(!full && lowNote + 12 + numKeys <= 128);
+    resized();   // the keyboard's size depends on the number of keys
     keyboard.setRangeToFit(lowNote, lowNote + numKeys - 1);
 }
 
 void InstrumentPanel::updateNaming()
 {
     auto & transpositions = getTranspositions();
-    int t = jlimit(0, (int) transpositions.size() - 1, transposeChoice.getSelectedId() - 1);
-    naming.allNames = namesToggle.getToggleState();
-    naming.useFlats = flatsToggle.getToggleState();
-    naming.middleCOctave = middleCChoice.getSelectedId();
-    naming.transpose = transpositions[(size_t) t].semitones;
+    transposeIndex = jlimit(0, (int) transpositions.size() - 1, transposeIndex);
+    naming.allNames = namesCircle.getToggleState();
+    naming.useFlats = flatsCircle.getToggleState();
+    naming.transpose = transpositions[(size_t) transposeIndex].semitones;
+    middleCCircle.setText(naming.middleCOctave == 3 ? "C3" : "C4");
+    middleCCircle.setTooltip(TRANS("Octave numbering: middle C is") + " " + (naming.middleCOctave == 3 ? String("C3") : String("C4")) + ". " + TRANS("Click to change."));
+    // the transposition: a short name in the circle, on (bright) when not at concert pitch
+    static const std::map<int, String> shortNames = { { 0, "C" }, { 2, String::fromUTF8("B\xe2\x99\xad") }, { 14, String::fromUTF8("B\xe2\x99\xad" "8") },
+                                                      { 9, String::fromUTF8("E\xe2\x99\xad") }, { 21, String::fromUTF8("E\xe2\x99\xad" "8") },
+                                                      { 7, "F" }, { 3, "A" }, { 12, "8va" } };
+    auto it = shortNames.find(naming.transpose);
+    transposeCircle.setText(it != shortNames.end() ? it->second : String(naming.transpose));
+    transposeCircle.setOn(naming.transpose != 0);
+    transposeCircle.setTooltip(TRANS("Note names:") + " " + TRANS(String(transpositions[(size_t) transposeIndex].name)));
     keyboard.setNaming(naming);
     fretboard.setNaming(naming);
     if (isFretted()) {
@@ -570,18 +752,24 @@ void InstrumentPanel::updateNaming()
 void InstrumentPanel::updateMidiStatus()
 {
     auto * dm = getDeviceManager ? getDeviceManager() : nullptr;
+    String text;
+    bool on = false;
     if (dm == nullptr) {
-        midiStatus.setText(TRANS("Notes come from the MIDI sent to this plugin's track."), dontSendNotification);
-        return;
+        text = TRANS("Notes come from the MIDI sent to this plugin's track.");
+        on = true;
     }
-    StringArray names;
-    for (auto & d : MidiInput::getAvailableDevices()) {
-        if (dm->isMidiInputDeviceEnabled(d.identifier)) names.add(d.name);
+    else {
+        StringArray names;
+        for (auto & d : MidiInput::getAvailableDevices()) {
+            if (dm->isMidiInputDeviceEnabled(d.identifier)) names.add(d.name);
+        }
+        on = !names.isEmpty();
+        text = on ? names.joinIntoString(", ") : TRANS("No MIDI input on. Turn one on in Settings > Audio, or click the instrument.");
     }
-    midiStatus.setText(names.isEmpty()
-                       ? TRANS("No MIDI input on. Turn one on in Settings > Audio, or click the instrument.")
-                       : TRANS("MIDI input:") + " " + names.joinIntoString(", "),
-                       dontSendNotification);
+    // the socket is bright red while a keyboard is connected; the text says which
+    midiCircle.setOn(on);
+    midiCircle.setTooltip(on ? TRANS("MIDI input:") + " " + text : text);
+    midiStatus.setText(on ? TRANS("MIDI:") + " " + text : text, dontSendNotification);
 }
 
 void InstrumentPanel::notesChanged()
@@ -648,17 +836,17 @@ void InstrumentPanel::noteShareChanged()
 void InstrumentPanel::updateShareControls()
 {
     bool canShare = !noteShare.canShare || noteShare.canShare();
-    shareToggle.setToggleState(noteShare.isSharing(), dontSendNotification);
-    shareToggle.setEnabled(canShare || noteShare.isSharing());
-    shareToggle.setTooltip(canShare ? TRANS("Light up your keys on the others' screens while you play. They hear you as usual; this only shows which keys.")
-                                    : TRANS("Join a lesson to share your keys"));
+    shareCircle.setOn(noteShare.isSharing());
+    shareCircle.setEnabled(canShare || noteShare.isSharing());
+    shareCircle.setTooltip(!canShare && !noteShare.isSharing() ? TRANS("Join a lesson to share your keys")
+                           : noteShare.isSharing() ? TRANS("Sharing your keys: the others see which keys you play. Click to stop.")
+                                                   : TRANS("Share my keys: light up your keys on the others' screens while you play. They hear you as usual; this only shows which keys."));
 
-    showToggle.setToggleState(noteShare.isShowingRemote(), dontSendNotification);
+    showCircle.setOn(noteShare.isShowingRemote());
     auto who = noteShare.getRemoteName();
     String text = who.isNotEmpty() ? TRANS("Show") + " " + who + TRANS("'s keys") : TRANS("Show the other person's keys");
     if (noteShare.isRemoteSharing() && !noteShare.isShowingRemote()) text << " (" << TRANS("sharing now") << ")";
-    showToggle.setButtonText(text);
-    resized();
+    showCircle.setTooltip(text);
 }
 
 void InstrumentPanel::playLocal(int note, bool on, int channel, float velocity)

@@ -1,0 +1,251 @@
+// SPDX-License-Identifier: GPLv3-or-later WITH Appstore-exception
+// Copyright (C) 2026 Tin Can Studios
+
+#include "TinCanIcons.h"
+#include "TinCanTheme.h"
+
+namespace TinCan {
+
+namespace Icons {
+
+static Path svg(const char * d) { return Drawable::parseSVGPath(d); }
+
+Icon piano()
+{
+    // a keyboard: the outline and white-key lines; two black keys solid
+    Icon i;
+    i.line.addRoundedRectangle(3.0f, 5.0f, 18.0f, 14.0f, 2.0f);
+    i.line.startNewSubPath(9.0f, 12.0f); i.line.lineTo(9.0f, 19.0f);
+    i.line.startNewSubPath(15.0f, 12.0f); i.line.lineTo(15.0f, 19.0f);
+    i.solid.addRoundedRectangle(7.2f, 5.0f, 3.6f, 7.5f, 0.6f);
+    i.solid.addRoundedRectangle(13.2f, 5.0f, 3.6f, 7.5f, 0.6f);
+    return i;
+}
+
+Icon guitar()
+{
+    // Lucide "guitar" (ISC licence)
+    Icon i;
+    i.line = svg("m11.9 12.1 4.514-4.514");
+    i.line.addPath(svg("M20.1 2.3a1 1 0 0 0-1.4 0l-1.114 1.114A2 2 0 0 0 17 4.828v1.344a2 2 0 0 1-.586 1.414A2 2 0 0 1 17.828 7h1.344a2 2 0 0 0 1.414-.586L21.7 5.3a1 1 0 0 0 0-1.4z"));
+    i.line.addPath(svg("m6 16 2 2"));
+    i.line.addPath(svg("M8.2 9.9C8.7 8.8 9.8 8 11 8c2.8 0 5 2.2 5 5 0 1.2-.8 2.3-1.9 2.8l-.9.4A2 2 0 0 0 12 18a4 4 0 0 1-4 4c-3.3 0-6-2.7-6-6a4 4 0 0 1 4-4 2 2 0 0 0 1.8-1.2z"));
+    i.solid.addEllipse(10.6f, 11.6f, 1.8f, 1.8f);
+    return i;
+}
+
+Icon chevronLeft() { Icon i; i.line = svg("m15 18-6-6 6-6"); return i; }
+Icon chevronRight() { Icon i; i.line = svg("m9 18 6-6-6-6"); return i; }
+
+Icon cast()
+{
+    // Lucide "cast"
+    Icon i;
+    i.line = svg("M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6");
+    i.line.addPath(svg("M2 12a9 9 0 0 1 8 8"));
+    i.line.addPath(svg("M2 16a5 5 0 0 1 4 4"));
+    i.solid.addEllipse(1.2f, 19.2f, 1.6f, 1.6f);
+    return i;
+}
+
+Icon eye()
+{
+    // Lucide "eye"
+    Icon i;
+    i.line = svg("M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0");
+    i.line.addEllipse(9.0f, 9.0f, 6.0f, 6.0f);
+    return i;
+}
+
+Icon midi()
+{
+    // a 5-pin DIN socket, as on MIDI cables
+    Icon i;
+    i.line.addEllipse(3.0f, 3.0f, 18.0f, 18.0f);
+    i.line.startNewSubPath(10.5f, 3.4f); i.line.lineTo(13.5f, 3.4f);
+    const float pins[5][2] = { { 7.0f, 12.0f }, { 17.0f, 12.0f }, { 8.5f, 8.5f }, { 15.5f, 8.5f }, { 12.0f, 7.0f } };
+    for (auto & p : pins) i.solid.addEllipse(p[0] - 1.2f, p[1] - 1.2f, 2.4f, 2.4f);
+    return i;
+}
+
+}
+
+void IconCircle::paintButton(Graphics & g, bool highlighted, bool down)
+{
+    auto r = getLocalBounds().toFloat().reduced(1.0f);
+    r = r.withSizeKeepingCentre(jmin(r.getWidth(), r.getHeight()), jmin(r.getWidth(), r.getHeight()));
+    const bool on = getToggleState();
+    const float alpha = isEnabled() ? 1.0f : 0.4f;
+
+    // the circle: soft red (the site's string-soft on night), bright red when on
+    Colour fill = on ? TinCanTheme::stringStrong : TinCanTheme::string.withAlpha(highlighted ? 0.30f : 0.16f);
+    if (down) fill = fill.brighter(0.15f);
+    g.setColour(fill.withMultipliedAlpha(alpha));
+    g.fillEllipse(r);
+    g.setColour((on ? TinCanTheme::stringStrong.brighter(0.25f) : TinCanTheme::string.withAlpha(highlighted ? 0.75f : 0.45f)).withMultipliedAlpha(alpha));
+    g.drawEllipse(r.reduced(0.6f), 1.2f);
+
+    const Colour ink = (on ? Colours::white : TinCanTheme::stringLight).withMultipliedAlpha(alpha);
+    g.setColour(ink);
+    if (!icon.line.isEmpty() || !icon.solid.isEmpty()) {
+        // the 24x24 icon in the middle half of the circle
+        auto box = r.reduced(r.getWidth() * (text.isNotEmpty() ? 0.30f : 0.24f));
+        auto t = AffineTransform::scale(box.getWidth() / 24.0f).translated(box.getX(), box.getY());
+        g.strokePath(icon.line, PathStrokeType(2.0f, PathStrokeType::curved, PathStrokeType::rounded), t);
+        g.fillPath(icon.solid, t);
+    }
+    else if (text.isNotEmpty()) {
+        // a lone music sign (♭) is small in the font: larger, so it reads like the letters
+        float fs = text.length() == 1 && text[0] > 0x2000 ? 24.0f : text.length() <= 2 ? 15.0f : text.length() <= 3 ? 13.0f : 11.0f;
+        g.setFont(Font(fs, Font::bold));
+        g.drawText(text, r, Justification::centred, false);
+    }
+    if (badge.isNotEmpty()) {
+        // a small number at the lower right, in its own dot
+        auto b = juce::Rectangle<float>(15.0f, 15.0f).withCentre({ r.getRight() - 6.0f, r.getBottom() - 6.0f });
+        g.setColour((on ? Colours::white : TinCanTheme::stringStrong).withMultipliedAlpha(alpha));
+        g.fillEllipse(b);
+        g.setColour((on ? TinCanTheme::stringStrong : Colours::white).withMultipliedAlpha(alpha));
+        g.setFont(Font(11.0f, Font::bold));
+        g.drawText(badge, b, Justification::centred, false);
+    }
+}
+
+//==============================================================================
+
+IconPicker::IconPicker()
+{
+    setInterceptsMouseClicks(false, true);
+}
+
+IconPicker::~IconPicker()
+{
+    stopTimer();
+    for (auto * c : circles) Desktop::getInstance().getAnimator().cancelAnimation(c, false);
+}
+
+void IconPicker::setOptions(std::vector<Option> newOptions, int selectedId)
+{
+    options = std::move(newOptions);
+    circles.clear();
+    for (auto & o : options) {
+        auto * c = circles.add(new IconCircle());
+        c->setIcon(o.icon);
+        c->setText(o.text);
+        c->setBadge(o.badge);
+        c->setTooltip(o.tip);
+        c->setTitle(o.tip);
+        c->addMouseListener(this, false);
+        const int id = o.id;
+        c->onClick = [this, id]() { pick(id); };
+        addChildComponent(c);
+    }
+    selected = selectedId;
+    open = false;
+    layout(false);
+}
+
+void IconPicker::setSelected(int id)
+{
+    selected = id;
+    layout(false);
+}
+
+int IconPicker::getOpenWidth() const
+{
+    const int n = (int) options.size();
+    return n * IconCircle::size + jmax(0, n - 1) * gap + 2 * pad;
+}
+
+juce::Rectangle<int> IconPicker::slot(int index) const
+{
+    return { pad + index * (IconCircle::size + gap), (getHeight() - IconCircle::size) / 2, IconCircle::size, IconCircle::size };
+}
+
+bool IconPicker::hitTest(int x, int y)
+{
+    // closed: only the one circle answers, so the space it may open into stays usable
+    if (open) return true;
+    return slot(0).expanded(pad).contains(x, y);
+}
+
+void IconPicker::paint(Graphics & g)
+{
+    if (!open) return;
+    // a pill behind the open choices, so they read over whatever is under them
+    auto r = juce::Rectangle<int>(0, slot(0).getY() - pad, getOpenWidth(), IconCircle::size + 2 * pad).toFloat();
+    g.setColour(TinCanTheme::raised.withAlpha(0.96f));
+    g.fillRoundedRectangle(r, r.getHeight() / 2);
+    g.setColour(TinCanTheme::line);
+    g.drawRoundedRectangle(r.reduced(0.5f), r.getHeight() / 2, 1.0f);
+}
+
+void IconPicker::layout(bool animate)
+{
+    auto & animator = Desktop::getInstance().getAnimator();
+    const int ms = 160;
+    // the choice first, then the others in their own order
+    int k = 1;
+    for (size_t i = 0; i < options.size(); ++i) {
+        auto * c = circles[(int) i];
+        const bool isChoice = options[i].id == selected;
+        c->setOn(isChoice);
+        auto target = isChoice ? slot(0) : slot(k++);
+        if (isChoice || open) {
+            if (!c->isVisible()) { c->setBounds(slot(0)); c->setAlpha(isChoice ? 1.0f : 0.0f); c->setVisible(true); }
+            if (animate) animator.animateComponent(c, target, 1.0f, ms, false, 0.4, 0.6);
+            else { animator.cancelAnimation(c, false); c->setBounds(target); c->setAlpha(1.0f); }
+        }
+        else if (c->isVisible()) {
+            // fold back into the choice and disappear
+            if (animate) {
+                animator.animateComponent(c, slot(0), 0.0f, ms, false, 0.4, 0.6);
+                Component::SafePointer<IconCircle> safe(c);
+                Timer::callAfterDelay(ms + 30, [safe, this]() { if (safe && !open) safe->setVisible(false); });
+            }
+            else { animator.cancelAnimation(c, false); c->setVisible(false); }
+        }
+        if (isChoice) c->toFront(false);
+    }
+    repaint();
+}
+
+void IconPicker::setOpen(bool shouldBeOpen)
+{
+    if (open == shouldBeOpen) return;
+    open = shouldBeOpen;
+    if (open) toFront(false);
+    layout(true);
+    if (onOpenChanged) onOpenChanged(open);
+}
+
+void IconPicker::pick(int id)
+{
+    if (!open) { setOpen(true); return; }   // a click on the closed circle opens it (touch, keyboard)
+    const bool changed = id != selected;
+    selected = id;
+    open = false;
+    layout(true);
+    if (onOpenChanged) onOpenChanged(false);
+    if (changed && onChange) onChange(id);
+}
+
+void IconPicker::mouseEnter(const MouseEvent &)
+{
+    stopTimer();
+    if (!open) setOpen(true);
+}
+
+void IconPicker::mouseExit(const MouseEvent &)
+{
+    // close a moment after the pointer leaves (moving between circles crosses small gaps)
+    startTimer(280);
+}
+
+void IconPicker::timerCallback()
+{
+    stopTimer();
+    if (open && !isMouseOver(true)) setOpen(false);
+}
+
+}

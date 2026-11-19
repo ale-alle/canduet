@@ -24,7 +24,7 @@
 //
 // Messages (JSON, WebView2 postMessage):
 //   app  -> page  {"t":"state","me":{…},"inputs":[{"i","label","name","stereo","canPair","gain","pan","muted","level","levels"}],"conn":"connecting|connected|lost","lesson":{…},
-//                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board"}}      ~10 a second
+//                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board","score"}}      ~10 a second
 //                 {"t":"chat","items":[{"from","text","me","sys"}]}                    new messages
 //                 {"t":"toast","text","ms"}                                           a short notice
 //   page -> app   {"t":"ready"}
@@ -32,7 +32,7 @@
 //                 {"t":"peer","id","k":"mute|solo|quality|buffer|resetBuffer|remove","v"}
 //                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"monitorLevel","v"} {"t":"outMute","v"} {"t":"recvMute","v"}
 //                 {"t":"input","i","k":"gain|pan|mute|pair","v"}   one input in the input mixer (T-077)
-//                 {"t":"tools"} {"t":"board"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
+//                 {"t":"tools"} {"t":"board"} {"t":"score"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
 //                 {"t":"chat","text"}
 //                 {"t":"dock","rect":[x,y,w,h]}                  the Tools gap, as fractions of the page ([] = closed)
@@ -61,14 +61,13 @@ class LessonView : public Component, private Timer, private NoteShare::Listener
 public:
     struct Hooks
     {
-        std::function<void()> toggleBoard, openSetup, openSettings, openEffects, openHelp, leave, shareVideoId;
+        std::function<void()> toggleBoard, toggleScore, openSetup, openSettings, openEffects, openHelp, leave, shareVideoId;
         std::function<void()> recordAsk, recordStop, markStart;
         std::function<void(const String &)> markSave;
         std::function<String()> recordPhase;      // "idle", "asking", "asked" or "recording"
         std::function<double()> recordSeconds;
-        std::function<bool()> boardOpen;
+        std::function<bool()> boardOpen, scoreOpen;
         std::function<void(String & in, String & out)> deviceNames;
-        std::function<String()> diagDevice;   // DIAG (temporary, T-077): xruns, CPU, buffer
         // the audio interface's inputs that are on, in order: device channel numbers (0-based) and names
         std::function<void(Array<int> & numbers, StringArray & names)> inputChannels;
         std::function<std::unique_ptr<ToolsPanel>()> makeTools;
@@ -128,7 +127,6 @@ private:
     bool everConnected = false;
     float monitorLevel = 1.0f;   // "Hear myself" level to go back to
     float outputLevel = 1.0f;    // output level to go back to after the Output button (T-077)
-    int diagTicks = 0;           // DIAG (temporary, T-077)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LessonView)
 };

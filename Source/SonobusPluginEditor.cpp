@@ -1783,6 +1783,26 @@ void SonobusAudioProcessorEditor::sbChatEventReceived(SonobusAudioProcessor *com
         return;
     }
 
+    if (mesg.tags == TinCan::kScoreTag || mesg.tags == TinCan::TempoWire::Tag) {
+        // shared score and tempo (T-080); off the message thread, queued with a cap like the keys
+        bool post = false;
+        {
+            const ScopedLock sl(mScoreMsgLock);
+            if (mScoreMsgFrom.size() < 512) {
+                mScoreMsgFrom.add(mesg.from);
+                mScoreMsgPayload.add(mesg.message.substring(0, TinCan::kScoreMaxPayload + 64));
+                mScoreMsgTag.add(mesg.tags);
+            }
+            post = !mScoreMsgPosted;
+            mScoreMsgPosted = true;
+        }
+        if (post) {
+            Component::SafePointer<SonobusAudioProcessorEditor> safeThis(this);
+            MessageManager::callAsync([safeThis]() { if (safeThis) safeThis->handleScoreMessages(); });
+        }
+        return;
+    }
+
     if (mesg.tags == TinCan::NoteWire::Tag) {
         // shared keys (T-074); arrives off the message thread. Queued with a cap, and drained by one
         // async call, so a peer sending too much can't flood the message thread (QA).
@@ -3445,8 +3465,96 @@ void SonobusAudioProcessorEditor::showWorkspace()
     mWorkspaceWindow->toFront(true);
 }
 
+void SonobusAudioProcessorEditor::handleScoreMessages()
+{
+    StringArray from, payload, tag;
+    {
+        const ScopedLock sl(mScoreMsgLock);
+        from.swapWith(mScoreMsgFrom);
+        payload.swapWith(mScoreMsgPayload);
+        tag.swapWith(mScoreMsgTag);
+        mScoreMsgPosted = false;
+    }
+    for (int i = 0; i < from.size(); ++i) {
+        if (tag[i] == TinCan::TempoWire::Tag) {
+            getTempoShare().receive(from[i], payload[i]);
+        }
+        else if (mScoreWindow) {
+            mScoreWindow->receive(from[i], payload[i]);
+        }
+        else if (mLessonView && !mScoreToldThisLesson && payload[i].contains("\"k\":\"ops\"")) {
+            // someone is writing in the score: their copy is sent over when ours opens
+            mScoreToldThisLesson = true;
+            mLessonView->showToast(from[i].substring(0, 80) + " " + TRANS("is writing in the score. Press Score to see it."), 7000);
+        }
+    }
+}
+
+void SonobusAudioProcessorEditor::showScore()
+{
+    if (!mScoreWindow) {
+        Component::SafePointer<SonobusAudioProcessorEditor> safeThis(this);
+        TinCan::ScoreWindow::Hooks hooks;
+        hooks.practice = mLessonView == nullptr || mLessonView->isPractice();
+        hooks.myName = [safeThis]() { return safeThis ? safeThis->getMyLessonName() : String(); };
+        hooks.sendToPeers = [safeThis](const String & payload) {
+            if (!safeThis) return;
+            auto & proc = safeThis->processor;
+            if (!proc.isConnectedToServer() || proc.getCurrentJoinedGroup().isEmpty()) return;
+            SBChatEvent ev(SBChatEvent::UserType, proc.getCurrentJoinedGroup(), safeThis->getMyLessonName(), "",
+                           TinCan::kScoreTag, payload);
+            proc.sendChatEvent(ev);
+        };
+        hooks.peerNames = [safeThis]() {
+            StringArray names;
+            if (!safeThis) return names;
+            auto & proc = safeThis->processor;
+            if (!proc.isConnectedToServer() || proc.getCurrentJoinedGroup().isEmpty()) return names;
+            for (int i = 0; i < proc.getNumberRemotePeers(); ++i) {
+                if (proc.getRemotePeerConnected(i)) names.add(proc.getRemotePeerUserName(i));
+            }
+            return names;
+        };
+        mScoreWindow = std::make_unique<TinCan::ScoreWindow>(processor, getNoteShare(), std::move(hooks));
+    }
+    mScoreWindow->setVisible(true);
+    mScoreWindow->toFront(true);
+}
+
+void SonobusAudioProcessorEditor::toggleScore()
+{
+    if (mScoreWindow && mScoreWindow->isVisible() && mScoreWindow->isActiveWindow()) mScoreWindow->setVisible(false);
+    else showScore();
+}
+
+TinCan::TempoShare & SonobusAudioProcessorEditor::getTempoShare()
+{
+    if (!mTempoShare) {
+        Component::SafePointer<SonobusAudioProcessorEditor> safeThis(this);
+        mTempoShare = std::make_unique<TinCan::TempoShare>(processor,
+            [safeThis](const String & payload) {
+                if (!safeThis) return;
+                auto & proc = safeThis->processor;
+                SBChatEvent ev(SBChatEvent::UserType, proc.getCurrentJoinedGroup(), safeThis->getMyLessonName(), "",
+                               TinCan::TempoWire::Tag, payload);
+                proc.sendChatEvent(ev);
+            },
+            [safeThis]() {
+                if (!safeThis || !safeThis->mLessonView || safeThis->mLessonView->isPractice()) return false;
+                auto & proc = safeThis->processor;
+                return proc.isConnectedToServer() && proc.getCurrentJoinedGroup().isNotEmpty() && proc.getNumberRemotePeers() > 0;
+            },
+            [safeThis]() { return safeThis ? safeThis->getMyLessonName() : String(); });
+    }
+    return *mTempoShare;
+}
+
 void SonobusAudioProcessorEditor::closeLessonVideo()
 {
+    // the score goes with the lesson (save it first to keep it), and so does the shared tempo's counter
+    mScoreWindow.reset();
+    mScoreToldThisLesson = false;
+    if (mTempoShare) mTempoShare->lessonEnded();
     if (mNoteShare) mNoteShare->lessonEnded();
     if (mLessonView && mLessonView->isPractice() && (processor.isRecordingToFile() || mRecordingConsent.getPhase() != TinCan::RecordingConsent::Phase::Idle)) {
         // practice has no room to leave, so nothing else would stop it (QA): stop and save it now,
@@ -3567,6 +3675,9 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
         else safeThis->showWorkspace();
     };
     h.boardOpen = [safeThis]() { return safeThis && safeThis->mWorkspaceWindow && safeThis->mWorkspaceWindow->isVisible(); };
+    h.toggleScore = [safeThis]() { if (safeThis) safeThis->toggleScore(); };
+    h.scoreOpen = [safeThis]() { return safeThis && safeThis->mScoreWindow && safeThis->mScoreWindow->isVisible(); };
+    getTempoShare();   // watching the tempo from the start of the lesson
     h.openSetup = [safeThis]() { if (safeThis) safeThis->showAudioSetup(true); };
     h.openSettings = [safeThis]() {
         // after the click returns: the box floats above the page as a window of its own

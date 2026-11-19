@@ -4,6 +4,7 @@
 #pragma once
 
 #include "JuceHeader.h"
+#include "TinCanIcons.h"
 #include "TinCanInstruments.h"
 #include "TinCanNotes.h"
 #include "TinCanNoteShare.h"
@@ -96,6 +97,9 @@ private:
     int mouseNote = -1;
 };
 
+// how wide a piano's white key is for its height (a real key is about 23.5 by 150 mm)
+constexpr float whiteKeyHeightPerWidth = 5.6f;
+
 class InstrumentPanel : public Component, private MidiKeyboardState::Listener,
                         private ChangeListener, private NoteShare::Listener
 {
@@ -118,13 +122,20 @@ private:
     void playLocal(int note, bool on, int channel, float velocity);
     void notesChanged();
     void selectInstrument(int index);
+    void selectRange(int presetIndex);
     void selectTuning(int index);
+    void showTuningMenu();
+    void showTransposeMenu();
     void applyCustomTuning();
     bool showTuningValidity();
     void updateRange();
     void updateNaming();
     void updateMidiStatus();
+    void updateTuningCircle();
     bool isFretted() const;
+    // the choices are kept for next time the window opens (instrument.json in the data folder)
+    void loadSettings();
+    void saveSettings() const;
 
     SonobusAudioProcessor & processor;
     std::function<AudioDeviceManager*()> getDeviceManager;
@@ -136,28 +147,27 @@ private:
     FretboardView fretboard;
     NoteNaming naming;
 
-    ComboBox instrumentChoice;
-    // piano
-    ComboBox rangeChoice;
-    TextButton octaveDown { "<" }, octaveUp { ">" };
-    // guitar and bass
-    ComboBox tuningChoice;
-    TextEditor tuningEditor;
-    // all
-    ComboBox transposeChoice;
-    ComboBox middleCChoice;
-    ToggleButton namesToggle { TRANS("All note names") }, flatsToggle { TRANS("Flats") };
-    // T-074: send my keys to the lesson; show the others' keys
-    ToggleButton shareToggle { TRANS("Share my keys") }, showToggle { TRANS("Show the other person's keys") };
+    // round icon menus, like the rest of the app (T-080 follow-up, owner 2026-11-17)
+    IconPicker instrumentPicker;          // piano, guitar, 4- and 5-string bass
+    IconPicker rangePicker;               // 25 .. 88 keys
+    IconCircle octaveDown, octaveUp;
+    IconCircle tuningCircle;              // a menu of tunings, and Custom
+    TextEditor tuningEditor;              // only while the tuning is Custom
+    IconCircle namesCircle, flatsCircle, middleCCircle, transposeCircle;
+    IconCircle shareCircle, showCircle, midiCircle;
     Label midiStatus;
     Label lastNoteLabel;
     Label chordLabel;   // the chord of the held keys, and the other person's when they share
     juce::Rectangle<int> legendArea;
 
     int instrumentIndex = 0;
-    int lowNote = 48;   // C3
-    int numKeys = 37;
+    int rangeIndex = 3;                   // 61 keys
+    int tuningIndex = 0;                  // -1: custom
+    int transposeIndex = 0;
+    int lowNote = 36;                     // C2
+    int numKeys = 61;
     int lastNote = -1;  // most recent note-on, concert pitch
+    bool loading = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InstrumentPanel)
 };

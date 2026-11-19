@@ -31,6 +31,9 @@ typedef MVerb<float> MVerbFloat;
 namespace SonoAudio {
 class Metronome;
 }
+namespace TinCan {
+class ScorePlayer;
+}
 
 
 #define MAX_PEERS 32
@@ -345,6 +348,8 @@ public:
     // metronome position for the beat indicator (T-036), any thread
     double getMetronomeBeatPosition() const;
     double getMetronomeCountInRemaining() const;
+    // the shared score's playback on this computer (T-080)
+    TinCan::ScorePlayer & getScorePlayer() { return *mScorePlayer; }
     bool disconnectFromServer();
     double getElapsedConnectedTime() const { return mSessionConnectionStamp > 0 ? (Time::getMillisecondCounterHiRes() - mSessionConnectionStamp) * 1e-3 : 0.0; }
 
@@ -1323,6 +1328,7 @@ private:
 
     // metronome
     std::unique_ptr<SonoAudio::Metronome> mMetronome;
+    std::unique_ptr<TinCan::ScorePlayer> mScorePlayer;   // T-080
    
     // misc
     bool mSliderSnapToMouse = true;

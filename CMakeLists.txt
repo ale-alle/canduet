@@ -25,6 +25,17 @@ endif()
 # In-lesson video (T-009, doc/TINCAN-VIDEO.md): on Windows the video page runs in Microsoft Edge WebView2.
 # The WebView2 SDK (headers + WebView2Loader.dll) is downloaded from nuget.org at configure time, hash-checked.
 option(TINCAN_VIDEO "In-lesson video window (Windows, WebView2)" ON)
+
+# The shared score's sounds (T-080): GeneralUser GS 2.0.3 by S. Christian Collins (free to use and
+# ship, deps/tsf/GeneralUser-GS-LICENSE.txt), 32 MB, so it's downloaded once at configure time from a
+# fixed commit and checked, rather than kept in git. Copied to sounds\ next to CanDuet.exe.
+set(TINCAN_SOUNDFONT "${CMAKE_BINARY_DIR}/GeneralUser-GS-2.0.3.sf2")
+if (NOT EXISTS "${TINCAN_SOUNDFONT}")
+    file(DOWNLOAD "https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/97049183643d5fc5a9322a69c5b09efb667c6c3a/GeneralUser-GS.sf2"
+        "${TINCAN_SOUNDFONT}"
+        EXPECTED_HASH SHA256=9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe
+        SHOW_PROGRESS)
+endif()
 set(TINCAN_VIDEO_PAGE "" CACHE STRING "Video page URL (empty: <TINCAN_API_BASE>/app/video/)")
 set(TINCAN_WEBVIEW2_VERSION "1.0.2903.40")
 set(TINCAN_WEBVIEW2_SHA256 "ef128016dd1e51c59178c827ed5b8aa3322c57afa8675d930f8109505542ad74")
@@ -414,6 +425,14 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanHome.h
         Source/TinCanWorkspace.cpp
         Source/TinCanWorkspace.h
+        Source/TinCanIcons.cpp
+        Source/TinCanIcons.h
+        Source/TinCanScore.cpp
+        Source/TinCanScore.h
+        Source/TinCanScoreCore.cpp
+        Source/TinCanScoreCore.h
+        Source/TinCanScorePlayer.cpp
+        Source/TinCanScorePlayer.h
         Source/TinCanRecording.cpp
         Source/TinCanRecording.h
         Source/TinCanSummaries.cpp
@@ -585,6 +604,10 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         workspace-page/index.html
         workspace-page/workspace-model.js
         workspace-page/workspace-ui.js
+        score-page/score.html
+        score-page/score-model.js
+        score-page/score-ui.js
+        score-page/vexflow-bravura.js
         images/chat.svg
         images/chat_dots.svg
         images/checkmark.svg
@@ -738,6 +761,11 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/video-page/lesson.html" "$<TARGET_FILE_DIR:${target_name}_Standalone>/lesson"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/video-page/fonts" "$<TARGET_FILE_DIR:${target_name}_Standalone>/lesson/fonts"
             COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/video-page/cans" "$<TARGET_FILE_DIR:${target_name}_Standalone>/lesson/cans")
+        # the shared score's sounds (T-080), next to the exe
+        add_custom_command(TARGET ${target_name}_Standalone POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}_Standalone>/sounds"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${TINCAN_SOUNDFONT}" "$<TARGET_FILE_DIR:${target_name}_Standalone>/sounds/GeneralUser-GS.sf2"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/deps/tsf/GeneralUser-GS-LICENSE.txt" "$<TARGET_FILE_DIR:${target_name}_Standalone>/sounds")
     endif()
             
 endfunction()
@@ -777,6 +805,7 @@ add_executable(TinCanTests EXCLUDE_FROM_ALL
     tests/TinCanLessonRulesTest.cpp
     tests/TinCanNoteWireTest.cpp
     tests/TinCanChordsTest.cpp
+    tests/TinCanScoreCoreTest.cpp
     Source/TinCanPacketCipher.cpp
     Source/TinCanNotes.cpp
     Source/TinCanInstruments.cpp
@@ -786,6 +815,7 @@ add_executable(TinCanTests EXCLUDE_FROM_ALL
     Source/TinCanAudioCheck.cpp
     Source/TinCanLessonRules.cpp
     Source/TinCanChords.cpp
+    Source/TinCanScoreCore.cpp
     deps/monocypher/monocypher.c)
 
 # Tin Can audio tests (JUCE, console): cmake --build build --target TinCanAudioTests --config Release
