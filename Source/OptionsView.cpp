@@ -225,6 +225,7 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
 
     mRecFormatChoice = std::make_unique<SonoChoiceButton>();
     mRecFormatChoice->addChoiceListener(this);
+    mRecFormatChoice->addItem(TRANS("MP3"), SonobusAudioProcessor::FileFormatMP3);
     mRecFormatChoice->addItem(TRANS("FLAC"), SonobusAudioProcessor::FileFormatFLAC);
     mRecFormatChoice->addItem(TRANS("WAV"), SonobusAudioProcessor::FileFormatWAV);
     mRecFormatChoice->addItem(TRANS("OGG"), SonobusAudioProcessor::FileFormatOGG);

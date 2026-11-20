@@ -27,6 +27,7 @@
 #include "LatencyMeasurer.h"
 #include "Metronome.h"
 #include "TinCanScorePlayer.h"
+#include "TinCanMp3Format.h"
 #include "CrossPlatformUtils.h"
 
 using namespace SonoAudio;
@@ -97,7 +98,7 @@ static String useSpecificUdpPortKey("UseUdpPort");
 static String changeQualForAllKey("ChangeQualForAll");
 static String changeRecvQualForAllKey("ChangeRecvQualForAll");
 static String defRecordOptionsKey("DefaultRecordingOptions");
-static String defRecordFormatKey("DefaultRecordingFormat");
+static String defRecordFormatKey("RecordingFormat2"); // CanDuet: new key so the MP3 default reaches existing installs
 static String defRecordBitsKey("DefaultRecordingBitsPerSample");
 static String recordSelfPreFxKey("RecordSelfPreFx");
 static String recordSelfSilenceMutedKey("RecordSelfSilenceWhenMuted");
@@ -9452,6 +9453,7 @@ bool SonobusAudioProcessor::startRecordingToFile(const URL & recordLocationUrl, 
     //WavAudioFormat audioFormat;
     std::unique_ptr<AudioFormat> audioFormat;
     std::unique_ptr<AudioFormat> wavAudioFormat;
+    std::unique_ptr<AudioFormat> fallbackAudioFormat; // CanDuet: FLAC for tracks the MP3 encoder can't take
 
     int qualindex = 0;
     
@@ -9479,6 +9481,11 @@ bool SonobusAudioProcessor::startRecordingToFile(const URL & recordLocationUrl, 
         totalRecordingChannels = 2;
     }
 
+    if (fileformat == FileFormatMP3 && !TinCanMp3AudioFormat::canEncode(getSampleRate(), totalRecordingChannels)) {
+        // CanDuet: the Windows MP3 encoder takes mono/stereo at 32/44.1/48 kHz only (or is missing): use FLAC
+        fileformat = FileFormatFLAC;
+    }
+
     if (fileformat == FileFormatFLAC && totalRecordingChannels > 8) {
         // flac doesn't support > 8 channels
         fileformat = FileFormatWAV;
@@ -9493,6 +9500,11 @@ bool SonobusAudioProcessor::startRecordingToFile(const URL & recordLocationUrl, 
         audioFormat = std::make_unique<WavAudioFormat>();
         usefile = usefile.withFileExtension(".wav");
         mimetype = "audio/wav" ;
+    }
+    else if (fileformat == FileFormatMP3 || (fileformat == FileFormatAuto && usefile.getFileExtension().toLowerCase() == ".mp3")) {
+        audioFormat = std::make_unique<TinCanMp3AudioFormat>();
+        usefile = usefile.withFileExtension(".mp3");
+        mimetype = "audio/mpeg" ;
     }
     else if (fileformat == FileFormatOGG || (fileformat == FileFormatAuto && usefile.getFileExtension().toLowerCase() == ".ogg")) {
         audioFormat = std::make_unique<OggVorbisAudioFormat>();
@@ -9716,14 +9728,21 @@ bool SonobusAudioProcessor::startRecordingToFile(const URL & recordLocationUrl, 
                 int chans = mInputChannelGroups[i].params.numChannels;
                 mSelfRecordChans[i] = chans;
                 String inname = mInputChannelGroups[i].params.name;
-                String filename = usefile.getFileNameWithoutExtension() + (inname.isEmpty() ? "-SELF" : ("-SELF-" + inname)) + usefile.getFileExtension();
+                AudioFormat * selfformat = audioFormat.get();
+                String selfext = usefile.getFileExtension();
+                if (fileformat == FileFormatMP3 && !TinCanMp3AudioFormat::canEncode(getSampleRate(), chans)) {
+                    if (!fallbackAudioFormat) fallbackAudioFormat = std::make_unique<FlacAudioFormat>();
+                    selfformat = fallbackAudioFormat.get();
+                    selfext = ".flac";
+                }
+                String filename = usefile.getFileNameWithoutExtension() + (inname.isEmpty() ? "-SELF" : ("-SELF-" + inname)) + selfext;
                 filename = File::createLegalFileName(filename);
                 
                 URL returl;
 
                 if (auto fileStream = makeStream(recdir, filename, returl))
                 {
-                    if (auto writer = audioFormat->createWriterFor (fileStream.get(), getSampleRate(), chans, bitsPerSample, {}, qualindex))
+                    if (auto writer = selfformat->createWriterFor (fileStream.get(), getSampleRate(), chans, bitsPerSample, {}, qualindex))
                     {
                         fileStream.release(); // (passes responsibility for deleting the stream to the writer object that is now using it)
 
@@ -9791,7 +9810,13 @@ bool SonobusAudioProcessor::startRecordingToFile(const URL & recordLocationUrl, 
                 AudioFormat * useformat = audioFormat.get();
                 String fileext = usefile.getFileExtension();
 
-                if (fileformat == FileFormatFLAC && numchan > 8) {
+                if (fileformat == FileFormatMP3 && !TinCanMp3AudioFormat::canEncode(getSampleRate(), numchan)) {
+                    // CanDuet: more than stereo from this person: FLAC (or WAV past 8 channels) for their track
+                    if (!fallbackAudioFormat) fallbackAudioFormat = std::make_unique<FlacAudioFormat>();
+                    useformat = fallbackAudioFormat.get();
+                    fileext = ".flac";
+                }
+                if ((fileformat == FileFormatFLAC || fileformat == FileFormatMP3) && numchan > 8) {
                     if (!wavAudioFormat) {
                         wavAudioFormat = std::make_unique<WavAudioFormat>();
                     }

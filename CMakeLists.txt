@@ -435,6 +435,8 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanScorePlayer.h
         Source/TinCanRecording.cpp
         Source/TinCanRecording.h
+        Source/TinCanMp3Format.cpp
+        Source/TinCanMp3Format.h
         Source/TinCanSummaries.cpp
         Source/TinCanSummaries.h
         Source/VDONinjaView.h
@@ -825,12 +827,15 @@ set_target_properties(TinCanAudioTests PROPERTIES EXCLUDE_FROM_ALL TRUE)
 target_sources(TinCanAudioTests PRIVATE
     tests/TinCanMetronomeTest.cpp
     tests/TinCanRecordingTest.cpp
+    tests/TinCanMp3Test.cpp
+    Source/TinCanMp3Format.cpp
     Source/Metronome.cpp
     Source/TinCanBeatClock.cpp
     Source/TinCanRecording.cpp)
 target_compile_definitions(TinCanAudioTests PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
+    JUCE_USE_WINDOWS_MEDIA_FORMAT=1
     TINCAN_TEST_IMAGES="${CMAKE_CURRENT_SOURCE_DIR}/images")
 target_link_libraries(TinCanAudioTests PRIVATE
     juce::juce_audio_formats

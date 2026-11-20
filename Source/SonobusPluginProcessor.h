@@ -173,7 +173,8 @@ public:
         FileFormatAuto,
         FileFormatFLAC,
         FileFormatWAV,
-        FileFormatOGG
+        FileFormatOGG,
+        FileFormatMP3   // CanDuet: Windows MP3 encoder (TinCanMp3Format); falls back to FLAC where it can't encode
     };
 
     enum PeerDisplayMode {
@@ -1289,7 +1290,7 @@ private:
     // recording stuff
     
     uint32 mDefaultRecordingOptions = RecordMix;
-    RecordFileFormat mDefaultRecordingFormat = FileFormatFLAC;
+    RecordFileFormat mDefaultRecordingFormat = FileFormatMP3;
     int mDefaultRecordingBitsPerSample = 16;
     bool mRecordInputPreFX = true;
     bool mRecordInputSilenceWhenMuted = true;
