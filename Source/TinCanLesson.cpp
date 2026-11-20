@@ -241,6 +241,64 @@ static float round1(float v) { return std::round(v * 10.0f) / 10.0f; }
 
 // the input mixer's rows (T-077): one per input group, in order. Its meter channels are the groups'
 // channels laid end to end, after each input's level (and the microphone level over them all).
+// one input's effects (T-084): each knob's amount (0 = off) and every setting behind its pop-up
+static var compressorVar(const SonoAudio::CompressorParams & p, bool withMakeup)
+{
+    DynamicObject::Ptr o = new DynamicObject();
+    o->setProperty("amount", p.enabled ? p.mix : 0.0f);
+    o->setProperty("threshold", p.thresholdDb);
+    o->setProperty("ratio", p.ratio);
+    o->setProperty("attack", p.attackMs);
+    o->setProperty("release", p.releaseMs);
+    if (withMakeup) {
+        o->setProperty("makeup", p.makeupGainDb);
+        o->setProperty("autoMakeup", p.automakeupGain);
+    }
+    return var(o.get());
+}
+
+var LessonView::effectsState(int g)
+{
+    DynamicObject::Ptr fx = new DynamicObject();
+    SonoAudio::CompressorParams gate, comp;
+    SonoAudio::ParametricEqParams eq;
+    processor.getInputExpanderParams(g, gate);
+    processor.getInputCompressorParams(g, comp);
+    processor.getInputEqParams(g, eq);
+    fx->setProperty("gate", compressorVar(gate, false));
+    fx->setProperty("comp", compressorVar(comp, true));
+    DynamicObject::Ptr e = new DynamicObject();
+    e->setProperty("amount", eq.enabled ? eq.mix : 0.0f);
+    e->setProperty("lowGain", eq.lowShelfGain);   e->setProperty("lowFreq", eq.lowShelfFreq);
+    e->setProperty("mid1Gain", eq.para1Gain);     e->setProperty("mid1Freq", eq.para1Freq);   e->setProperty("mid1Q", eq.para1Q);
+    e->setProperty("mid2Gain", eq.para2Gain);     e->setProperty("mid2Freq", eq.para2Freq);   e->setProperty("mid2Q", eq.para2Q);
+    e->setProperty("highGain", eq.highShelfGain); e->setProperty("highFreq", eq.highShelfFreq);
+    fx->setProperty("eq", var(e.get()));
+    fx->setProperty("rev", processor.getInputReverbSend(g, true));
+    fx->setProperty("dly", processor.getInputDelaySend(g));
+    return var(fx.get());
+}
+
+// the shared Reverb and Delay the strips send to; everyone hears them (T-084)
+var LessonView::busState()
+{
+    DynamicObject::Ptr bus = new DynamicObject();
+    DynamicObject::Ptr rev = new DynamicObject();
+    rev->setProperty("level", getParam(SonobusAudioProcessor::paramInputReverbLevel));
+    rev->setProperty("size", getParam(SonobusAudioProcessor::paramInputReverbSize));
+    rev->setProperty("damping", getParam(SonobusAudioProcessor::paramInputReverbDamping));
+    rev->setProperty("preDelay", getParam(SonobusAudioProcessor::paramInputReverbPreDelay));
+    bus->setProperty("rev", var(rev.get()));
+    auto & d = processor.getInputDelay();
+    DynamicObject::Ptr dly = new DynamicObject();
+    dly->setProperty("time", d.timeMs.load());
+    dly->setProperty("repeats", d.feedback.load());
+    dly->setProperty("tone", d.toneHz.load());
+    dly->setProperty("level", d.level.load());
+    bus->setProperty("dly", var(dly.get()));
+    return var(bus.get());
+}
+
 var LessonView::inputsState()
 {
     Array<int> numbers;
@@ -278,6 +336,7 @@ var LessonView::inputsState()
         }
         r->setProperty("pan", round1(pan * 10.0f) / 10.0f);
         r->setProperty("muted", processor.getInputGroupMuted(g));
+        r->setProperty("fx", effectsState(g));
         // one meter per channel (a pair's strip shows two), 0..1 over -60..0 dB
         Array<var> levels;
         float top = 0.0f;
@@ -394,6 +453,7 @@ void LessonView::sendState()
     msg->setProperty("t", "state");
     msg->setProperty("me", var(me.get()));
     msg->setProperty("inputs", inputsState());
+    msg->setProperty("fxBus", busState());
     msg->setProperty("conn", conn);
     msg->setProperty("lesson", var(lesson.get()));
     msg->setProperty("peers", peers);
@@ -524,6 +584,96 @@ void LessonView::handleMessage(const var & message)
         }
         else if (k == "pair") {
             processor.setInputGroupStereoPair(g, (bool) value);
+        }
+        else if ((k == "gate" || k == "comp" || k == "eq" || k == "rev" || k == "dly") && isNumber) {
+            // an effect's knob (T-084): its amount, 0 turns it off
+            const float amount = jlimit(0.0f, 1.0f, (float) value);
+            const bool on = amount > 0.001f;
+            if (k == "gate" || k == "comp") {
+                SonoAudio::CompressorParams p;
+                if (k == "gate") processor.getInputExpanderParams(g, p); else processor.getInputCompressorParams(g, p);
+                p.enabled = on;
+                if (on) p.mix = amount;
+                if (k == "gate") processor.setInputExpanderParams(g, p); else processor.setInputCompressorParams(g, p);
+            }
+            else if (k == "eq") {
+                SonoAudio::ParametricEqParams p;
+                processor.getInputEqParams(g, p);
+                p.enabled = on;
+                if (on) p.mix = amount;
+                processor.setInputEqParams(g, p);
+            }
+            else if (k == "rev") {
+                processor.setInputReverbSend(g, on ? amount : 0.0f, true);
+            }
+            else processor.setInputDelaySend(g, on ? amount : 0.0f);
+        }
+        sendState();
+    }
+    else if (type == "inputFx") {
+        // an effect's pop-up (T-084): its settings, leaving the knob's amount alone
+        const var iv = message.getProperty("i", var());
+        if (!(iv.isInt() || iv.isDouble())) return;
+        const int g = (int) iv;
+        if (g < 0 || g >= processor.getInputGroupCount()) return;
+        const auto e = message.getProperty("e", var()).toString();
+        const var p = message.getProperty("p", var());
+        if (!p.isObject()) return;
+        auto num = [&p](const char * key, float lo, float hi, float fallback) {
+            const var v = p.getProperty(key, var());
+            return (v.isInt() || v.isDouble()) ? jlimit(lo, hi, (float) (double) v) : fallback;
+        };
+        if (e == "gate" || e == "comp") {
+            SonoAudio::CompressorParams c;
+            if (e == "gate") processor.getInputExpanderParams(g, c); else processor.getInputCompressorParams(g, c);
+            c.thresholdDb = num("threshold", -80.0f, 0.0f, c.thresholdDb);
+            c.ratio = num("ratio", 1.0f, 20.0f, c.ratio);
+            c.attackMs = num("attack", 0.1f, 200.0f, c.attackMs);
+            c.releaseMs = num("release", 5.0f, 2000.0f, c.releaseMs);
+            if (e == "comp") {
+                const var am = p.getProperty("autoMakeup", var());
+                if (am.isBool()) c.automakeupGain = (bool) am;
+                c.makeupGainDb = num("makeup", 0.0f, 30.0f, c.makeupGainDb);
+                processor.setInputCompressorParams(g, c);
+            }
+            else processor.setInputExpanderParams(g, c);
+        }
+        else if (e == "eq") {
+            SonoAudio::ParametricEqParams q;
+            processor.getInputEqParams(g, q);
+            q.lowShelfGain = num("lowGain", -18.0f, 18.0f, q.lowShelfGain);
+            q.lowShelfFreq = num("lowFreq", 20.0f, 500.0f, q.lowShelfFreq);
+            q.para1Gain = num("mid1Gain", -18.0f, 18.0f, q.para1Gain);
+            q.para1Freq = num("mid1Freq", 40.0f, 8000.0f, q.para1Freq);
+            q.para1Q = num("mid1Q", 0.3f, 10.0f, q.para1Q);
+            q.para2Gain = num("mid2Gain", -18.0f, 18.0f, q.para2Gain);
+            q.para2Freq = num("mid2Freq", 100.0f, 16000.0f, q.para2Freq);
+            q.para2Q = num("mid2Q", 0.3f, 10.0f, q.para2Q);
+            q.highShelfGain = num("highGain", -18.0f, 18.0f, q.highShelfGain);
+            q.highShelfFreq = num("highFreq", 1000.0f, 18000.0f, q.highShelfFreq);
+            processor.setInputEqParams(g, q);
+        }
+        sendState();
+    }
+    else if (type == "fxBus") {
+        // the shared Reverb or Delay's pop-up (T-084)
+        const auto e = message.getProperty("e", var()).toString();
+        const var p = message.getProperty("p", var());
+        if (!p.isObject()) return;
+        auto has = [&p](const char * key) { const var v = p.getProperty(key, var()); return v.isInt() || v.isDouble(); };
+        auto get = [&p](const char * key, float lo, float hi) { return jlimit(lo, hi, (float) (double) p.getProperty(key, var())); };
+        if (e == "rev") {
+            if (has("level")) setParam(SonobusAudioProcessor::paramInputReverbLevel, get("level", 0.0f, 1.0f));
+            if (has("size")) setParam(SonobusAudioProcessor::paramInputReverbSize, get("size", 0.0f, 1.0f));
+            if (has("damping")) setParam(SonobusAudioProcessor::paramInputReverbDamping, get("damping", 0.0f, 1.0f));
+            if (has("preDelay")) setParam(SonobusAudioProcessor::paramInputReverbPreDelay, get("preDelay", 0.0f, 100.0f));
+        }
+        else if (e == "dly") {
+            auto & d = processor.getInputDelay();
+            if (has("time")) d.timeMs = get("time", 20.0f, TinCan::Delay::maxTimeMs);
+            if (has("repeats")) d.feedback = get("repeats", 0.0f, 0.9f);
+            if (has("tone")) d.toneHz = get("tone", 1000.0f, 16000.0f);
+            if (has("level")) d.level = get("level", 0.0f, 1.0f);
         }
         sendState();
     }

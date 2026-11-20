@@ -103,6 +103,8 @@ private:
     void handlePeerMessage(int index, const String & kind, const var & value);
     void sendState();
     var inputsState();
+    var effectsState(int group);
+    var busState();
     void sendNewChat();
     void placeTools();
     void setParam(const String & id, float value);

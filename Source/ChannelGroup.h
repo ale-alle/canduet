@@ -75,6 +75,7 @@ struct ChannelGroupParams
 
     // reverb send
     float inReverbSend = 0.0f;
+    float inDelaySend = 0.0f; // CanDuet: send to the shared delay that everyone hears
     float monReverbSend = 0.0f;
 
     // monitoring level
@@ -155,6 +156,10 @@ public:
     std::unique_ptr<MapUI>  eqControl[2];
     bool eqParamsChanged = false;
     bool _lastEqEnabled = false;
+
+    // CanDuet: each effect's amount (dry/wet), ramped per block; 0 while an effect is off
+    float _lastExpanderMix = 0.0f, _lastCompressorMix = 0.0f, _lastEqMix = 0.0f;
+    AudioBuffer<float> fxDryBuffer;   // the signal before one effect, for the blend (2 x 8192, made in init)
 
     // limiter
     //faustLimiter mInputLimiter;

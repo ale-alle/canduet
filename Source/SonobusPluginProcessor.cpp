@@ -116,6 +116,11 @@ static String lastSoundboardShownKey("lastSoundboardShown");
 static String chatUseFixedWidthFontKey("chatFixedWidthFont");
 static String chatFontSizeOffsetKey("chatFontSizeOffset");
 static String linkMonitoringDelayTimesKey("linkMonDelayTimes");
+// CanDuet: the shared Delay (T-084)
+static String fxDelayTimeKey("fxDelayTimeMs");
+static String fxDelayFeedbackKey("fxDelayFeedback");
+static String fxDelayToneKey("fxDelayToneHz");
+static String fxDelayLevelKey("fxDelayLevel");
 static String langOverrideCodeKey("langOverrideCode");
 static String useUnivFontKey("useUnivFont");
 static String lastWindowWidthKey("lastWindowWidth");
@@ -2194,6 +2199,21 @@ void SonobusAudioProcessor::setInputReverbSend(int changroup, float rgain, bool 
             mInputChannelGroups[changroup].params.monReverbSend = rgain;
         }
     }
+}
+
+void SonobusAudioProcessor::setInputDelaySend(int changroup, float sendgain)
+{
+    if (changroup >= 0 && changroup < MAX_CHANGROUPS) {
+        mInputChannelGroups[changroup].params.inDelaySend = jlimit(0.0f, 1.0f, sendgain);
+    }
+}
+
+float SonobusAudioProcessor::getInputDelaySend(int changroup)
+{
+    if (changroup >= 0 && changroup < MAX_CHANGROUPS) {
+        return mInputChannelGroups[changroup].params.inDelaySend;
+    }
+    return 0.0f;
 }
 
 float SonobusAudioProcessor::getInputReverbSend(int changroup, bool input)
@@ -7205,6 +7225,7 @@ void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     mMainReverb->setSampleRate(sampleRate);
     mMReverb.setSampleRate(sampleRate);
     mInputReverb.setSampleRate(sampleRate);
+    mInputDelay.prepare(sampleRate);
 
     mZitaReverb.init(sampleRate);
     mZitaReverb.buildUserInterface(&mZitaControl);
@@ -7592,6 +7613,9 @@ void SonobusAudioProcessor::ensureBuffers(int numSamples)
     if (mainFxBuffer.getNumSamples() < numSamples || mainFxBuffer.getNumChannels() != maxchans) {
         mainFxBuffer.setSize(maxchans, numSamples, false, false, true);
     }
+    if (inputDlyBuffer.getNumSamples() < numSamples || inputDlyBuffer.getNumChannels() != 2) {
+        inputDlyBuffer.setSize(2, numSamples, false, false, true);
+    }
     if (inputRevBuffer.getNumSamples() < numSamples || inputRevBuffer.getNumChannels() != maxchans) {
         inputRevBuffer.setSize(maxchans, numSamples, false, false, true);
     }
@@ -7789,7 +7813,23 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
         }
     }
 
-    bool doinreverb = inReverbEnabled || mLastInputReverbEnabled;
+    // CanDuet: the shared Delay rides the input reverb's path (sent, monitored and recorded with it)
+    bool inDelayEnabled = false;
+    for (auto i = 0; i < mInputChannelGroupCount && i < MAX_CHANGROUPS; ++i) {
+        if (mInputChannelGroups[i].params.inDelaySend > 0.0f || mLastInputDelaySend[i] > 0.0f) {
+            inDelayEnabled = true;
+            break;
+        }
+    }
+    const bool delayStarting = inDelayEnabled && mInputDelayTailSamples <= 0;
+    if (inDelayEnabled) {
+        mInputDelayTailSamples = (int64) (getSampleRate() * 12.0); // longest echoes at full repeats
+    } else if (mInputDelayTailSamples > 0) {
+        mInputDelayTailSamples -= numSamples;
+    }
+    bool dodelay = inDelayEnabled || mInputDelayTailSamples > 0;
+
+    bool doinreverb = inReverbEnabled || mLastInputReverbEnabled || dodelay;
     int revfxchannels = 2;
 
     if (doinreverb) {
@@ -8085,13 +8125,46 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
             mInputReverb.reset();
         }
 
-        mInputReverb.process((float **)inputRevBuffer.getArrayOfWritePointers(), (float **)inputRevBuffer.getArrayOfWritePointers(), numSamples);
+        if (inReverbEnabled || mLastInputReverbEnabled) {
+            mInputReverb.process((float **)inputRevBuffer.getArrayOfWritePointers(), (float **)inputRevBuffer.getArrayOfWritePointers(), numSamples);
+        } else {
+            inputRevBuffer.clear(0, numSamples);   // only the delay is on: no reverb tail coming back
+        }
 
         if (inReverbEnabled != mLastInputReverbEnabled ) {
             float sgain = inReverbEnabled ? 0.0f : 1.0f;
             float egain = inReverbEnabled ? 1.0f : 0.0f;
 
             inputRevBuffer.applyGainRamp(0, numSamples, sgain, egain);
+        }
+
+        if (dodelay) {
+            if (delayStarting) {
+                mInputDelay.reset();
+            }
+            // each input's Delay send, from its processed signal: mono to both sides, a pair side by side
+            inputDlyBuffer.clear(0, numSamples);
+            int srcch = 0;
+            for (auto i = 0; i < mInputChannelGroupCount && i < MAX_CHANGROUPS; ++i) {
+                const int nch = mInputChannelGroups[i].params.numChannels;
+                const float now = mInputChannelGroups[i].params.inDelaySend;
+                const float last = mLastInputDelaySend[i];
+                if ((now > 0.0f || last > 0.0f) && srcch < inputPostBuffer.getNumChannels()) {
+                    if (nch >= 2 && srcch + 1 < inputPostBuffer.getNumChannels()) {
+                        inputDlyBuffer.addFromWithRamp(0, 0, inputPostBuffer.getReadPointer(srcch), numSamples, last, now);
+                        inputDlyBuffer.addFromWithRamp(1, 0, inputPostBuffer.getReadPointer(srcch + 1), numSamples, last, now);
+                    } else {
+                        inputDlyBuffer.addFromWithRamp(0, 0, inputPostBuffer.getReadPointer(srcch), numSamples, last * 0.707f, now * 0.707f);
+                        inputDlyBuffer.addFromWithRamp(1, 0, inputPostBuffer.getReadPointer(srcch), numSamples, last * 0.707f, now * 0.707f);
+                    }
+                }
+                mLastInputDelaySend[i] = now;
+                srcch += nch;
+            }
+            mInputDelay.process(inputDlyBuffer, numSamples);
+            for (int channel = 0; channel < 2 && channel < inputRevBuffer.getNumChannels(); ++channel) {
+                inputRevBuffer.addFrom(channel, 0, inputDlyBuffer, channel, 0, numSamples);
+            }
         }
 
         if (sendCh == 1 || sendCh == 2) {
@@ -8867,6 +8940,10 @@ void SonobusAudioProcessor::getStateInformationWithOptions(MemoryBlock& destData
     extraTree.setProperty(lastSoundboardWidthKey, var((int)mLastSoundboardWidth), nullptr);
     extraTree.setProperty(lastSoundboardShownKey, mLastSoundboardShown, nullptr);
     extraTree.setProperty(linkMonitoringDelayTimesKey, mLinkMonitoringDelayTimes, nullptr);
+    extraTree.setProperty(fxDelayTimeKey, mInputDelay.timeMs.load(), nullptr);
+    extraTree.setProperty(fxDelayFeedbackKey, mInputDelay.feedback.load(), nullptr);
+    extraTree.setProperty(fxDelayToneKey, mInputDelay.toneHz.load(), nullptr);
+    extraTree.setProperty(fxDelayLevelKey, mInputDelay.level.load(), nullptr);
     extraTree.setProperty(lastUsernameKey, mCurrentUsername, nullptr);
     extraTree.setProperty(langOverrideCodeKey, mLangOverrideCode, nullptr);
     extraTree.setProperty(useUnivFontKey, mUseUniversalFont, nullptr);
@@ -8985,6 +9062,11 @@ void SonobusAudioProcessor::setStateInformationWithOptions (const void* data, in
 
             int bps = (uint32)(int) extraTree.getProperty(defRecordBitsKey, (int)mDefaultRecordingBitsPerSample);
             setDefaultRecordingBitsPerSample(bps);
+
+            mInputDelay.timeMs = (float) extraTree.getProperty(fxDelayTimeKey, mInputDelay.timeMs.load());
+            mInputDelay.feedback = (float) extraTree.getProperty(fxDelayFeedbackKey, mInputDelay.feedback.load());
+            mInputDelay.toneHz = (float) extraTree.getProperty(fxDelayToneKey, mInputDelay.toneHz.load());
+            mInputDelay.level = (float) extraTree.getProperty(fxDelayLevelKey, mInputDelay.level.load());
 
             bool linkmon = extraTree.getProperty(linkMonitoringDelayTimesKey, mLinkMonitoringDelayTimes);
             setLinkMonitoringDelayTimes(linkmon);

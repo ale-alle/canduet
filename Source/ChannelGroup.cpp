@@ -11,6 +11,7 @@ static String channelStartIndexKey("chanstart");
 static String numChannelsKey("numchan");
 static String monReverbSendKey("monreverbsend");
 static String inReverbSendKey("inreverbsend");
+static String inDelaySendKey("indelaysend");
 static String monitorLevelKey("monitorlev");
 static String peerMonoPanKey("pan");
 static String peerPan1Key("span1");
@@ -90,6 +91,8 @@ void ChannelGroupParams::setToDefaults(bool isplugin)
 void ChannelGroup::init(double sampRate)
 {
     sampleRate = sampRate;
+
+    if (fxDryBuffer.getNumSamples() < 8192) fxDryBuffer.setSize(2, 8192);
     
     if (!compressor) {
         compressor = std::make_unique<faustCompressor>();
@@ -242,21 +245,45 @@ void ChannelGroup::processBlock (AudioBuffer<float>& frombuffer,
     // these all operate ONLY when the channel group has 1 or 2 channels (and when the effects have been initialized)
     if (params.numChannels > 0 && params.numChannels <= 2 && compressor)
     {
+        // CanDuet: each effect blends with its dry signal by its amount (params mix), ramped over the
+        // block; turning an effect off ramps its amount to 0 for one last block, so nothing clicks.
+        const bool stereoOut = tobufNumChan - destStartChan > 1 && numchan == 2 && destNumChans >= 2;
+        const int fxChans = stereoOut ? 2 : (destStartChan < tobufNumChan ? 1 : 0);
+        const bool canBlend = numSamples <= fxDryBuffer.getNumSamples() && fxDryBuffer.getNumChannels() >= 2;
+        auto keepDry = [&](float lastMix, float mixNow) {
+            if (!canBlend || (lastMix >= 0.999f && mixNow >= 0.999f)) return false;
+            for (int k = 0; k < fxChans; ++k) fxDryBuffer.copyFrom(k, 0, tobuffer, destStartChan + k, 0, numSamples);
+            return true;
+        };
+        auto blend = [&](float lastMix, float mixNow) {
+            const float step = numSamples > 0 ? (mixNow - lastMix) / (float) numSamples : 0.0f;
+            for (int k = 0; k < fxChans; ++k) {
+                float * out = tobuffer.getWritePointer(destStartChan + k);
+                const float * dry = fxDryBuffer.getReadPointer(k);
+                float m = lastMix;
+                for (int i = 0; i < numSamples; ++i, m += step) out[i] = dry[i] + m * (out[i] - dry[i]);
+            }
+        };
+
         // apply input expander
         if (expanderParamsChanged) {
             commitExpanderParams();
             expanderParamsChanged = false;
         }
+        const float expMix = params.expanderParams.enabled ? jlimit(0.0f, 1.0f, params.expanderParams.mix) : 0.0f;
         if (_lastExpanderEnabled || params.expanderParams.enabled) {
-            if (tobufNumChan - destStartChan > 1 && numchan == 2 && destNumChans >= 2) {
+            const bool blended = keepDry(_lastExpanderMix, expMix);
+            if (stereoOut) {
                 float *bufs[2] = { tobuffer.getWritePointer(destStartChan), tobuffer.getWritePointer(destStartChan+1)};
                 expander->compute(numSamples, bufs, bufs);
             } else if (destStartChan < tobufNumChan) {
                 float *bufs[2] = { tobuffer.getWritePointer(destStartChan), silentBuffer.getWritePointer(0) }; // just a silent dummy buffer
                 expander->compute(numSamples, bufs, bufs);
             }
+            if (blended) blend(_lastExpanderMix, expMix);
         }
         _lastExpanderEnabled = params.expanderParams.enabled;
+        _lastExpanderMix = expMix;
 
 
         // apply input compressor
@@ -264,16 +291,20 @@ void ChannelGroup::processBlock (AudioBuffer<float>& frombuffer,
             commitCompressorParams();
             compressorParamsChanged = false;
         }
+        const float compMix = params.compressorParams.enabled ? jlimit(0.0f, 1.0f, params.compressorParams.mix) : 0.0f;
         if (_lastCompressorEnabled || params.compressorParams.enabled) {
-            if (tobufNumChan - destStartChan > 1 && numchan == 2 && destNumChans >= 2) {
+            const bool blended = keepDry(_lastCompressorMix, compMix);
+            if (stereoOut) {
                 float *bufs[2] = { tobuffer.getWritePointer(destStartChan), tobuffer.getWritePointer(destStartChan+1)};
                 compressor->compute(numSamples, bufs, bufs);
             } else if (destStartChan < tobufNumChan) {
                 float *bufs[2] = { tobuffer.getWritePointer(destStartChan), silentBuffer.getWritePointer(0) }; // just a silent dummy buffer
                 compressor->compute(numSamples, bufs, bufs);
             }
+            if (blended) blend(_lastCompressorMix, compMix);
         }
         _lastCompressorEnabled = params.compressorParams.enabled;
+        _lastCompressorMix = compMix;
 
 
         // apply input EQ
@@ -281,8 +312,10 @@ void ChannelGroup::processBlock (AudioBuffer<float>& frombuffer,
             commitEqParams();
             eqParamsChanged = false;
         }
+        const float eqMix = params.eqParams.enabled ? jlimit(0.0f, 1.0f, params.eqParams.mix) : 0.0f;
         if (_lastEqEnabled || params.eqParams.enabled) {
-            if (tobufNumChan - destStartChan > 1 && numchan == 2 && destNumChans >= 2) {
+            const bool blended = keepDry(_lastEqMix, eqMix);
+            if (stereoOut) {
                 // only 2 channels support for now... TODO
                 float *bufs[2] = { tobuffer.getWritePointer(destStartChan), tobuffer.getWritePointer(destStartChan+1)};
                 eq[0]->compute(numSamples, &bufs[0], &bufs[0]);
@@ -292,8 +325,10 @@ void ChannelGroup::processBlock (AudioBuffer<float>& frombuffer,
                 float *outbuf = tobuffer.getWritePointer(destStartChan);
                 eq[0]->compute(numSamples, &inbuf, &outbuf);
             }
+            if (blended) blend(_lastEqMix, eqMix);
         }
         _lastEqEnabled = params.eqParams.enabled;
+        _lastEqMix = eqMix;
 
 
         // apply input limiter
@@ -636,6 +671,7 @@ ValueTree ChannelGroupParams::getValueTree() const
     channelGroupTree.setProperty(peerPan2Key, panStereo[1], nullptr);
     channelGroupTree.setProperty(monReverbSendKey, monReverbSend, nullptr);
     channelGroupTree.setProperty(inReverbSendKey, inReverbSend, nullptr);
+    channelGroupTree.setProperty(inDelaySendKey, inDelaySend, nullptr);
     channelGroupTree.setProperty(monitorLevelKey, monitor, nullptr);
 
     channelGroupTree.setProperty(monDestStartKey, monDestStartIndex, nullptr);
@@ -679,6 +715,7 @@ void ChannelGroupParams::setFromValueTree(const ValueTree & channelGroupTree)
     panStereo[1] = channelGroupTree.getProperty(peerPan2Key, panStereo[1]);
     monReverbSend = channelGroupTree.getProperty(monReverbSendKey, monReverbSend);
     inReverbSend = channelGroupTree.getProperty(inReverbSendKey, inReverbSend);
+    inDelaySend = channelGroupTree.getProperty(inDelaySendKey, inDelaySend);
     monitor = channelGroupTree.getProperty(monitorLevelKey, monitor);
 
     panDestStartIndex = channelGroupTree.getProperty(panDestStartKey, panDestStartIndex);

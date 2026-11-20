@@ -302,7 +302,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .strip.bus .nm { background: color-mix(in srgb, var(--string) 18%, var(--raised)); }
 .busgap { flex: none; width: 14px; }
 .console { --fh: 168px; display: flex; align-items: stretch; overflow-x: auto; padding-bottom: 4px; }
-.strip { flex: none; width: 82px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 8px 6px 6px;
+.strip { flex: none; width: 88px; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 8px 6px 6px;
   background: linear-gradient(180deg, #1d2846, #131b31); border: 1px solid var(--line); border-radius: 10px; }
 .strip.st { width: 112px; }
 .strip .lk { height: 22px; display: grid; place-items: center; }
@@ -338,6 +338,36 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .strip .nm b { display: block; font-size: 11.5px; white-space: nowrap; }
 .strip .nm small { display: block; font-size: 9.5px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lkgap { flex: none; width: 26px; display: flex; justify-content: center; padding-top: 8px; }
+/* effects on each input (T-084): a knob per effect for how much of it, its name opens every setting */
+.strip .fx { width: 100%; display: flex; flex-direction: column; gap: 3px; padding: 5px 0 6px; border-bottom: 1px solid var(--line); }
+.strip .fx.none { visibility: hidden; }
+.fxr { display: flex; align-items: center; gap: 5px; height: 22px; }
+.kn { --v: 0; display: block; width: 20px; height: 20px; border-radius: 50%; position: relative; cursor: ns-resize; touch-action: none;
+  background: conic-gradient(from 225deg, var(--string) calc(var(--v) * 270deg), var(--line-strong) 0 270deg, transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 5.5px, #000 6px); mask: radial-gradient(circle, transparent 5.5px, #000 6px); }
+.knw { flex: none; display: block; position: relative; width: 20px; height: 20px; }
+.knw::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 6px; margin: -6px 0 0 -1px; border-radius: 1px; background: var(--muted);
+  transform-origin: 50% 6px; transform: rotate(calc(-135deg + var(--v) * 270deg)); pointer-events: none; }
+.knw.on::after { background: var(--text); }
+.kn:focus-visible { outline: none; }
+.knw:has(.kn:focus-visible) { outline: 2px solid var(--string); outline-offset: 1px; border-radius: 50%; }
+.fxb { flex: 1; min-width: 0; height: 20px; padding: 0 4px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font: 600 10.5px/1 var(--font-sans); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fxb:hover, .fxb[aria-expanded=true] { color: var(--text); border-color: var(--string); }
+.fxr.on .fxb { color: var(--text); }
+/* an effect's settings: a small window over the mixer, next to its strip */
+.pop.fxwin { z-index: 16; width: 286px; gap: 10px; padding: 14px 16px; }
+.fxwin .fh { display: flex; align-items: center; gap: 8px; }
+.fxwin .fh h3 { flex: 1; min-width: 0; }
+.fxwin .fh small { display: block; font: 500 11.5px/1.3 var(--font-sans); color: var(--subtle); }
+.fxwin .fs { display: grid; grid-template-columns: 74px 1fr 58px; align-items: center; gap: 4px 8px; font-size: 12.5px; }
+.fxwin .fs label { color: var(--muted); }
+.fxwin .fs input[type=range] { width: 100%; accent-color: var(--string); }
+.fxwin .fs output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); font-size: 12px; }
+.fxwin .fs .sep { grid-column: 1 / -1; height: 1px; background: var(--line); margin: 3px 0; }
+.fxwin .fs .chk { grid-column: 2 / -1; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.fxwin .fs .dis { opacity: .4; }
+.fxwin .hint { font-size: 11.5px; color: var(--subtle); }
 .lkbtn { width: 24px; height: 22px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--subtle); display: grid; place-items: center; padding: 0; }
 .lkbtn svg.ic { width: 15px; height: 15px; }
 .lkbtn:hover { color: var(--text); border-color: var(--line-strong); }
@@ -447,9 +477,14 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   <div class="pop mixer" id="pop-mixer" role="dialog" aria-label="Mixer">
     <div class="mhead"><h3>Mixer</h3>
       <span class="dev"><span id="inDev"></span> <button class="link" type="button" data-act="setup">Change…</button></span>
-      <button class="pill t-only" type="button" data-act="effects">Reverb…</button>
       <button class="xbtn" type="button" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
     <div class="console" id="inList"></div>
+  </div>
+  <div class="pop fxwin" id="fxWin" role="dialog" aria-label="Effect settings">
+    <div class="fh"><h3 id="fxTitle">Effect<small id="fxSub"></small></h3>
+      <button class="xbtn" type="button" id="fxClose" aria-label="Close the effect settings"><i data-i="x"></i></button></div>
+    <div class="fs" id="fxBody"></div>
+    <p class="hint" id="fxHint"></p>
   </div>
   <div class="pop" id="pop-cam" role="dialog" aria-label="Your camera">
     <h3>Your camera</h3>
@@ -1022,6 +1057,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   function closePops() {
     const wasOpen = $$(".pop.open").length > 0;
     $$(".pop.open").forEach((p) => p.classList.remove("open"));
+    fxOpen = null;
     $$("[aria-expanded=true]").forEach((b) => b.setAttribute("aria-expanded", "false"));
     // back to the button that opened it, if focus was inside the popover
     const a = document.activeElement;
@@ -1174,6 +1210,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const bars = r.stereo ? 2 : 1;
     const scale = bus ? scaleHtml(bus.ticks, bus.toPos) : scaleHtml([12, 6, 0, -6, -12, -24, -40], inGainToPos);
     el.innerHTML = `<div class="lk"></div>
+      <div class="fx${bus ? " none" : ""}">${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
       <div class="pn${bus ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
       <div class="fz"><div class="scale">${scale}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
         <div class="mt">${'<span class="vu"><i></i></span>'.repeat(bars)}</div></div>
@@ -1189,6 +1226,11 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     el.querySelector(".mb").title = bus ? bus.muteTip : "Mute " + label;
     el.querySelector(".mb").setAttribute("aria-label", el.querySelector(".mb").title);
     if (r.stereo) el.querySelector(".lk").append(linkBtn(r.i, true, label));
+    el.querySelectorAll(".fxr").forEach((row) => {
+      const f = fxById(row.dataset.e);
+      row.querySelector(".kn").setAttribute("aria-label", label + " " + f.knob);
+      row.querySelector(".fxb").title = f.name + " settings for " + label;
+    });
     return el;
   }
   function linkBtn(i, on, label) {
@@ -1238,7 +1280,9 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       el.querySelector(".g").value = inGainToPos(r.gain); el.querySelector(".gO").textContent = dbShort(r.gain);
       el.querySelector(".p").value = r.pan || 0; el.querySelector(".pn output").textContent = panShort(r.pan || 0);
       el.querySelector(".mb").setAttribute("aria-pressed", String(!!r.muted));
+      el.querySelectorAll(".fxr").forEach((row) => { if (!(fxBusy[r.i + ":" + row.dataset.e] > now)) showKnob(row, fxAmount(r, row.dataset.e)); });
     }
+    if (fxOpen) fillFxWin(false);
     for (const b of BUSES) {
       const el = list.querySelector(`.strip[data-bus="${b.id}"]`);
       if (!el) continue;
@@ -1286,10 +1330,214 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (lk) send({ t: "input", i: +lk.dataset.i, k: "pair", v: lk.getAttribute("aria-pressed") !== "true" });
   });
 
+  // ---- effects on each input (T-084): one knob for how much, a window for every setting ----
+  // Gate, Compressor and EQ blend with the dry sound by their knob; Reverb and Delay are shared by every
+  // input and the knob is how much of this input goes to them. Everyone hears all of it, and it's recorded.
+  const FX = [
+    { id: "gate", name: "Gate", knob: "noise gate amount", title: "Noise gate",
+      hint: "Quiets the input when it falls below the threshold, so hum and room noise between notes go away. The knob sets how much." },
+    { id: "comp", name: "Comp", knob: "compressor amount", title: "Compressor",
+      hint: "Evens out loud and quiet playing. The knob blends it with the untouched sound (parallel compression)." },
+    { id: "eq", name: "EQ", knob: "EQ amount", title: "EQ",
+      hint: "Shapes the tone: lows, two middle bands and highs. The knob blends it with the untouched sound." },
+    { id: "rev", name: "Reverb", knob: "reverb send", title: "Reverb", shared: true,
+      hint: "One reverb shared by every input. The knob on each strip sets how much of that input goes into it." },
+    { id: "dly", name: "Delay", knob: "delay send", title: "Delay", shared: true,
+      hint: "One delay shared by every input. The knob on each strip sets how much of that input goes into it." },
+  ];
+  const fxById = (id) => FX.find((f) => f.id === id);
+  let fxBus = { rev: { level: 1, size: 0.15, damping: 0.5, preDelay: 0 }, dly: { time: 350, repeats: 0.35, tone: 6000, level: 0.8 } };
+  const fxBusy = {};
+  let fxOpen = null;   // { i, e }
+  const fxAmount = (r, e) => { const f = r && r.fx; if (!f) return 0; const v = e === "rev" || e === "dly" ? f[e] : (f[e] && f[e].amount); return Math.max(0, Math.min(1, +v || 0)); };
+  function showKnob(row, v) {
+    const w = row.querySelector(".knw"), k = row.querySelector(".kn");
+    w.style.setProperty("--v", v); k.style.setProperty("--v", v);
+    w.classList.toggle("on", v > 0.001); row.classList.toggle("on", v > 0.001);
+    k.setAttribute("aria-valuenow", String(Math.round(v * 100)));
+    k.setAttribute("aria-valuetext", v > 0.001 ? Math.round(v * 100) + "%" : "Off");
+    k.title = (fxById(row.dataset.e) || {}).name + ": " + (v > 0.001 ? Math.round(v * 100) + "%" : "off") + " (drag, scroll or arrow keys; double-click for off)";
+  }
+  function setKnob(row, v) {
+    v = Math.max(0, Math.min(1, Math.round(v * 100) / 100));
+    const i = +row.closest(".strip").dataset.i, e = row.dataset.e;
+    fxBusy[i + ":" + e] = performance.now() + 700;
+    showKnob(row, v);
+    const r = inputs.find((x) => x.i === i);
+    if (r) { r.fx = r.fx || {}; if (e === "rev" || e === "dly") r.fx[e] = v; else r.fx[e] = Object.assign({}, r.fx[e], { amount: v }); }
+    sendInput(i, e, v);
+    if (fxOpen && fxOpen.i === i && fxOpen.e === e) fillFxWin(false);
+  }
+  const knobVal = (row) => (+row.querySelector(".kn").getAttribute("aria-valuenow") || 0) / 100;
+  let knobDrag = null;
+  $("#inList").addEventListener("pointerdown", (e) => {
+    const k = e.target.closest(".kn"); if (!k) return;
+    e.preventDefault(); k.focus({ preventScroll: true }); k.setPointerCapture(e.pointerId);
+    knobDrag = { k, row: k.closest(".fxr"), y: e.clientY, v: knobVal(k.closest(".fxr")) };
+  });
+  $("#inList").addEventListener("pointermove", (e) => {
+    if (!knobDrag || e.target !== knobDrag.k) return;
+    setKnob(knobDrag.row, knobDrag.v + (knobDrag.y - e.clientY) / (e.shiftKey ? 600 : 150));   // 150 px is the whole turn
+  });
+  const endDrag = () => { knobDrag = null; };
+  $("#inList").addEventListener("pointerup", endDrag);
+  $("#inList").addEventListener("pointercancel", endDrag);
+  $("#inList").addEventListener("wheel", (e) => {
+    const k = e.target.closest(".kn"); if (!k) return;
+    e.preventDefault(); const row = k.closest(".fxr");
+    setKnob(row, knobVal(row) + (e.deltaY < 0 ? 0.05 : -0.05));
+  }, { passive: false });
+  $("#inList").addEventListener("keydown", (e) => {
+    const k = e.target.closest(".kn"); if (!k) return;
+    const row = k.closest(".fxr"), v = knobVal(row);
+    const step = { ArrowUp: 0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowLeft: -0.05, PageUp: 0.2, PageDown: -0.2 }[e.key];
+    if (step !== undefined) { e.preventDefault(); e.stopPropagation(); setKnob(row, v + step); }
+    else if (e.key === "Home") { e.preventDefault(); setKnob(row, 0); }
+    else if (e.key === "End") { e.preventDefault(); setKnob(row, 1); }
+  });
+  $("#inList").addEventListener("dblclick", (e) => { const k = e.target.closest(".kn"); if (k) setKnob(k.closest(".fxr"), 0); });
+
+  // the settings window: each row is a slider over a range (log for frequencies and times)
+  const hz = (v) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2).replace(/\.?0+$/, "") + " kHz" : Math.round(v) + " Hz";
+  const ms = (v) => v >= 1000 ? (v / 1000).toFixed(2) + " s" : (v < 10 ? v.toFixed(1) : Math.round(v)) + " ms";
+  const db = (v) => (v > 0 ? "+" : "") + (+v).toFixed(1) + " dB";
+  const pct = (v) => Math.round(v * 100) + "%";
+  const ratio = (v) => (+v).toFixed(1) + ":1";
+  const AMOUNT = { k: "amount", label: "Amount", min: 0, max: 1, fmt: pct, amount: true };
+  const FXSET = {
+    gate: [AMOUNT, { sep: true }, { k: "threshold", label: "Threshold", min: -80, max: 0, fmt: db }, { k: "ratio", label: "Ratio", min: 1, max: 10, fmt: ratio },
+           { k: "attack", label: "Attack", min: 0.1, max: 100, log: true, fmt: ms }, { k: "release", label: "Release", min: 10, max: 1000, log: true, fmt: ms }],
+    comp: [AMOUNT, { sep: true }, { k: "threshold", label: "Threshold", min: -60, max: 0, fmt: db }, { k: "ratio", label: "Ratio", min: 1, max: 20, log: true, fmt: ratio },
+           { k: "attack", label: "Attack", min: 0.1, max: 100, log: true, fmt: ms }, { k: "release", label: "Release", min: 10, max: 1000, log: true, fmt: ms },
+           { k: "autoMakeup", label: "Make-up", check: "Automatic" }, { k: "makeup", label: "", min: 0, max: 24, fmt: db, off: (p) => !!p.autoMakeup }],
+    eq: [AMOUNT, { sep: true }, { k: "lowGain", label: "Low", min: -18, max: 18, fmt: db }, { k: "lowFreq", label: "", min: 20, max: 500, log: true, fmt: hz },
+         { k: "mid1Gain", label: "Mid 1", min: -18, max: 18, fmt: db }, { k: "mid1Freq", label: "", min: 40, max: 8000, log: true, fmt: hz }, { k: "mid1Q", label: "", min: 0.3, max: 10, log: true, fmt: (v) => "Q " + (+v).toFixed(1) },
+         { k: "mid2Gain", label: "Mid 2", min: -18, max: 18, fmt: db }, { k: "mid2Freq", label: "", min: 100, max: 16000, log: true, fmt: hz }, { k: "mid2Q", label: "", min: 0.3, max: 10, log: true, fmt: (v) => "Q " + (+v).toFixed(1) },
+         { k: "highGain", label: "High", min: -18, max: 18, fmt: db }, { k: "highFreq", label: "", min: 1000, max: 18000, log: true, fmt: hz }],
+    rev: [Object.assign({}, AMOUNT, { label: "This input" }), { sep: true }, { k: "level", label: "Level", min: 0, max: 1, fmt: pct, bus: true }, { k: "size", label: "Size", min: 0, max: 1, fmt: pct, bus: true },
+          { k: "damping", label: "Damping", min: 0, max: 1, fmt: pct, bus: true }, { k: "preDelay", label: "Pre-delay", min: 0, max: 100, fmt: ms, bus: true }],
+    dly: [Object.assign({}, AMOUNT, { label: "This input" }), { sep: true }, { k: "time", label: "Time", min: 20, max: 2000, log: true, fmt: ms, bus: true },
+          { k: "repeats", label: "Repeats", min: 0, max: 0.9, fmt: pct, bus: true }, { k: "tone", label: "Tone", min: 1000, max: 16000, log: true, fmt: hz, bus: true },
+          { k: "level", label: "Level", min: 0, max: 1, fmt: pct, bus: true }],
+  };
+  const toPos = (s, v) => s.log ? Math.log(v / s.min) / Math.log(s.max / s.min) : (v - s.min) / (s.max - s.min);
+  const fromPos = (s, p) => s.log ? s.min * Math.pow(s.max / s.min, p) : s.min + p * (s.max - s.min);
+  function fxValues() {
+    const r = inputs.find((x) => x.i === fxOpen.i) || {}, e = fxOpen.e;
+    const own = (r.fx && typeof r.fx[e] === "object") ? r.fx[e] : {};
+    return { own, bus: fxBus[e] || {}, amount: fxAmount(r, e), r };
+  }
+  function fillFxWin(build) {
+    if (!fxOpen) return;
+    const f = fxById(fxOpen.e), vals = fxValues(), body = $("#fxBody");
+    if (build) {
+      $("#fxTitle").firstChild.textContent = f.title;
+      $("#fxSub").textContent = (vals.r.label || "Input") + (f.shared ? " · shared by every input" : "");
+      $("#fxHint").textContent = f.hint;
+      body.textContent = "";
+      FXSET[f.id].forEach((s, n) => {
+        if (s.sep) { const d = document.createElement("div"); d.className = "sep"; body.append(d); return; }
+        const id = "fx_" + f.id + "_" + n;
+        const lab = document.createElement("label"); lab.htmlFor = id; lab.textContent = s.label;
+        if (s.check) {
+          const c = document.createElement("label"); c.className = "chk";
+          c.innerHTML = `<input type="checkbox" id="${id}"> ${s.check}`;
+          c.querySelector("input").dataset.k = s.k;
+          body.append(lab, c);
+          return;
+        }
+        const inp = document.createElement("input");
+        inp.type = "range"; inp.id = id; inp.min = 0; inp.max = 1000; inp.step = 1; inp.dataset.n = n;
+        inp.setAttribute("aria-label", (s.label || FXSET[f.id][n - 1].label || "") + " " + s.k.replace(/([A-Z])/g, " $1").toLowerCase());
+        const out = document.createElement("output"); out.htmlFor = id;
+        body.append(lab, inp, out);
+      });
+    }
+    const busyUntil = fxBusy["win"] || 0;
+    if (!build && busyUntil > performance.now()) return;
+    FXSET[f.id].forEach((s, n) => {
+      if (s.sep) return;
+      const id = "fx_" + f.id + "_" + n, el = document.getElementById(id);
+      if (!el) return;
+      if (s.check) { el.checked = !!vals.own[s.k]; return; }
+      const v = s.amount ? vals.amount : +((s.bus ? vals.bus : vals.own)[s.k] ?? s.min);
+      el.value = Math.round(Math.max(0, Math.min(1, toPos(s, v))) * 1000);
+      el.nextElementSibling.textContent = s.amount && v <= 0.001 ? "Off" : s.fmt(v);
+      const off = s.off ? s.off(vals.own) : false;
+      el.disabled = off; el.classList.toggle("dis", off); el.nextElementSibling.classList.toggle("dis", off);
+    });
+  }
+  const fxQueue = {};
+  function sendFx(msg, key) {
+    const first = !fxQueue[key];
+    fxQueue[key] = msg;
+    if (first) setTimeout(() => { send(fxQueue[key]); delete fxQueue[key]; }, 40);
+  }
+  $("#fxBody").addEventListener("input", (e) => {
+    if (!fxOpen) return;
+    const f = fxById(fxOpen.e), vals = fxValues();
+    fxBusy["win"] = performance.now() + 700;
+    if (e.target.type === "checkbox") {
+      vals.own[e.target.dataset.k] = e.target.checked;
+      if (vals.r.fx) vals.r.fx[f.id] = vals.own;
+      send({ t: "inputFx", i: fxOpen.i, e: f.id, p: { [e.target.dataset.k]: e.target.checked } });
+      fxBusy["win"] = 0; fillFxWin(false); fxBusy["win"] = performance.now() + 700;
+      return;
+    }
+    const s = FXSET[f.id][+e.target.dataset.n];
+    let v = fromPos(s, +e.target.value / 1000);
+    v = Math.round(v * 1000) / 1000;
+    e.target.nextElementSibling.textContent = s.amount && v <= 0.001 ? "Off" : s.fmt(v);
+    if (s.amount) {
+      const row = $(`#inList .strip[data-i="${fxOpen.i}"] .fxr[data-e="${f.id}"]`);
+      if (row) setKnob(row, v); else sendInput(fxOpen.i, f.id, v);
+    } else if (s.bus) {
+      fxBus[f.id] = Object.assign({}, fxBus[f.id], { [s.k]: v });
+      sendFx({ t: "fxBus", e: f.id, p: { [s.k]: v } }, "bus:" + f.id + ":" + s.k);
+    } else {
+      vals.own[s.k] = v;
+      if (vals.r.fx) vals.r.fx[f.id] = vals.own;
+      sendFx({ t: "inputFx", i: fxOpen.i, e: f.id, p: { [s.k]: v } }, fxOpen.i + ":" + f.id + ":" + s.k);
+    }
+  });
+  function openFx(btn) {
+    const row = btn.closest(".fxr"), strip = btn.closest(".strip");
+    const i = +strip.dataset.i, e = row.dataset.e;
+    const win = $("#fxWin");
+    if (fxOpen && fxOpen.i === i && fxOpen.e === e && win.classList.contains("open")) return closeFx();
+    $$("#inList .fxb[aria-expanded=true]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+    fxOpen = { i, e };
+    fillFxWin(true);
+    win.classList.add("open");
+    btn.setAttribute("aria-expanded", "true");
+    // beside its strip, over the mixer, kept inside the window
+    const mixer = $("#pop-mixer"), host = win.offsetParent || body;
+    const hr = host.getBoundingClientRect(), sr = strip.getBoundingClientRect(), mr = mixer.getBoundingClientRect();
+    const w = win.offsetWidth, vw = window.innerWidth;
+    let left = sr.right + 8 + w <= vw - 12 ? sr.right + 8 : sr.left - 8 - w;
+    left = Math.max(12, Math.min(vw - 12 - w, left));
+    win.style.left = (left - hr.left) + "px";
+    win.style.right = "auto";
+    win.style.bottom = (hr.bottom - mr.bottom) + "px";
+    const first = win.querySelector("input"); if (first) first.focus({ preventScroll: true });
+  }
+  function closeFx() {
+    const win = $("#fxWin");
+    win.classList.remove("open");
+    const was = fxOpen; fxOpen = null;
+    const btn = was && $(`#inList .strip[data-i="${was.i}"] .fxr[data-e="${was.e}"] .fxb`);
+    $$("#inList .fxb[aria-expanded=true]").forEach((b) => b.setAttribute("aria-expanded", "false"));
+    if (btn) btn.focus({ preventScroll: true });
+  }
+  $("#inList").addEventListener("click", (e) => { const b = e.target.closest(".fxb"); if (b) { e.stopPropagation(); openFx(b); } });
+  $("#fxClose").addEventListener("click", (e) => { e.stopPropagation(); closeFx(); });
+  $("#fxWin").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeFx(); } });
+
   function onState(m) {
     if (Array.isArray(m.peers)) audioPeers = m.peers.filter((p) => p && typeof p.id === "string").slice(0, 32);
     if (m.me && typeof m.me === "object") me = Object.assign(me, m.me);
     if (Array.isArray(m.inputs)) inputs = m.inputs.filter((r) => r && typeof r.i === "number").slice(0, 64);
+    if (m.fxBus && typeof m.fxBus === "object") fxBus = Object.assign(fxBus, m.fxBus);
     if (typeof m.conn === "string") conn = m.conn;
     if (m.lesson && typeof m.lesson === "object") lessonInfo = Object.assign(lessonInfo, m.lesson);
     if (m.rec && typeof m.rec === "object") rec = Object.assign(rec, m.rec);
@@ -1513,6 +1761,10 @@ body:not([data-rec=recording]) .rec-only { display: none; }
               { i: 1, label: "Input 2", name: "Mic/Line 2", stereo: false, canPair: true, gain: 1, pan: 0, muted: true, level: 0 },
               { i: 2, label: "Input 3", name: "Mic/Line 3", stereo: false, canPair: false, gain: 1.4, pan: 0, muted: false, level: 0.6 },
               { i: 3, label: "Input 5–6", name: "Line 5 / Line 6", stereo: true, canPair: false, gain: 1, pan: -0.2, muted: false, level: 0.45, levels: [0.45, 0.38] }];
+    const demoFx = (g, c, q, rv, dl) => ({ gate: { amount: g, threshold: -60, ratio: 2, attack: 1, release: 200 },
+      comp: { amount: c, threshold: -16, ratio: 2, attack: 10, release: 80, makeup: 5.4, autoMakeup: true },
+      eq: { amount: q, lowGain: 0, lowFreq: 60, mid1Gain: 0, mid1Freq: 90, mid1Q: 1.5, mid2Gain: -3, mid2Freq: 360, mid2Q: 4, highGain: 2, highFreq: 10000 }, rev: rv, dly: dl });
+    inputs.forEach((r, k) => { r.fx = demoFx(k === 0 ? 0.6 : 0, k === 0 ? 1 : 0, k === 3 ? 0.8 : 0, k === 0 ? 0.3 : 0, k === 2 ? 0.25 : 0); });
     renderInputs();
     conn = st === "problem" ? "lost" : "connected";
     lessonInfo = { title: "Piano with Mia", startsAt: Date.now() - 12 * 60000, endsAt: Date.now() + 18 * 60000, joinedAt: Date.now() - 11 * 60000 };

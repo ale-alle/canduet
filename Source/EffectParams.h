@@ -20,6 +20,7 @@ struct CompressorParams
     float releaseMs = 80.0f;
     float makeupGainDb = 0.0f;
     bool  automakeupGain = true;
+    float mix = 1.0f; // CanDuet: 0..1 blend of processed with dry (the strip's amount knob)
 };
 
 
@@ -40,6 +41,7 @@ struct ParametricEqParams
     float para2Q = 4.0f;
     float highShelfGain = 0.0f; // db
     float highShelfFreq = 10000.0f; // Hz
+    float mix = 1.0f; // CanDuet: 0..1 blend of processed with dry (the strip's amount knob)
 };
 
 struct DelayParams

@@ -437,6 +437,7 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanRecording.h
         Source/TinCanMp3Format.cpp
         Source/TinCanMp3Format.h
+        Source/TinCanDelay.h
         Source/TinCanSummaries.cpp
         Source/TinCanSummaries.h
         Source/VDONinjaView.h
@@ -828,6 +829,7 @@ target_sources(TinCanAudioTests PRIVATE
     tests/TinCanMetronomeTest.cpp
     tests/TinCanRecordingTest.cpp
     tests/TinCanMp3Test.cpp
+    tests/TinCanDelayTest.cpp
     Source/TinCanMp3Format.cpp
     Source/Metronome.cpp
     Source/TinCanBeatClock.cpp

@@ -25,6 +25,7 @@
 #include "TinCanNotes.h"
 #include "TinCanPacketCipher.h"
 #include "TinCanPitch.h"
+#include "TinCanDelay.h"
 
 typedef MVerb<float> MVerbFloat;
 
@@ -598,6 +599,10 @@ public:
 
 
     void setInputReverbSend(int changroup, float rgain, bool input=false);
+    // CanDuet: the strip's Delay send (0..1) and the shared delay's settings
+    void setInputDelaySend(int changroup, float sendgain);
+    float getInputDelaySend(int changroup);
+    TinCan::Delay & getInputDelay() { return mInputDelay; }
     float getInputReverbSend(int changroup, bool input=false);
 
     void setInputPolarityInvert(int changroup, bool invert);
@@ -1078,6 +1083,7 @@ private:
     bool mReverbParamsChanged = false;
     bool mLastHasMainFx = false;
     bool mLastInputReverbEnabled = false;
+    int64 mInputDelayTailSamples = 0;   // CanDuet: keeps the delay running while its echoes die away
     bool mFreshInit = true;
     
     Atomic<bool>   mAnythingSoloed  { false };
@@ -1274,6 +1280,9 @@ private:
 
     // input reverb
     MVerbFloat mInputReverb;
+    TinCan::Delay mInputDelay;          // CanDuet: shared delay the strips send to, heard by everyone (T-084)
+    AudioBuffer<float> inputDlyBuffer;
+    float mLastInputDelaySend[MAX_CHANGROUPS] = {};
 
 
     // met and playback channel groups

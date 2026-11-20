@@ -13,6 +13,7 @@ static String compressorAttackKey("attack");
 static String compressorReleaseKey("release");
 static String compressorMakeupGainKey("makeupgain");
 static String compressorAutoMakeupGainKey("automakeup");
+static String fxMixKey("mix");
 
 static String eqStateKey("ParametricEqState");
 static String eqEnabledKey("enabled");
@@ -25,7 +26,7 @@ static String eqPara1FreqKey("p1freq");
 static String eqPara1QKey("p1q");
 static String eqPara2GainKey("p2gain");
 static String eqPara2FreqKey("p2freq");
-static String eqPara2QKey("p1q");
+static String eqPara2QKey("p2q"); // CanDuet: was "p1q", which saved band 2's Q over band 1's
 
 static String delayEnabledKey("enabled");
 static String delayTimeMsKey("delaytimems");
@@ -43,6 +44,7 @@ ValueTree CompressorParams::getValueTree(const String & stateKey) const
     item.setProperty(compressorReleaseKey, releaseMs, nullptr);
     item.setProperty(compressorMakeupGainKey, makeupGainDb, nullptr);
     item.setProperty(compressorAutoMakeupGainKey, automakeupGain, nullptr);
+    item.setProperty(fxMixKey, mix, nullptr);
 
     return item;
 }
@@ -56,6 +58,7 @@ void CompressorParams::setFromValueTree(const ValueTree & item)
     releaseMs = item.getProperty(compressorReleaseKey, releaseMs);
     makeupGainDb = item.getProperty(compressorMakeupGainKey, makeupGainDb);
     automakeupGain = item.getProperty(compressorAutoMakeupGainKey, automakeupGain);
+    mix = item.getProperty(fxMixKey, mix);
 }
 
 ValueTree ParametricEqParams::getValueTree() const
@@ -73,6 +76,7 @@ ValueTree ParametricEqParams::getValueTree() const
     item.setProperty(eqPara2GainKey, para2Gain, nullptr);
     item.setProperty(eqPara2FreqKey, para2Freq, nullptr);
     item.setProperty(eqPara2QKey, para2Q, nullptr);
+    item.setProperty(fxMixKey, mix, nullptr);
 
     return item;
 }
@@ -90,6 +94,7 @@ void ParametricEqParams::setFromValueTree(const ValueTree & item)
     para2Gain = item.getProperty(eqPara2GainKey, para2Gain);
     para2Freq = item.getProperty(eqPara2FreqKey, para2Freq);
     para2Q = item.getProperty(eqPara2QKey, para2Q);
+    mix = item.getProperty(fxMixKey, mix);
 
 }
 
