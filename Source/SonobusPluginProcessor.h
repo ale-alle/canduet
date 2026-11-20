@@ -26,6 +26,7 @@
 #include "TinCanPacketCipher.h"
 #include "TinCanPitch.h"
 #include "TinCanDelay.h"
+#include "TinCanPlugins.h"
 
 typedef MVerb<float> MVerbFloat;
 
@@ -352,6 +353,14 @@ public:
     double getMetronomeCountInRemaining() const;
     // the shared score's playback on this computer (T-080)
     TinCan::ScorePlayer & getScorePlayer() { return *mScorePlayer; }
+
+    // VST3 plugins (T-086): the host (found plugins, plugin windows), made on first use (message thread)
+    TinCan::PluginHost & getPluginHost();
+    // the score's instrument: a found VST3 instrument (its identifier), or empty for the built-in
+    // sounds. False with error when it can't start. Its sound settings are kept with the app's settings.
+    bool setScoreInstrument(const String & identifier, String & error);
+    String getScoreInstrumentName() const;
+    void showScoreInstrumentWindow();
     bool disconnectFromServer();
     // Tin Can: one line in connection-log.txt (no names, addresses or keys)
     static void logConnectionStep(const String & text);
@@ -1344,6 +1353,8 @@ private:
     // metronome
     std::unique_ptr<SonoAudio::Metronome> mMetronome;
     std::unique_ptr<TinCan::ScorePlayer> mScorePlayer;   // T-080
+    std::unique_ptr<TinCan::PluginHost> mPluginHost;     // T-086
+    String mScoreInstrumentId, mScoreInstrumentState;    // kept while it isn't loaded (not found yet)
    
     // misc
     bool mSliderSnapToMouse = true;

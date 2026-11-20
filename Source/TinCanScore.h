@@ -46,6 +46,11 @@ public:
 private:
     class Browser;
 
+    // the header's Sound menu (T-086): built-in sounds or a VST3 instrument, its window, finding plugins
+    void showSoundMenu();
+    void updateSoundButton();
+    std::unique_ptr<DockHeaderButton> soundButton;
+
     void timerCallback() override;
     void notesArrived(const std::vector<NoteEvent> & events) override;
     void handleMessage(const var & message);

@@ -12,7 +12,8 @@ struct tsf;
 
 // Plays the shared score (T-080) on this computer only: the notes go to this computer's output,
 // never to the others in the lesson (owner decision 2026-11-17, each computer plays its own sound).
-// The sound is a SoundFont (GeneralUser GS, sounds\ next to CanDuet.exe) played by TinySoundFont.
+// The sound is a SoundFont (GeneralUser GS, sounds\ next to CanDuet.exe) played by TinySoundFont, or a
+// VST3 instrument chosen in the Score window (T-086), which then plays every part instead.
 // Playback follows the metronome: it starts after the count-in, or at the next bar if the metronome
 // is already going, and keeps the metronome's tempo, so the clicks and the notes stay together.
 namespace TinCan {
@@ -51,8 +52,16 @@ public:
     // -1e9 when nothing is playing or the start isn't known yet
     double beatAt(int sampleOffset, double metronomeBeat, double tempo, bool metronomeRunning) const;
 
+    // message thread (T-086): a VST3 instrument instead of the SoundFont (nullptr: back to the
+    // SoundFont). The previous one is handed back to be deleted on the message thread.
+    std::unique_ptr<AudioPluginInstance> setInstrument(std::unique_ptr<AudioPluginInstance> instrument);
+    AudioPluginInstance * getInstrument() const { return instrument.get(); }
+
 private:
     void renderTo(float * L, float * R, int from, int count);
+    void noteOn(int midi, int offset);
+    void noteOff(int midi, int offset);
+    void renderPlugin(AudioBuffer<float> & out, int numChannels, int numSamples);
 
     tsf * synth = nullptr;
     String error;
@@ -79,7 +88,14 @@ private:
     double ownBeat = 0.0;     // score beat when not following the metronome
     int waitBlocks = 0;       // blocks waited for the metronome to start
     double sampleRate = 48000.0;
+    int maxBlockSize = 512;
     std::vector<float> interleaved;
+
+    // the VST3 instrument (T-086): swapped under the lock; played while notes sound and a while after
+    std::unique_ptr<AudioPluginInstance> instrument;
+    MidiBuffer midi;
+    AudioBuffer<float> pluginBuffer;
+    int64 tailSamples = 0;
 
     std::atomic<double> position { 0.0 };
     std::atomic<bool> playing { false };

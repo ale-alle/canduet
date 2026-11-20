@@ -440,6 +440,8 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanDelay.h
         Source/TinCanDock.cpp
         Source/TinCanDock.h
+        Source/TinCanPlugins.cpp
+        Source/TinCanPlugins.h
         Source/TinCanSummaries.cpp
         Source/TinCanSummaries.h
         Source/VDONinjaView.h
@@ -566,6 +568,7 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         ${TINCAN_VIDEO_DEFS}
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
+        JUCE_PLUGINHOST_VST3=1
         JUCE_DISPLAY_SPLASH_SCREEN=0
         JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
 	JUCE_USE_WINDOWS_MEDIA_FORMAT=1
@@ -832,6 +835,9 @@ target_sources(TinCanAudioTests PRIVATE
     tests/TinCanRecordingTest.cpp
     tests/TinCanMp3Test.cpp
     tests/TinCanDelayTest.cpp
+    tests/TinCanVstTest.cpp
+    Source/TinCanScorePlayer.cpp
+    Source/TinCanScoreCore.cpp
     Source/TinCanMp3Format.cpp
     Source/Metronome.cpp
     Source/TinCanBeatClock.cpp
@@ -840,9 +846,11 @@ target_compile_definitions(TinCanAudioTests PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_USE_WINDOWS_MEDIA_FORMAT=1
+    JUCE_PLUGINHOST_VST3=1
     TINCAN_TEST_IMAGES="${CMAKE_CURRENT_SOURCE_DIR}/images")
 target_link_libraries(TinCanAudioTests PRIVATE
     juce::juce_audio_formats
     juce::juce_audio_basics
+    juce::juce_audio_processors
     juce::juce_gui_basics
     juce::juce_recommended_config_flags)

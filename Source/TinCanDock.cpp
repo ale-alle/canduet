@@ -6,83 +6,79 @@
 
 namespace TinCan {
 
-// a small pill in the header: text with an optional line icon in front
-class DockHolder::HeaderButton : public Button
+DockHeaderButton::DockHeaderButton() : Button({}) { setMouseCursor(MouseCursor::PointingHandCursor); }
+
+void DockHeaderButton::set(const String & text, Glyph g, const String & tip)
 {
-public:
-    enum class Glyph { none, popOut, dockIn, close };
+    setButtonText(text);
+    glyph = g;
+    setTooltip(tip);
+    setTitle(tip);
+    repaint();
+}
 
-    HeaderButton() : Button({}) { setMouseCursor(MouseCursor::PointingHandCursor); }
+int DockHeaderButton::idealWidth() const
+{
+    const auto t = getButtonText();
+    if (t.isEmpty()) return 28;
+    return 14 + (glyph != Glyph::none ? 18 : 0)
+           + Font(13.0f, Font::bold).getStringWidth(t);
+}
 
-    void set(const String & text, Glyph g, const String & tip)
-    {
-        setButtonText(text);
-        glyph = g;
-        setTooltip(tip);
-        setTitle(tip);
-        repaint();
+void DockHeaderButton::paintButton(Graphics & g, bool over, bool down)
+{
+    auto r = getLocalBounds().toFloat().reduced(0.5f, 3.5f);
+    g.setColour(down ? TinCanTheme::lineStrong : over ? TinCanTheme::raised.brighter(0.15f) : TinCanTheme::raised);
+    g.fillRoundedRectangle(r, 7.0f);
+    g.setColour(over ? TinCanTheme::string : TinCanTheme::line);
+    g.drawRoundedRectangle(r, 7.0f, 1.0f);
+
+    g.setColour(over ? TinCanTheme::text : TinCanTheme::muted);
+    auto inner = r.reduced(7.0f, 0.0f);
+    const bool hasText = getButtonText().isNotEmpty();
+    Path p;
+    if (glyph == Glyph::menu) {
+        // a small down arrow at the right, after the text
+        auto a = inner.removeFromRight(10.0f).withSizeKeepingCentre(10.0f, 6.0f);
+        inner.removeFromRight(6.0f);
+        p.startNewSubPath(a.getX(), a.getY()); p.lineTo(a.getCentreX(), a.getBottom()); p.lineTo(a.getRight(), a.getY());
     }
-
-    int idealWidth() const
-    {
-        const auto t = getButtonText();
-        if (t.isEmpty()) return 28;
-        return 14 + (glyph != Glyph::none ? 18 : 0)
-               + Font(13.0f, Font::bold).getStringWidth(t);
-    }
-
-    void paintButton(Graphics & g, bool over, bool down) override
-    {
-        auto r = getLocalBounds().toFloat().reduced(0.5f, 3.5f);
-        g.setColour(down ? TinCanTheme::lineStrong : over ? TinCanTheme::raised.brighter(0.15f) : TinCanTheme::raised);
-        g.fillRoundedRectangle(r, 7.0f);
-        g.setColour(over ? TinCanTheme::string : TinCanTheme::line);
-        g.drawRoundedRectangle(r, 7.0f, 1.0f);
-
-        const auto ink = over ? TinCanTheme::text : TinCanTheme::muted;
-        g.setColour(ink);
-        auto inner = r.reduced(7.0f, 0.0f);
-        if (glyph != Glyph::none) {
-            auto box = (getButtonText().isEmpty() ? inner.withSizeKeepingCentre(12.0f, 12.0f)
-                                                  : inner.removeFromLeft(12.0f).withSizeKeepingCentre(12.0f, 12.0f));
-            if (getButtonText().isNotEmpty()) inner.removeFromLeft(6.0f);
-            Path p;
-            const float x = box.getX(), y = box.getY(), w = box.getWidth();
-            if (glyph == Glyph::close) {
-                p.startNewSubPath(x + 1, y + 1); p.lineTo(x + w - 1, y + w - 1);
-                p.startNewSubPath(x + w - 1, y + 1); p.lineTo(x + 1, y + w - 1);
+    else if (glyph != Glyph::none) {
+        auto box = hasText ? inner.removeFromLeft(12.0f).withSizeKeepingCentre(12.0f, 12.0f)
+                           : inner.withSizeKeepingCentre(12.0f, 12.0f);
+        if (hasText) inner.removeFromLeft(6.0f);
+        const float x = box.getX(), y = box.getY(), w = box.getWidth();
+        if (glyph == Glyph::close) {
+            p.startNewSubPath(x + 1, y + 1); p.lineTo(x + w - 1, y + w - 1);
+            p.startNewSubPath(x + w - 1, y + 1); p.lineTo(x + 1, y + w - 1);
+        }
+        else {
+            // a box with an arrow leaving it (pop out) or entering it (dock in)
+            p.startNewSubPath(x + w * 0.45f, y + 1); p.lineTo(x + 1, y + 1); p.lineTo(x + 1, y + w - 1);
+            p.lineTo(x + w - 1, y + w - 1); p.lineTo(x + w - 1, y + w * 0.55f);
+            if (glyph == Glyph::popOut) {
+                p.startNewSubPath(x + w * 0.45f, y + w * 0.55f); p.lineTo(x + w - 1, y + 1);
+                p.startNewSubPath(x + w * 0.62f, y + 1); p.lineTo(x + w - 1, y + 1); p.lineTo(x + w - 1, y + w * 0.38f);
             }
             else {
-                // a box with an arrow leaving it (pop out) or entering it (dock in)
-                p.startNewSubPath(x + w * 0.45f, y + 1); p.lineTo(x + 1, y + 1); p.lineTo(x + 1, y + w - 1);
-                p.lineTo(x + w - 1, y + w - 1); p.lineTo(x + w - 1, y + w * 0.55f);
-                if (glyph == Glyph::popOut) {
-                    p.startNewSubPath(x + w * 0.45f, y + w * 0.55f); p.lineTo(x + w - 1, y + 1);
-                    p.startNewSubPath(x + w * 0.62f, y + 1); p.lineTo(x + w - 1, y + 1); p.lineTo(x + w - 1, y + w * 0.38f);
-                }
-                else {
-                    p.startNewSubPath(x + w - 1, y + 1); p.lineTo(x + w * 0.45f, y + w * 0.55f);
-                    p.startNewSubPath(x + w * 0.45f, y + w * 0.2f); p.lineTo(x + w * 0.45f, y + w * 0.55f); p.lineTo(x + w * 0.8f, y + w * 0.55f);
-                }
+                p.startNewSubPath(x + w - 1, y + 1); p.lineTo(x + w * 0.45f, y + w * 0.55f);
+                p.startNewSubPath(x + w * 0.45f, y + w * 0.2f); p.lineTo(x + w * 0.45f, y + w * 0.55f); p.lineTo(x + w * 0.8f, y + w * 0.55f);
             }
-            g.strokePath(p, PathStrokeType(1.7f, PathStrokeType::curved, PathStrokeType::rounded));
-        }
-        if (getButtonText().isNotEmpty()) {
-            g.setFont(Font(13.0f, Font::bold));
-            g.drawText(getButtonText(), inner, Justification::centredLeft, false);
         }
     }
-
-private:
-    Glyph glyph = Glyph::none;
-};
+    if (!p.isEmpty()) g.strokePath(p, PathStrokeType(1.7f, PathStrokeType::curved, PathStrokeType::rounded));
+    if (hasText) {
+        g.setFont(Font(13.0f, Font::bold));
+        g.drawText(getButtonText(), inner, Justification::centredLeft, true);
+    }
+}
 
 DockHolder::DockHolder(const String & t) : title(t)
 {
     setOpaque(true);
-    dockButton = std::make_unique<HeaderButton>();
-    closeButton = std::make_unique<HeaderButton>();
-    closeButton->set({}, HeaderButton::Glyph::close, TRANS("Close") + " " + title);
+    dockButton = std::make_unique<DockHeaderButton>();
+    closeButton = std::make_unique<DockHeaderButton>();
+    closeButton->set({}, DockHeaderButton::Glyph::close, TRANS("Close") + " " + title);
     dockButton->onClick = [this]() { if (onToggleDock) onToggleDock(); };
     closeButton->onClick = [this]() { if (onClose) onClose(); };
     addChildComponent(dockButton.get());
@@ -103,12 +99,19 @@ void DockHolder::setBody(Component * newBody)
 void DockHolder::setDocked(bool d)
 {
     docked = d;
-    if (docked) dockButton->set(TRANS("Pop out"), HeaderButton::Glyph::popOut, TRANS("Move") + " " + title + " " + TRANS("to a window of its own"));
-    else dockButton->set(TRANS("Dock in lesson"), HeaderButton::Glyph::dockIn, TRANS("Put") + " " + title + " " + TRANS("back inside the lesson window"));
+    if (docked) dockButton->set(TRANS("Pop out"), DockHeaderButton::Glyph::popOut, TRANS("Move") + " " + title + " " + TRANS("to a window of its own"));
+    else dockButton->set(TRANS("Dock in lesson"), DockHeaderButton::Glyph::dockIn, TRANS("Put") + " " + title + " " + TRANS("back inside the lesson window"));
     dockButton->setVisible(docked || canDock);
     closeButton->setVisible(docked);   // its own window has the title bar's close
     resized();
     repaint();
+}
+
+void DockHolder::addHeaderItem(Component * item)
+{
+    headerItems.add(item);
+    addAndMakeVisible(item);
+    resized();
 }
 
 void DockHolder::setCanDock(bool can)
@@ -140,7 +143,15 @@ void DockHolder::resized()
         closeButton->setBounds(head.removeFromRight(30));
         head.removeFromRight(6);
     }
-    if (dockButton->isVisible()) dockButton->setBounds(head.removeFromRight(dockButton->idealWidth()));
+    if (dockButton->isVisible()) {
+        dockButton->setBounds(head.removeFromRight(dockButton->idealWidth()));
+        head.removeFromRight(6);
+    }
+    for (auto * item : headerItems) {
+        const int w = item->getWidth() > 0 ? item->getWidth() : 160;
+        item->setBounds(head.removeFromRight(jmin(w, jmax(0, head.getWidth() - 120))));
+        head.removeFromRight(6);
+    }
     if (body != nullptr) body->setBounds(docked ? r.reduced(1, 0).withTrimmedBottom(1) : r);
 }
 

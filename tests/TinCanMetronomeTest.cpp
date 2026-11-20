@@ -30,6 +30,7 @@ static AudioBuffer<float> loadWav(const File & f, MemoryBlock & raw)
 int runRecordingTests();  // TinCanRecordingTest.cpp
 int runMp3Tests();        // TinCanMp3Test.cpp
 int runDelayTests();      // TinCanDelayTest.cpp
+int runVstTests();        // TinCanVstTest.cpp
 
 struct Expected { int64 sample; const AudioBuffer<float> * sound; float gain; };
 
@@ -152,6 +153,7 @@ int main()
     failures += runRecordingTests();
     failures += runMp3Tests();
     failures += runDelayTests();
+    failures += runVstTests();
 
     if (failures == 0) {
         std::printf("TinCanAudioTests: all checks passed\n");

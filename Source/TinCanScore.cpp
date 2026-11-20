@@ -92,8 +92,60 @@ ScoreWindow::ScoreWindow(SonobusAudioProcessor & p, NoteShare & ns, Hooks h)
         setBody(std::move(label));
     }
 
+    soundButton = std::make_unique<DockHeaderButton>();
+    soundButton->onClick = [this]() { showSoundMenu(); };
+    updateSoundButton();
+    getHolder().addHeaderItem(soundButton.get());
+
     noteShare.addListener(this);
     startTimerHz(30);
+}
+
+void ScoreWindow::updateSoundButton()
+{
+    if (!soundButton) return;
+    const auto name = processor.getScoreInstrumentName();
+    soundButton->set(TRANS("Sound") + ": " + (name.isNotEmpty() ? name : TRANS("Built-in")), DockHeaderButton::Glyph::menu,
+                     TRANS("Choose the sound the score plays with: the built-in sounds or a VST3 instrument"));
+    soundButton->setSize(jmin(280, soundButton->idealWidth()), DockHolder::headerHeight);
+    getHolder().relayout();
+}
+
+void ScoreWindow::showSoundMenu()
+{
+    auto & host = processor.getPluginHost();
+    const auto instruments = host.getInstruments();
+    const bool usingPlugin = processor.getScoreInstrumentName().isNotEmpty();
+    const auto currentId = usingPlugin ? processor.getScorePlayer().getInstrument()->getPluginDescription().createIdentifierString() : String();
+
+    PopupMenu menu;
+    menu.addItem(1, TRANS("Built-in sounds"), true, !usingPlugin);
+    menu.addSectionHeader(TRANS("VST3 instruments"));
+    if (instruments.isEmpty()) menu.addItem(4, TRANS("None found yet: use Find plugins"), false, false);
+    for (int i = 0; i < instruments.size(); ++i)
+        menu.addItem(100 + i, instruments[i].name + (instruments[i].manufacturerName.isNotEmpty() ? "  (" + instruments[i].manufacturerName + ")" : String()),
+                     true, instruments[i].createIdentifierString() == currentId);
+    menu.addSeparator();
+    if (usingPlugin) menu.addItem(2, TRANS("Show the instrument's window..."));
+    menu.addItem(3, TRANS("Find plugins..."));
+
+    Component::SafePointer<ScoreWindow> safeThis(this);
+    menu.showMenuAsync(PopupMenu::Options().withTargetComponent(soundButton.get()), [safeThis, instruments](int result) {
+        if (!safeThis || result == 0) return;
+        auto & proc = safeThis->processor;
+        if (result == 2) { proc.showScoreInstrumentWindow(); return; }
+        if (result == 3) { proc.getPluginHost().showPluginList(); return; }
+        String id;
+        if (result >= 100 && result - 100 < instruments.size()) id = instruments[result - 100].createIdentifierString();
+        else if (result != 1) return;
+        String error;
+        if (!proc.setScoreInstrument(id, error)) {
+            AlertWindow::showMessageBoxAsync(MessageBoxIconType::WarningIcon, TRANS("Couldn't load the instrument"), error);
+            return;
+        }
+        safeThis->updateSoundButton();
+        if (id.isNotEmpty()) proc.showScoreInstrumentWindow();   // to pick its sound
+    });
 }
 
 ScoreWindow::~ScoreWindow()

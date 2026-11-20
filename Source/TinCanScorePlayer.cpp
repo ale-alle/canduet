@@ -57,9 +57,11 @@ bool ScorePlayer::load()
 
 void ScorePlayer::play(std::vector<ScoreNote> notes, double endBeat, int program, bool followMetronome)
 {
-    if (!load()) return;
-    int index = tsf_get_presetindex(synth, 0, jlimit(0, 127, program));
-    if (index < 0) index = tsf_get_presetindex(synth, 0, 0);
+    // a VST3 instrument plays without the SoundFont (T-086)
+    const bool sf = load();
+    if (!sf && !instrument) return;
+    int index = sf ? tsf_get_presetindex(synth, 0, jlimit(0, 127, program)) : 0;
+    if (sf && index < 0) index = tsf_get_presetindex(synth, 0, 0);
     ScoreSchedule s;
     s.setNotes(std::move(notes), endBeat);
     {
@@ -88,7 +90,15 @@ void ScorePlayer::prepare(double rate, int maxBlock)
 {
     const SpinLock::ScopedLockType sl(lock);
     sampleRate = rate > 0 ? rate : 48000.0;
-    interleaved.assign((size_t) jmax(512, maxBlock) * 2, 0.0f);
+    maxBlockSize = jmax(512, maxBlock);
+    interleaved.assign((size_t) maxBlockSize * 2, 0.0f);
+    midi.ensureSize(4096);
+    if (instrument) {
+        instrument->releaseResources();
+        instrument->setRateAndBufferSizeDetails(sampleRate, maxBlockSize);
+        instrument->prepareToPlay(sampleRate, maxBlockSize);
+        pluginBuffer.setSize(jmax(2, instrument->getTotalNumInputChannels(), instrument->getTotalNumOutputChannels()), maxBlockSize);
+    }
     if (synth) {
         tsf_set_output(synth, TSF_STEREO_INTERLEAVED, (int) sampleRate, -4.0f);
         tsf_reset(synth);
@@ -105,6 +115,68 @@ double ScorePlayer::beatAt(int sampleOffset, double metronomeBeat, double tempo,
         return metronomeBeat - anchor + sampleOffset * bps;
     }
     return ownBeat + sampleOffset * bps;
+}
+
+std::unique_ptr<AudioPluginInstance> ScorePlayer::setInstrument(std::unique_ptr<AudioPluginInstance> next)
+{
+    double rate;
+    int block;
+    {
+        const SpinLock::ScopedLockType sl(lock);
+        rate = sampleRate;
+        block = maxBlockSize;
+    }
+    AudioBuffer<float> buffer;
+    if (next) {
+        // ready before the audio thread sees it
+        next->setRateAndBufferSizeDetails(rate, block);
+        next->prepareToPlay(rate, block);
+        buffer.setSize(jmax(2, next->getTotalNumInputChannels(), next->getTotalNumOutputChannels()), block);
+    }
+    {
+        const SpinLock::ScopedLockType sl(lock);
+        std::swap(instrument, next);
+        std::swap(pluginBuffer, buffer);
+        midi.clear();
+        midi.ensureSize(4096);
+        tailSamples = 0;
+        if (active) {
+            // the notes that were sounding stop; playback carries on with the new sound
+            ScoreSchedule::Event events[256];
+            schedule.releaseAll(events, 256);
+        }
+        if (synth) tsf_note_off_all(synth);
+    }
+    if (next) next->releaseResources();
+    return next;
+}
+
+void ScorePlayer::noteOn(int note, int offset)
+{
+    if (instrument) { midi.addEvent(MidiMessage::noteOn(1, note, (uint8) 96), offset); tailSamples = (int64) (sampleRate * 10.0); }
+    else tsf_note_on(synth, preset, note, 0.75f);
+}
+
+void ScorePlayer::noteOff(int note, int offset)
+{
+    if (instrument) midi.addEvent(MidiMessage::noteOff(1, note), offset);
+    else tsf_note_off(synth, preset, note);
+}
+
+void ScorePlayer::renderPlugin(AudioBuffer<float> & out, int numChannels, int numSamples)
+{
+    // one call for the block, notes at their sample offsets; the plugin's first two outputs are added
+    if (numSamples > pluginBuffer.getNumSamples()) { midi.clear(); return; }
+    AudioBuffer<float> view(pluginBuffer.getArrayOfWritePointers(), pluginBuffer.getNumChannels(), numSamples);
+    view.clear();
+    instrument->processBlock(view, midi);
+    midi.clear();
+    const int outs = jmin(2, instrument->getTotalNumOutputChannels(), view.getNumChannels());
+    for (int c = 0; c < numChannels && c < 2; ++c) {
+        if (outs <= 0) break;
+        out.addFrom(c, 0, view, jmin(c, outs - 1), 0, numSamples);
+    }
+    tailSamples = jmax((int64) 0, tailSamples - numSamples);
 }
 
 void ScorePlayer::renderTo(float * L, float * R, int from, int count)
@@ -125,14 +197,14 @@ void ScorePlayer::process(AudioBuffer<float> & out, int numChannels, int numSamp
                           bool metronomeRunning, double metronomeBeat, double countInRemaining, int beatsPerBar)
 {
     const SpinLock::ScopedTryLockType sl(lock);
-    if (!sl.isLocked() || !synth || numChannels < 1 || numSamples <= 0) return;
+    if (!sl.isLocked() || (!synth && !instrument) || numChannels < 1 || numSamples <= 0) return;
 
     ScoreSchedule::Event events[256];
 
     if (request.pending) {
         request.pending = false;
         int n = schedule.releaseAll(events, 256);
-        for (int i = 0; i < n; ++i) tsf_note_off(synth, preset, events[i].midi);
+        for (int i = 0; i < n; ++i) noteOff(events[i].midi, 0);
         if (request.stop) {
             active = false;
         }
@@ -152,7 +224,8 @@ void ScorePlayer::process(AudioBuffer<float> & out, int numChannels, int numSamp
 
     if (!active) {
         // let released notes ring out
-        if (tsf_active_voice_count(synth) > 0) renderTo(L, R, 0, numSamples);
+        if (instrument) { if (tailSamples > 0 || !midi.isEmpty()) renderPlugin(out, numChannels, numSamples); }
+        else if (tsf_active_voice_count(synth) > 0) renderTo(L, R, 0, numSamples);
         return;
     }
 
@@ -170,7 +243,8 @@ void ScorePlayer::process(AudioBuffer<float> & out, int numChannels, int numSamp
         }
         else {
             position = -1.0e9;
-            renderTo(L, R, 0, numSamples);
+            if (instrument) renderPlugin(out, numChannels, numSamples);
+            else renderTo(L, R, 0, numSamples);
             return;
         }
     }
@@ -184,13 +258,22 @@ void ScorePlayer::process(AudioBuffer<float> & out, int numChannels, int numSamp
     position = b0;
 
     int n = schedule.process(b0, b1, numSamples, events, 256);
-    int pos = 0;
-    for (int i = 0; i < n; ++i) {
-        if (events[i].offset > pos) { renderTo(L, R, pos, events[i].offset - pos); pos = events[i].offset; }
-        if (events[i].on) tsf_note_on(synth, preset, events[i].midi, 0.75f);
-        else tsf_note_off(synth, preset, events[i].midi);
+    if (instrument) {
+        for (int i = 0; i < n; ++i) {
+            if (events[i].on) noteOn(events[i].midi, events[i].offset);
+            else noteOff(events[i].midi, events[i].offset);
+        }
+        renderPlugin(out, numChannels, numSamples);
     }
-    if (pos < numSamples) renderTo(L, R, pos, numSamples - pos);
+    else {
+        int pos = 0;
+        for (int i = 0; i < n; ++i) {
+            if (events[i].offset > pos) { renderTo(L, R, pos, events[i].offset - pos); pos = events[i].offset; }
+            if (events[i].on) noteOn(events[i].midi, events[i].offset);
+            else noteOff(events[i].midi, events[i].offset);
+        }
+        if (pos < numSamples) renderTo(L, R, pos, numSamples - pos);
+    }
 
     if (schedule.finished(b1)) {
         active = false;

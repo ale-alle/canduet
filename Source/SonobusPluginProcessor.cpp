@@ -122,6 +122,8 @@ static String fxDelayFeedbackKey("fxDelayFeedback");
 static String fxDelayToneKey("fxDelayToneHz");
 static String fxDelayLevelKey("fxDelayLevel");
 static String dockLayoutKey("tinCanDockLayout");
+static String scoreInstrumentKey("scoreInstrument");
+static String scoreInstrumentStateKey("scoreInstrumentState");
 static String langOverrideCodeKey("langOverrideCode");
 static String useUnivFontKey("useUnivFont");
 static String lastWindowWidthKey("lastWindowWidth");
@@ -919,6 +921,9 @@ mState (*this, &mUndoManager, "SonoBusAoO",
 
 SonobusAudioProcessor::~SonobusAudioProcessor()
 {
+    // T-086: plugin windows and the score's instrument go before the plugin host
+    if (mPluginHost) mPluginHost->closeAllEditors();
+    if (mScorePlayer) mScorePlayer->setInstrument(nullptr);
     mTransportSource.setSource(nullptr);
     mTransportSource.removeChangeListener(this);
 
@@ -2215,6 +2220,44 @@ float SonobusAudioProcessor::getInputDelaySend(int changroup)
         return mInputChannelGroups[changroup].params.inDelaySend;
     }
     return 0.0f;
+}
+
+TinCan::PluginHost & SonobusAudioProcessor::getPluginHost()
+{
+    if (!mPluginHost) mPluginHost = std::make_unique<TinCan::PluginHost>();
+    return *mPluginHost;
+}
+
+bool SonobusAudioProcessor::setScoreInstrument(const String & identifier, String & error)
+{
+    error.clear();
+    auto & host = getPluginHost();
+    std::unique_ptr<AudioPluginInstance> inst;
+    if (identifier.isNotEmpty()) {
+        auto desc = host.findByIdentifier(identifier);
+        if (!desc) { error = TRANS("That plugin isn't in the list any more. Find plugins again."); return false; }
+        inst = host.create(*desc, getSampleRate(), getBlockSize(), error);
+        if (!inst) return false;
+        // the same plugin again: its sounds as they were left
+        if (identifier == mScoreInstrumentId || mScoreInstrumentId.isEmpty()) TinCan::PluginHost::restoreState(*inst, mScoreInstrumentState);
+    }
+    if (auto * old = mScorePlayer->getInstrument()) host.closeEditor(old);
+    auto old = mScorePlayer->setInstrument(std::move(inst));
+    old.reset();
+    if (identifier != mScoreInstrumentId) mScoreInstrumentState.clear();
+    mScoreInstrumentId = identifier;
+    return true;
+}
+
+String SonobusAudioProcessor::getScoreInstrumentName() const
+{
+    if (mScorePlayer && mScorePlayer->getInstrument()) return mScorePlayer->getInstrument()->getName();
+    return {};
+}
+
+void SonobusAudioProcessor::showScoreInstrumentWindow()
+{
+    if (auto * inst = mScorePlayer->getInstrument()) getPluginHost().showEditor(*inst, inst->getName() + " - " + TRANS("Score sound"));
 }
 
 float SonobusAudioProcessor::getInputReverbSend(int changroup, bool input)
@@ -8946,6 +8989,11 @@ void SonobusAudioProcessor::getStateInformationWithOptions(MemoryBlock& destData
     extraTree.setProperty(fxDelayToneKey, mInputDelay.toneHz.load(), nullptr);
     extraTree.setProperty(fxDelayLevelKey, mInputDelay.level.load(), nullptr);
     extraTree.setProperty(dockLayoutKey, mDockLayout, nullptr);
+    if (mScorePlayer && mScorePlayer->getInstrument()) {
+        mScoreInstrumentState = TinCan::PluginHost::saveState(*mScorePlayer->getInstrument());
+    }
+    extraTree.setProperty(scoreInstrumentKey, mScoreInstrumentId, nullptr);
+    extraTree.setProperty(scoreInstrumentStateKey, mScoreInstrumentState, nullptr);
     extraTree.setProperty(lastUsernameKey, mCurrentUsername, nullptr);
     extraTree.setProperty(langOverrideCodeKey, mLangOverrideCode, nullptr);
     extraTree.setProperty(useUnivFontKey, mUseUniversalFont, nullptr);
@@ -9070,6 +9118,17 @@ void SonobusAudioProcessor::setStateInformationWithOptions (const void* data, in
             mInputDelay.toneHz = (float) extraTree.getProperty(fxDelayToneKey, mInputDelay.toneHz.load());
             mInputDelay.level = (float) extraTree.getProperty(fxDelayLevelKey, mInputDelay.level.load());
             mDockLayout = extraTree.getProperty(dockLayoutKey, mDockLayout).toString();
+            {
+                // the score's VST3 instrument and its sounds (T-086); a missing plugin leaves the built-in sounds
+                const String id = extraTree.getProperty(scoreInstrumentKey, String()).toString();
+                const String state = extraTree.getProperty(scoreInstrumentStateKey, String()).toString();
+                if (id.isNotEmpty() && id != mScoreInstrumentId && MessageManager::getInstanceWithoutCreating() != nullptr
+                    && MessageManager::getInstance()->isThisTheMessageThread()) {
+                    String err;
+                    mScoreInstrumentState = state;
+                    if (!setScoreInstrument(id, err)) { mScoreInstrumentId = id; DBG("score instrument: " << err); }
+                }
+            }
 
             bool linkmon = extraTree.getProperty(linkMonitoringDelayTimesKey, mLinkMonitoringDelayTimes);
             setLinkMonitoringDelayTimes(linkmon);

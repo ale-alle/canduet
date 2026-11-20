@@ -14,6 +14,21 @@
 // the WebView2 to follow its component (patched in deps/juce, juce_WebBrowserComponent_windows.cpp).
 namespace TinCan {
 
+// a small pill for a tool's header: text with an optional line icon in front
+class DockHeaderButton : public Button
+{
+public:
+    enum class Glyph { none, popOut, dockIn, close, menu };
+
+    DockHeaderButton();
+    void set(const String & text, Glyph glyph, const String & tip);
+    int idealWidth() const;
+    void paintButton(Graphics & g, bool over, bool down) override;
+
+private:
+    Glyph glyph = Glyph::none;
+};
+
 class DockHolder : public Component
 {
 public:
@@ -27,6 +42,11 @@ public:
     void setDocked(bool docked);
     void setCanDock(bool can);
 
+    // a tool's own control in the header, left of Dock / Pop out (not owned); call relayout() after
+    // its size changes
+    void addHeaderItem(Component * item);
+    void relayout() { resized(); }
+
     std::function<void()> onToggleDock, onClose;
 
     static constexpr int headerHeight = 32;
@@ -35,12 +55,11 @@ public:
     void resized() override;
 
 private:
-    class HeaderButton;
-
     String title;
     Component * body = nullptr;
     bool docked = false, canDock = false;
-    std::unique_ptr<HeaderButton> dockButton, closeButton;
+    std::unique_ptr<DockHeaderButton> dockButton, closeButton;
+    Array<Component *> headerItems;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DockHolder)
 };
