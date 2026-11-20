@@ -351,6 +351,8 @@ public:
     // the shared score's playback on this computer (T-080)
     TinCan::ScorePlayer & getScorePlayer() { return *mScorePlayer; }
     bool disconnectFromServer();
+    // Tin Can: one line in connection-log.txt (no names, addresses or keys)
+    static void logConnectionStep(const String & text);
     double getElapsedConnectedTime() const { return mSessionConnectionStamp > 0 ? (Time::getMillisecondCounterHiRes() - mSessionConnectionStamp) * 1e-3 : 0.0; }
 
     void setAutoconnectToGroupPeers(bool flag);

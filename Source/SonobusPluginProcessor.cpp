@@ -394,6 +394,8 @@ static void tincan_log(const String & text)
     file.appendText(Time::getCurrentTime().toISO8601(true) + " " + text + "\n");
 }
 
+void SonobusAudioProcessor::logConnectionStep(const String & text) { tincan_log(text); }
+
 // Tin Can: with a lesson key set, every packet except those addressed to the
 // connection server (/aoo/server/...) is sealed. Returns false if it must not be sent.
 static bool tincan_seal_if_needed(SonobusAudioProcessor::EndpointState * endpoint, const char *& data, int32_t & size, char * sealbuf, int sealcap)
@@ -1217,7 +1219,9 @@ bool SonobusAudioProcessor::disconnectFromServer()
 {
     if (!mAooClient) return false;
  
+    tincan_log("leave: disconnecting");
     mAooClient->disconnect();
+    tincan_log("leave: client disconnected");
 
     {
         const ScopedLock sl (mRecentsLock);
@@ -1228,6 +1232,7 @@ bool SonobusAudioProcessor::disconnectFromServer()
 
     // disconnect from everything else!
     removeAllRemotePeers();
+    tincan_log("leave: participants removed");
 
     {
         const ScopedLock sl (mClientLock);
@@ -1385,7 +1390,9 @@ bool SonobusAudioProcessor::leaveServerGroup(const String & group)
 {
     if (!mAooClient) return false;
 
+    tincan_log("leave: leaving room");
     int32_t retval = mAooClient->group_leave(group.toRawUTF8());
+    tincan_log("leave: room left");
     
     if (retval < 0) {
         DBG("Error leaving group " << group << " : " << retval);

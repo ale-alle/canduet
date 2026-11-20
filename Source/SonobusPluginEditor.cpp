@@ -3552,7 +3552,12 @@ TinCan::TempoShare & SonobusAudioProcessorEditor::getTempoShare()
 void SonobusAudioProcessorEditor::closeLessonVideo()
 {
     // the score goes with the lesson (save it first to keep it), and so does the shared tempo's counter
+    const bool logSteps = mLessonView != nullptr;   // T-081: find where leaving froze (connection-log.txt)
+    auto step = [logSteps](const char * what) { if (logSteps) SonobusAudioProcessor::logConnectionStep(String("leave: ") + what); };
+    step("closing score");
     mScoreWindow.reset();
+    // T-081: the board belongs to the lesson too (it stayed open after leaving)
+    if (mWorkspaceWindow) mWorkspaceWindow->setVisible(false);
     mScoreToldThisLesson = false;
     if (mTempoShare) mTempoShare->lessonEnded();
     if (mNoteShare) mNoteShare->lessonEnded();
@@ -3563,13 +3568,17 @@ void SonobusAudioProcessorEditor::closeLessonVideo()
         stopLocalRecording();
     }
     if (mLessonView) {
+        step("closing lesson window");
         mLessonView.reset();
         mMarkPressedAt = -1.0;
+        step("reloading My lessons");
         if (mHomeView) mHomeView->reload();   // My lessons again, with fresh times and Join buttons
         resized();
     }
+    if (mVideoWindow) step("closing video");
     mVideoWindow.reset();
     mVideoIdentity.clear();
+    step("closed");
 }
 
 void SonobusAudioProcessorEditor::createHomeView()
@@ -3692,6 +3701,7 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
         MessageManager::callAsync([safeThis]() {
             if (!safeThis) return;
             auto & proc = safeThis->processor;
+            SonobusAudioProcessor::logConnectionStep("leave: pressed");
             if (proc.isConnectedToServer()) {
                 if (proc.getWatchPublicGroups() && proc.getCurrentJoinedGroup().isNotEmpty()) proc.leaveServerGroup(proc.getCurrentJoinedGroup());
                 else proc.disconnectFromServer();
