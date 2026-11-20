@@ -7,6 +7,7 @@
 
 #include <JuceHeader.h>
 #include "../Source/TinCanScorePlayer.h"
+#include "../Source/TinCanLiveInstrument.h"
 
 #include <cstdio>
 
@@ -78,6 +79,38 @@ int runVstTests()
     // back to the built-in sounds: the plugin comes back to be deleted here
     auto old = player.setInstrument(nullptr);
     CHECK(old != nullptr);
+    old.reset();
+
+    // the mixer's Instrument strip: MIDI from the keyboard in, sound out, at the strip's level
+    {
+        TinCan::LiveInstrument live;
+        live.prepare(rate, block);
+        String err;
+        auto li = formats.createPluginInstance(*desc, rate, block, err);
+        CHECK(li != nullptr);
+        live.setPlugin(std::move(li));
+        MidiBuffer kb;
+        double livePeak = 0.0;
+        for (int b = 0; b < 60; ++b) {
+            kb.clear();
+            if (b == 2) kb.addEvent(MidiMessage::noteOn(1, 64, (uint8) 100), 100);
+            if (b == 40) kb.addEvent(MidiMessage::noteOff(1, 64), 0);
+            CHECK(live.render(kb, block));
+            livePeak = jmax(livePeak, (double) live.getOutput().getMagnitude(0, 0, block));
+        }
+        CHECK(livePeak > 0.01);
+        CHECK(live.meter.load() >= 0.0f);
+        // muted: silent
+        live.muted = true;
+        kb.clear(); kb.addEvent(MidiMessage::noteOn(1, 67, (uint8) 100), 0);
+        live.render(kb, block);   // the ramp down
+        live.render(kb, block);
+        CHECK(live.getOutput().getMagnitude(0, 0, block) < 1e-6f);
+        CHECK(live.setPlugin(nullptr) != nullptr);
+        CHECK(!live.render(kb, block));
+        std::printf("  live instrument strip: peak %.2f\n", livePeak);
+    }
+    old = nullptr;
     std::printf("  vst3 instrument (%s): %s (peak %.2f, rms %.3f)\n", desc->name.toRawUTF8(),
                 failures == before ? "ok" : "FAILED", peak, rms);
     old.reset();

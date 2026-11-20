@@ -374,6 +374,14 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .slb:hover { color: var(--text); border-color: var(--string); }
 .slb.on { border-style: solid; border-color: var(--line); background: color-mix(in srgb, var(--string) 22%, var(--surface)); color: var(--text); }
 .slb.on.byp { background: var(--surface); color: var(--subtle); text-decoration: line-through; }
+/* the Instrument strip (T-086): a VST3 instrument played by the MIDI keyboard; its chooser sits where the effects are */
+.strip .fx { position: relative; }
+.strip .fx .instw { visibility: visible; position: absolute; inset: 4px 0 6px; display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.instb { min-height: 46px; padding: 6px; border-radius: 8px; border: 1px dashed var(--line-strong); background: transparent; color: var(--muted);
+  font: 700 11px/1.25 var(--font-sans); white-space: normal; overflow-wrap: anywhere; }
+.instb:hover { color: var(--text); border-color: var(--string); }
+.instb.on { border-style: solid; border-color: var(--line); background: color-mix(in srgb, var(--string) 22%, var(--surface)); color: var(--text); }
+.instw p { margin: 0; font-size: 10px; line-height: 1.3; color: var(--subtle); text-align: center; }
 /* an effect's settings: a small window over the mixer, next to its strip */
 .pop.fxwin { z-index: 16; width: 286px; gap: 10px; padding: 14px 16px; }
 .fxwin .fh { display: flex; align-items: center; gap: 8px; }
@@ -1221,7 +1229,11 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   function setOutMute(m) { me.outMute = m; renderMe(); renderInputs(); send({ t: "outMute", v: m }); }
   const monOn = () => typeof me.monitorLevel === "number" ? me.monitorLevel > 0.001 : !!me.monitor;
   // the strips after the inputs: what the whole sound does
+  let inst = { name: "", gain: 1, muted: false, level: 0 };   // the Instrument strip (T-086)
   const BUSES = [
+    { id: "inst", label: "Instrument", sub: "MIDI keyboard", ticks: [12, 6, 0, -6, -12, -24, -40], toPos: inGainToPos, fromPos: inPosToGain,
+      get: () => inst.gain, level: () => inst.muted ? 0 : inst.level, muted: () => !!inst.muted, muteTip: "Mute the instrument",
+      set: (g) => { inst.gain = g; sendSoon({ t: "instrument", k: "gain", v: g }); }, mute: (m) => { inst.muted = m; send({ t: "instrument", k: "mute", v: m }); } },
     { id: "mic", label: "Microphone level", sub: "All inputs", ticks: [12, 6, 0, -6, -12, -24, -40], toPos: inGainToPos, fromPos: inPosToGain,
       get: () => me.inGain, level: () => me.micOff ? 0 : me.level, muted: () => !!me.micOff, muteTip: "Mute my microphone",
       set: (g) => sendSoon({ t: "inGain", v: g }), mute: (m) => { me.micOff = m; renderMe(); send({ t: "mic", off: m }); } },
@@ -1240,7 +1252,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const bars = r.stereo ? 2 : 1;
     const scale = bus ? scaleHtml(bus.ticks, bus.toPos) : scaleHtml([12, 6, 0, -6, -12, -24, -40], inGainToPos);
     el.innerHTML = `<div class="lk"></div>
-      <div class="fx${bus ? " none" : ""}">${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
+      <div class="fx${bus ? " none" : ""}">${bus && bus.id === "inst" ? '<div class="instw"><button class="instb" type="button" aria-haspopup="menu">+ Instrument</button><p>For your MIDI keyboard. Everyone hears it.</p></div>' : ""}${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
       <div class="slots${bus ? " none" : ""}">${[0, 1].map((s) => `<button class="slb" type="button" data-s="${s}" aria-haspopup="menu">+ Effect</button>`).join("")}</div>
       <div class="pn${bus ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
       <div class="fz"><div class="scale">${scale}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
@@ -1328,6 +1340,12 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       meter(el, [b.level()]);
       el.classList.toggle("off", b.muted());
       el.querySelector(".mb").setAttribute("aria-pressed", String(b.muted()));
+      if (b.id === "inst") {
+        const ib = el.querySelector(".instb");
+        ib.textContent = inst.name || "+ Instrument"; ib.classList.toggle("on", !!inst.name);
+        ib.title = inst.name ? inst.name + ": its window, or another instrument" : "Choose a VST3 instrument to play with your MIDI keyboard";
+        el.querySelector(".nm small").textContent = inst.name || "MIDI keyboard";
+      }
       if (now > meBusyUntil) { el.querySelector(".g").value = b.toPos(b.get()); el.querySelector(".gO").textContent = dbShort(b.get()); }
     }
   }
@@ -1569,6 +1587,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (btn) btn.focus({ preventScroll: true });
   }
   $("#inList").addEventListener("click", (e) => { const b = e.target.closest(".fxb"); if (b) { e.stopPropagation(); openFx(b); } });
+  $("#inList").addEventListener("click", (e) => { if (e.target.closest(".instb")) { e.stopPropagation(); send({ t: "instrument", k: "menu" }); } });
   // a VST3 effect slot (T-086): the app shows the choices as its own menu, where the mouse is
   $("#inList").addEventListener("click", (e) => {
     const b = e.target.closest(".slb"); if (!b) return;
@@ -1583,6 +1602,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (m.me && typeof m.me === "object") me = Object.assign(me, m.me);
     if (Array.isArray(m.inputs)) inputs = m.inputs.filter((r) => r && typeof r.i === "number").slice(0, 64);
     if (m.fxBus && typeof m.fxBus === "object") fxBus = Object.assign(fxBus, m.fxBus);
+    if (m.instrument && typeof m.instrument === "object") inst = Object.assign(inst, m.instrument);
     if (typeof m.conn === "string") conn = m.conn;
     if (m.lesson && typeof m.lesson === "object") lessonInfo = Object.assign(lessonInfo, m.lesson);
     if (m.rec && typeof m.rec === "object") rec = Object.assign(rec, m.rec);

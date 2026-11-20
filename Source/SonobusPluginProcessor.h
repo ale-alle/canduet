@@ -28,6 +28,7 @@
 #include "TinCanDelay.h"
 #include "TinCanPlugins.h"
 #include "TinCanInserts.h"
+#include "TinCanLiveInstrument.h"
 
 typedef MVerb<float> MVerbFloat;
 
@@ -369,6 +370,12 @@ public:
     void setInputInsertBypass(int changroup, int slot, bool bypassed);
     bool getInputInsertBypass(int changroup, int slot) const;
     void showInputInsertWindow(int changroup, int slot);
+
+    // the mixer's Instrument strip (T-086): a VST3 instrument played by the MIDI keyboard, heard by everyone
+    bool setLiveInstrument(const String & identifier, String & error);
+    String getLiveInstrumentName() const;
+    void showLiveInstrumentWindow();
+    TinCan::LiveInstrument & getLiveInstrument() { return mLiveInstrument; }
     bool disconnectFromServer();
     // Tin Can: one line in connection-log.txt (no names, addresses or keys)
     static void logConnectionStep(const String & text);
@@ -1364,6 +1371,7 @@ private:
     std::unique_ptr<TinCan::PluginHost> mPluginHost;     // T-086
     String mScoreInstrumentId, mScoreInstrumentState;    // kept while it isn't loaded (not found yet)
     TinCan::InsertChain mInputInserts[MAX_CHANGROUPS];   // T-086: each input's VST3 effects
+    TinCan::LiveInstrument mLiveInstrument;              // T-086: the Instrument strip
     String saveInputInserts();
     void restoreInputInserts(const String & json);
    

@@ -125,6 +125,10 @@ static String dockLayoutKey("tinCanDockLayout");
 static String scoreInstrumentKey("scoreInstrument");
 static String scoreInstrumentStateKey("scoreInstrumentState");
 static String inputInsertsKey("inputInserts");
+static String liveInstrumentKey("liveInstrument");
+static String liveInstrumentStateKey("liveInstrumentState");
+static String liveInstrumentGainKey("liveInstrumentGain");
+static String liveInstrumentMutedKey("liveInstrumentMuted");
 static String langOverrideCodeKey("langOverrideCode");
 static String useUnivFontKey("useUnivFont");
 static String lastWindowWidthKey("lastWindowWidth");
@@ -927,6 +931,7 @@ SonobusAudioProcessor::~SonobusAudioProcessor()
     if (mPluginHost) mPluginHost->closeAllEditors();
     if (mScorePlayer) mScorePlayer->setInstrument(nullptr);
     for (auto & chain : mInputInserts) for (int s = 0; s < TinCan::InsertChain::numSlots; ++s) chain.setSlot(s, nullptr);
+    mLiveInstrument.setPlugin(nullptr);
     mTransportSource.setSource(nullptr);
     mTransportSource.removeChangeListener(this);
 
@@ -2300,6 +2305,34 @@ void SonobusAudioProcessor::showInputInsertWindow(int changroup, int slot)
     if (changroup < 0 || changroup >= MAX_CHANGROUPS) return;
     if (auto * p = mInputInserts[changroup].getSlot(slot))
         getPluginHost().showEditor(*p, p->getName() + " - " + TRANS("Input") + " " + String(changroup + 1));
+}
+
+bool SonobusAudioProcessor::setLiveInstrument(const String & identifier, String & error)
+{
+    error.clear();
+    auto & host = getPluginHost();
+    std::unique_ptr<AudioPluginInstance> inst;
+    if (identifier.isNotEmpty()) {
+        auto desc = host.findByIdentifier(identifier);
+        if (!desc) { error = TRANS("That plugin isn't in the list any more. Find plugins again."); return false; }
+        inst = host.create(*desc, getSampleRate(), getBlockSize(), error);
+        if (!inst) return false;
+    }
+    if (auto * old = mLiveInstrument.getPlugin()) host.closeEditor(old);
+    auto old = mLiveInstrument.setPlugin(std::move(inst));
+    old.reset();
+    return true;
+}
+
+String SonobusAudioProcessor::getLiveInstrumentName() const
+{
+    auto * p = mLiveInstrument.getPlugin();
+    return p ? p->getName() : String();
+}
+
+void SonobusAudioProcessor::showLiveInstrumentWindow()
+{
+    if (auto * p = mLiveInstrument.getPlugin()) getPluginHost().showEditor(*p, p->getName() + " - " + TRANS("Instrument"));
 }
 
 String SonobusAudioProcessor::saveInputInserts()
@@ -7358,6 +7391,7 @@ void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     mMetronome->setSampleRate(sampleRate);
     mScorePlayer->prepare(sampleRate, samplesPerBlock);
     for (auto & chain : mInputInserts) chain.prepare(sampleRate, samplesPerBlock);   // T-086
+    mLiveInstrument.prepare(sampleRate, samplesPerBlock);
     mMainReverb->setSampleRate(sampleRate);
     mMReverb.setSampleRate(sampleRate);
     mInputReverb.setSampleRate(sampleRate);
@@ -7829,6 +7863,9 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 
     int numSamples = buffer.getNumSamples();
 
+    // T-086: the Instrument strip plays this block's MIDI (before anything uses the buffer)
+    const bool instSounding = mLiveInstrument.render(midiMessages, numSamples);
+
     int tunerch = mTunerChannel.load(std::memory_order_relaxed);
     if (tunerch >= 0 && tunerch < totalInputChannels) {
         mTunerRing.write(buffer.getReadPointer(tunerch), numSamples);
@@ -8041,6 +8078,19 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 
             mInputChannelGroups[i].processPan(inputPostBuffer, srcstart, sendWorkBuffer, dstch, dstcnt, numSamples, tgain);
             srcstart += mInputChannelGroups[i].params.numChannels;
+        }
+    }
+
+    // T-086: the Instrument strip goes to everyone, with the inputs
+    if (instSounding) {
+        const auto & io = mLiveInstrument.getOutput();
+        if (sendPanChannels >= 2 && sendWorkBuffer.getNumChannels() >= 2) {
+            sendWorkBuffer.addFrom(0, 0, io, 0, 0, numSamples);
+            sendWorkBuffer.addFrom(1, 0, io, 1, 0, numSamples);
+        }
+        else if (sendWorkBuffer.getNumChannels() >= 1) {
+            sendWorkBuffer.addFrom(0, 0, io, 0, 0, numSamples, 0.5f);
+            sendWorkBuffer.addFrom(0, 0, io, 1, 0, numSamples, 0.5f);
         }
     }
 
@@ -8630,6 +8680,19 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
         }
     }
 
+    // T-086: you always hear the Instrument strip (a keyboard makes no sound of its own)
+    if (instSounding) {
+        const auto & io = mLiveInstrument.getOutput();
+        if (totalOutputChannels >= 2) {
+            buffer.addFrom(0, 0, io, 0, 0, numSamples);
+            buffer.addFrom(1, 0, io, 1, 0, numSamples);
+        }
+        else if (totalOutputChannels == 1) {
+            buffer.addFrom(0, 0, io, 0, 0, numSamples, 0.5f);
+            buffer.addFrom(0, 0, io, 1, 0, numSamples, 0.5f);
+        }
+    }
+
     // EFFECTS
 
 
@@ -8915,6 +8978,12 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 
                 }
 
+                // T-086: and the Instrument strip
+                if (instSounding && totalRecordingChannels >= 2 && workBuffer.getNumChannels() >= 2) {
+                    workBuffer.addFrom(0, 0, mLiveInstrument.getOutput(), 0, 0, numSamples);
+                    workBuffer.addFrom(1, 0, mLiveInstrument.getOutput(), 1, 0, numSamples);
+                }
+
                 if (activeMixWriter.load() != nullptr) {
                     // write out full mix
                     activeMixWriter.load()->write (workBuffer.getArrayOfReadPointers(), numSamples);
@@ -9087,6 +9156,16 @@ void SonobusAudioProcessor::getStateInformationWithOptions(MemoryBlock& destData
     extraTree.setProperty(scoreInstrumentKey, mScoreInstrumentId, nullptr);
     extraTree.setProperty(scoreInstrumentStateKey, mScoreInstrumentState, nullptr);
     extraTree.setProperty(inputInsertsKey, saveInputInserts(), nullptr);
+    if (auto * li = mLiveInstrument.getPlugin()) {
+        extraTree.setProperty(liveInstrumentKey, li->getPluginDescription().createIdentifierString(), nullptr);
+        extraTree.setProperty(liveInstrumentStateKey, TinCan::PluginHost::saveState(*li), nullptr);
+    }
+    else {
+        extraTree.setProperty(liveInstrumentKey, String(), nullptr);
+        extraTree.setProperty(liveInstrumentStateKey, String(), nullptr);
+    }
+    extraTree.setProperty(liveInstrumentGainKey, mLiveInstrument.gain.load(), nullptr);
+    extraTree.setProperty(liveInstrumentMutedKey, mLiveInstrument.muted.load(), nullptr);
     extraTree.setProperty(lastUsernameKey, mCurrentUsername, nullptr);
     extraTree.setProperty(langOverrideCodeKey, mLangOverrideCode, nullptr);
     extraTree.setProperty(useUnivFontKey, mUseUniversalFont, nullptr);
@@ -9224,6 +9303,20 @@ void SonobusAudioProcessor::setStateInformationWithOptions (const void* data, in
                 // each input's VST3 effects (T-086)
                 if (MessageManager::getInstanceWithoutCreating() != nullptr && MessageManager::getInstance()->isThisTheMessageThread())
                     restoreInputInserts(extraTree.getProperty(inputInsertsKey, String()).toString());
+                // the Instrument strip (T-086)
+                mLiveInstrument.gain = (float) extraTree.getProperty(liveInstrumentGainKey, 1.0f);
+                mLiveInstrument.muted = (bool) extraTree.getProperty(liveInstrumentMutedKey, false);
+                {
+                    const String liId = extraTree.getProperty(liveInstrumentKey, String()).toString();
+                    if (liId.isNotEmpty() && mLiveInstrument.getPlugin() == nullptr && MessageManager::getInstanceWithoutCreating() != nullptr
+                        && MessageManager::getInstance()->isThisTheMessageThread()) {
+                        String err;
+                        if (setLiveInstrument(liId, err)) {
+                            if (auto * li = mLiveInstrument.getPlugin()) TinCan::PluginHost::restoreState(*li, extraTree.getProperty(liveInstrumentStateKey, String()).toString());
+                        }
+                        else DBG("live instrument: " << err);
+                    }
+                }
             }
 
             bool linkmon = extraTree.getProperty(linkMonitoringDelayTimesKey, mLinkMonitoringDelayTimes);

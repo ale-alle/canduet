@@ -122,6 +122,47 @@ ToolsPanel * LessonView::getTools() const
     return toolsWindow ? dynamic_cast<ToolsPanel *>(toolsWindow->getBody()) : nullptr;
 }
 
+// the Instrument strip's menu (T-086): no instrument, the found instruments, its window, find
+void LessonView::showInstrumentMenu()
+{
+    auto & host = processor.getPluginHost();
+    const auto instruments = host.getInstruments();
+    const auto current = processor.getLiveInstrumentName();
+
+    PopupMenu menu;
+    if (current.isNotEmpty()) {
+        menu.addSectionHeader(current);
+        menu.addItem(2, TRANS("Show its window..."));
+        menu.addItem(1, TRANS("Remove"));
+        menu.addSeparator();
+    }
+    menu.addSectionHeader(TRANS("VST3 instruments: play them with your MIDI keyboard"));
+    if (instruments.isEmpty()) menu.addItem(5, TRANS("None found yet: use Find plugins"), false, false);
+    for (int k = 0; k < instruments.size(); ++k)
+        menu.addItem(100 + k, instruments[k].name + (instruments[k].manufacturerName.isNotEmpty() ? "  (" + instruments[k].manufacturerName + ")" : String()),
+                     true, instruments[k].name == current);
+    menu.addSeparator();
+    menu.addItem(4, TRANS("Find plugins..."));
+
+    Component::SafePointer<LessonView> safeThis(this);
+    menu.showMenuAsync(PopupMenu::Options().withMousePosition(), [safeThis, instruments](int result) {
+        if (!safeThis || result == 0) return;
+        auto & proc = safeThis->processor;
+        if (result == 2) { proc.showLiveInstrumentWindow(); return; }
+        if (result == 4) { proc.getPluginHost().showPluginList(); return; }
+        String id;
+        if (result >= 100 && result - 100 < instruments.size()) id = instruments[result - 100].createIdentifierString();
+        else if (result != 1) return;
+        String error;
+        if (!proc.setLiveInstrument(id, error)) {
+            AlertWindow::showMessageBoxAsync(MessageBoxIconType::WarningIcon, TRANS("Couldn't load the instrument"), error);
+            return;
+        }
+        safeThis->sendState();
+        if (id.isNotEmpty()) proc.showLiveInstrumentWindow();   // to pick its sound
+    });
+}
+
 // a strip's VST3 effect slot (T-086): no effect, the found effects by maker, its window, bypass, find
 void LessonView::showSlotMenu(int g, int s)
 {
@@ -641,6 +682,16 @@ void LessonView::sendState()
     msg->setProperty("me", var(me.get()));
     msg->setProperty("inputs", inputsState());
     msg->setProperty("fxBus", busState());
+    {
+        // the Instrument strip (T-086)
+        auto & li = processor.getLiveInstrument();
+        DynamicObject::Ptr inst = new DynamicObject();
+        inst->setProperty("name", processor.getLiveInstrumentName().substring(0, 60));
+        inst->setProperty("gain", li.gain.load());
+        inst->setProperty("muted", li.muted.load());
+        inst->setProperty("level", std::round(li.meter.load() * 100.0f) / 100.0f);
+        msg->setProperty("instrument", var(inst.get()));
+    }
     msg->setProperty("conn", conn);
     msg->setProperty("lesson", var(lesson.get()));
     msg->setProperty("peers", peers);
@@ -795,6 +846,15 @@ void LessonView::handleMessage(const var & message)
             }
             else processor.setInputDelaySend(g, on ? amount : 0.0f);
         }
+        sendState();
+    }
+    else if (type == "instrument") {
+        // the Instrument strip (T-086): level, mute, or its menu
+        const auto k = message.getProperty("k", var()).toString();
+        auto & li = processor.getLiveInstrument();
+        if (k == "gain" && isNumber) li.gain = jlimit(0.0f, 4.0f, (float) value);
+        else if (k == "mute") li.muted = (bool) value;
+        else if (k == "menu") showInstrumentMenu();
         sendState();
     }
     else if (type == "slot") {
