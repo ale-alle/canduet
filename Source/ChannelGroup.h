@@ -21,6 +21,14 @@ namespace SonoAudio {
 // used to encapsulate audio processing for grouped set of audio
 // is used for both local or remote audio input
 
+// CanDuet (T-086): plugin effects on an input, run after the built-in effects and before the
+// limiter and the sends (audio thread; channels [start, start + count) of buffer, in place)
+struct InsertHook
+{
+    virtual ~InsertHook() = default;
+    virtual void process(AudioBuffer<float> & buffer, int start, int count, int numSamples) = 0;
+};
+
 struct ChannelGroupParams
 {
 
@@ -159,6 +167,7 @@ public:
 
     // CanDuet: each effect's amount (dry/wet), ramped per block; 0 while an effect is off
     float _lastExpanderMix = 0.0f, _lastCompressorMix = 0.0f, _lastEqMix = 0.0f;
+    InsertHook * insertHook = nullptr;   // CanDuet: VST3 effects on this input (T-086), not owned
     AudioBuffer<float> fxDryBuffer;   // the signal before one effect, for the blend (2 x 8192, made in init)
 
     // limiter

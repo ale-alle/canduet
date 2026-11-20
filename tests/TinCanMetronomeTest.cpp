@@ -31,6 +31,7 @@ int runRecordingTests();  // TinCanRecordingTest.cpp
 int runMp3Tests();        // TinCanMp3Test.cpp
 int runDelayTests();      // TinCanDelayTest.cpp
 int runVstTests();        // TinCanVstTest.cpp
+int runInsertsTests();    // TinCanInsertsTest.cpp
 
 struct Expected { int64 sample; const AudioBuffer<float> * sound; float gain; };
 
@@ -154,6 +155,7 @@ int main()
     failures += runMp3Tests();
     failures += runDelayTests();
     failures += runVstTests();
+    failures += runInsertsTests();
 
     if (failures == 0) {
         std::printf("TinCanAudioTests: all checks passed\n");

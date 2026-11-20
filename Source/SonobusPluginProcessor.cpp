@@ -124,6 +124,7 @@ static String fxDelayLevelKey("fxDelayLevel");
 static String dockLayoutKey("tinCanDockLayout");
 static String scoreInstrumentKey("scoreInstrument");
 static String scoreInstrumentStateKey("scoreInstrumentState");
+static String inputInsertsKey("inputInserts");
 static String langOverrideCodeKey("langOverrideCode");
 static String useUnivFontKey("useUnivFont");
 static String lastWindowWidthKey("lastWindowWidth");
@@ -862,6 +863,7 @@ mState (*this, &mUndoManager, "SonoBusAoO",
     
     mMetronome = std::make_unique<SonoAudio::Metronome>();
     mScorePlayer = std::make_unique<TinCan::ScorePlayer>();
+    for (int i = 0; i < MAX_CHANGROUPS; ++i) mInputChannelGroups[i].insertHook = &mInputInserts[i];   // T-086
     
     mMetronome->loadBarSoundFromBinaryData(BinaryData::bar_click_wav, BinaryData::bar_click_wavSize);
     mMetronome->loadBeatSoundFromBinaryData(BinaryData::beat_click_wav, BinaryData::beat_click_wavSize);
@@ -924,6 +926,7 @@ SonobusAudioProcessor::~SonobusAudioProcessor()
     // T-086: plugin windows and the score's instrument go before the plugin host
     if (mPluginHost) mPluginHost->closeAllEditors();
     if (mScorePlayer) mScorePlayer->setInstrument(nullptr);
+    for (auto & chain : mInputInserts) for (int s = 0; s < TinCan::InsertChain::numSlots; ++s) chain.setSlot(s, nullptr);
     mTransportSource.setSource(nullptr);
     mTransportSource.removeChangeListener(this);
 
@@ -2253,6 +2256,94 @@ String SonobusAudioProcessor::getScoreInstrumentName() const
 {
     if (mScorePlayer && mScorePlayer->getInstrument()) return mScorePlayer->getInstrument()->getName();
     return {};
+}
+
+bool SonobusAudioProcessor::setInputInsert(int changroup, int slot, const String & identifier, String & error)
+{
+    error.clear();
+    if (changroup < 0 || changroup >= MAX_CHANGROUPS || slot < 0 || slot >= TinCan::InsertChain::numSlots) return false;
+    auto & host = getPluginHost();
+    std::unique_ptr<AudioPluginInstance> inst;
+    if (identifier.isNotEmpty()) {
+        auto desc = host.findByIdentifier(identifier);
+        if (!desc) { error = TRANS("That plugin isn't in the list any more. Find plugins again."); return false; }
+        if (desc->isInstrument) { error = TRANS("That's an instrument, not an effect."); return false; }
+        inst = host.create(*desc, getSampleRate(), getBlockSize(), error);
+        if (!inst) return false;
+    }
+    auto & chain = mInputInserts[changroup];
+    if (auto * old = chain.getSlot(slot)) host.closeEditor(old);
+    auto old = chain.setSlot(slot, std::move(inst));
+    old.reset();
+    return true;
+}
+
+String SonobusAudioProcessor::getInputInsertName(int changroup, int slot) const
+{
+    if (changroup < 0 || changroup >= MAX_CHANGROUPS) return {};
+    auto * p = mInputInserts[changroup].getSlot(slot);
+    return p ? p->getName() : String();
+}
+
+void SonobusAudioProcessor::setInputInsertBypass(int changroup, int slot, bool bypassed)
+{
+    if (changroup >= 0 && changroup < MAX_CHANGROUPS) mInputInserts[changroup].setBypass(slot, bypassed);
+}
+
+bool SonobusAudioProcessor::getInputInsertBypass(int changroup, int slot) const
+{
+    return changroup >= 0 && changroup < MAX_CHANGROUPS && mInputInserts[changroup].getBypass(slot);
+}
+
+void SonobusAudioProcessor::showInputInsertWindow(int changroup, int slot)
+{
+    if (changroup < 0 || changroup >= MAX_CHANGROUPS) return;
+    if (auto * p = mInputInserts[changroup].getSlot(slot))
+        getPluginHost().showEditor(*p, p->getName() + " - " + TRANS("Input") + " " + String(changroup + 1));
+}
+
+String SonobusAudioProcessor::saveInputInserts()
+{
+    // [[{"id","state","bypass"} or null, ...] per input], only as far as the last input with a plugin
+    Array<var> groups;
+    int last = -1;
+    for (int g = 0; g < MAX_CHANGROUPS; ++g) {
+        Array<var> slots;
+        for (int s = 0; s < TinCan::InsertChain::numSlots; ++s) {
+            auto * p = mInputInserts[g].getSlot(s);
+            if (!p) { slots.add(var()); continue; }
+            DynamicObject::Ptr o = new DynamicObject();
+            o->setProperty("id", p->getPluginDescription().createIdentifierString());
+            o->setProperty("state", TinCan::PluginHost::saveState(*p));
+            o->setProperty("bypass", mInputInserts[g].getBypass(s));
+            slots.add(var(o.get()));
+            last = g;
+        }
+        groups.add(var(slots));
+    }
+    if (last < 0) return {};
+    groups.removeRange(last + 1, groups.size());
+    return JSON::toString(var(groups), true);
+}
+
+void SonobusAudioProcessor::restoreInputInserts(const String & json)
+{
+    const var v = JSON::parse(json);
+    auto * groups = v.getArray();
+    if (groups == nullptr) return;
+    for (int g = 0; g < groups->size() && g < MAX_CHANGROUPS; ++g) {
+        auto * slots = (*groups)[g].getArray();
+        if (slots == nullptr) continue;
+        for (int s = 0; s < slots->size() && s < TinCan::InsertChain::numSlots; ++s) {
+            const var o = (*slots)[s];
+            const auto id = o.getProperty("id", var()).toString();
+            if (id.isEmpty() || getInputInsertName(g, s).isNotEmpty()) continue;
+            String err;
+            if (!setInputInsert(g, s, id, err)) { DBG("input insert: " << err); continue; }
+            if (auto * p = mInputInserts[g].getSlot(s)) TinCan::PluginHost::restoreState(*p, o.getProperty("state", var()).toString());
+            mInputInserts[g].setBypass(s, (bool) o.getProperty("bypass", false));
+        }
+    }
 }
 
 void SonobusAudioProcessor::showScoreInstrumentWindow()
@@ -7266,6 +7357,7 @@ void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     
     mMetronome->setSampleRate(sampleRate);
     mScorePlayer->prepare(sampleRate, samplesPerBlock);
+    for (auto & chain : mInputInserts) chain.prepare(sampleRate, samplesPerBlock);   // T-086
     mMainReverb->setSampleRate(sampleRate);
     mMReverb.setSampleRate(sampleRate);
     mInputReverb.setSampleRate(sampleRate);
@@ -8994,6 +9086,7 @@ void SonobusAudioProcessor::getStateInformationWithOptions(MemoryBlock& destData
     }
     extraTree.setProperty(scoreInstrumentKey, mScoreInstrumentId, nullptr);
     extraTree.setProperty(scoreInstrumentStateKey, mScoreInstrumentState, nullptr);
+    extraTree.setProperty(inputInsertsKey, saveInputInserts(), nullptr);
     extraTree.setProperty(lastUsernameKey, mCurrentUsername, nullptr);
     extraTree.setProperty(langOverrideCodeKey, mLangOverrideCode, nullptr);
     extraTree.setProperty(useUnivFontKey, mUseUniversalFont, nullptr);
@@ -9128,6 +9221,9 @@ void SonobusAudioProcessor::setStateInformationWithOptions (const void* data, in
                     mScoreInstrumentState = state;
                     if (!setScoreInstrument(id, err)) { mScoreInstrumentId = id; DBG("score instrument: " << err); }
                 }
+                // each input's VST3 effects (T-086)
+                if (MessageManager::getInstanceWithoutCreating() != nullptr && MessageManager::getInstance()->isThisTheMessageThread())
+                    restoreInputInserts(extraTree.getProperty(inputInsertsKey, String()).toString());
             }
 
             bool linkmon = extraTree.getProperty(linkMonitoringDelayTimesKey, mLinkMonitoringDelayTimes);

@@ -442,6 +442,8 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanDock.h
         Source/TinCanPlugins.cpp
         Source/TinCanPlugins.h
+        Source/TinCanInserts.cpp
+        Source/TinCanInserts.h
         Source/TinCanSummaries.cpp
         Source/TinCanSummaries.h
         Source/VDONinjaView.h
@@ -836,6 +838,8 @@ target_sources(TinCanAudioTests PRIVATE
     tests/TinCanMp3Test.cpp
     tests/TinCanDelayTest.cpp
     tests/TinCanVstTest.cpp
+    tests/TinCanInsertsTest.cpp
+    Source/TinCanInserts.cpp
     Source/TinCanScorePlayer.cpp
     Source/TinCanScoreCore.cpp
     Source/TinCanMp3Format.cpp
@@ -852,5 +856,6 @@ target_link_libraries(TinCanAudioTests PRIVATE
     juce::juce_audio_formats
     juce::juce_audio_basics
     juce::juce_audio_processors
+    juce::juce_dsp
     juce::juce_gui_basics
     juce::juce_recommended_config_flags)

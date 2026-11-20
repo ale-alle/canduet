@@ -27,6 +27,7 @@
 #include "TinCanPitch.h"
 #include "TinCanDelay.h"
 #include "TinCanPlugins.h"
+#include "TinCanInserts.h"
 
 typedef MVerb<float> MVerbFloat;
 
@@ -361,6 +362,13 @@ public:
     bool setScoreInstrument(const String & identifier, String & error);
     String getScoreInstrumentName() const;
     void showScoreInstrumentWindow();
+
+    // VST3 effects on an input strip (T-086): slot 0 or 1; an empty identifier empties the slot
+    bool setInputInsert(int changroup, int slot, const String & identifier, String & error);
+    String getInputInsertName(int changroup, int slot) const;
+    void setInputInsertBypass(int changroup, int slot, bool bypassed);
+    bool getInputInsertBypass(int changroup, int slot) const;
+    void showInputInsertWindow(int changroup, int slot);
     bool disconnectFromServer();
     // Tin Can: one line in connection-log.txt (no names, addresses or keys)
     static void logConnectionStep(const String & text);
@@ -1355,6 +1363,9 @@ private:
     std::unique_ptr<TinCan::ScorePlayer> mScorePlayer;   // T-080
     std::unique_ptr<TinCan::PluginHost> mPluginHost;     // T-086
     String mScoreInstrumentId, mScoreInstrumentState;    // kept while it isn't loaded (not found yet)
+    TinCan::InsertChain mInputInserts[MAX_CHANGROUPS];   // T-086: each input's VST3 effects
+    String saveInputInserts();
+    void restoreInputInserts(const String & json);
    
     // misc
     bool mSliderSnapToMouse = true;

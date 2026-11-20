@@ -366,6 +366,14 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   font: 600 10.5px/1 var(--font-sans); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fxb:hover, .fxb[aria-expanded=true] { color: var(--text); border-color: var(--string); }
 .fxr.on .fxb { color: var(--text); }
+/* VST3 effect slots (T-086): the plugin's name, or + Effect; the choice opens as the app's own menu */
+.strip .slots { width: 100%; display: flex; flex-direction: column; gap: 3px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.strip .slots.none { visibility: hidden; }
+.slb { height: 20px; width: 100%; padding: 0 5px; border-radius: 5px; border: 1px dashed var(--line-strong); background: transparent; color: var(--subtle);
+  font: 600 10.5px/1 var(--font-sans); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slb:hover { color: var(--text); border-color: var(--string); }
+.slb.on { border-style: solid; border-color: var(--line); background: color-mix(in srgb, var(--string) 22%, var(--surface)); color: var(--text); }
+.slb.on.byp { background: var(--surface); color: var(--subtle); text-decoration: line-through; }
 /* an effect's settings: a small window over the mixer, next to its strip */
 .pop.fxwin { z-index: 16; width: 286px; gap: 10px; padding: 14px 16px; }
 .fxwin .fh { display: flex; align-items: center; gap: 8px; }
@@ -1233,6 +1241,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const scale = bus ? scaleHtml(bus.ticks, bus.toPos) : scaleHtml([12, 6, 0, -6, -12, -24, -40], inGainToPos);
     el.innerHTML = `<div class="lk"></div>
       <div class="fx${bus ? " none" : ""}">${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
+      <div class="slots${bus ? " none" : ""}">${[0, 1].map((s) => `<button class="slb" type="button" data-s="${s}" aria-haspopup="menu">+ Effect</button>`).join("")}</div>
       <div class="pn${bus ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
       <div class="fz"><div class="scale">${scale}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
         <div class="mt">${'<span class="vu"><i></i></span>'.repeat(bars)}</div></div>
@@ -1303,6 +1312,14 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       el.querySelector(".p").value = r.pan || 0; el.querySelector(".pn output").textContent = panShort(r.pan || 0);
       el.querySelector(".mb").setAttribute("aria-pressed", String(!!r.muted));
       el.querySelectorAll(".fxr").forEach((row) => { if (!(fxBusy[r.i + ":" + row.dataset.e] > now)) showKnob(row, fxAmount(r, row.dataset.e)); });
+      const slots = (r.fx && Array.isArray(r.fx.slots)) ? r.fx.slots : [];
+      el.querySelectorAll(".slb").forEach((b) => {
+        const sl = slots[+b.dataset.s];
+        const name = sl && typeof sl.name === "string" ? sl.name : "";
+        b.textContent = name || "+ Effect";
+        b.classList.toggle("on", !!name); b.classList.toggle("byp", !!(sl && sl.bypass));
+        b.title = name ? name + (sl.bypass ? " (bypassed)" : "") + ": its window, bypass or another effect" : "Add a VST3 effect to " + (r.label || "this input");
+      });
     }
     if (fxOpen) fillFxWin(false);
     for (const b of BUSES) {
@@ -1552,6 +1569,12 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (btn) btn.focus({ preventScroll: true });
   }
   $("#inList").addEventListener("click", (e) => { const b = e.target.closest(".fxb"); if (b) { e.stopPropagation(); openFx(b); } });
+  // a VST3 effect slot (T-086): the app shows the choices as its own menu, where the mouse is
+  $("#inList").addEventListener("click", (e) => {
+    const b = e.target.closest(".slb"); if (!b) return;
+    e.stopPropagation();
+    send({ t: "slot", i: +b.closest(".strip").dataset.i, s: +b.dataset.s });
+  });
   $("#fxClose").addEventListener("click", (e) => { e.stopPropagation(); closeFx(); });
   $("#fxWin").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeFx(); } });
 
@@ -1787,6 +1810,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       comp: { amount: c, threshold: -16, ratio: 2, attack: 10, release: 80, makeup: 5.4, autoMakeup: true },
       eq: { amount: q, lowGain: 0, lowFreq: 60, mid1Gain: 0, mid1Freq: 90, mid1Q: 1.5, mid2Gain: -3, mid2Freq: 360, mid2Q: 4, highGain: 2, highFreq: 10000 }, rev: rv, dly: dl });
     inputs.forEach((r, k) => { r.fx = demoFx(k === 0 ? 0.6 : 0, k === 0 ? 1 : 0, k === 3 ? 0.8 : 0, k === 0 ? 0.3 : 0, k === 2 ? 0.25 : 0); });
+    inputs[0].fx.slots = [{ name: "TR5 Classic Comp", bypass: false }, null];
+    inputs[3].fx.slots = [{ name: "AmpliTube 5", bypass: true }, { name: "TR5 CSR Plate", bypass: false }];
     renderInputs();
     conn = st === "problem" ? "lost" : "connected";
     lessonInfo = { title: "Piano with Mia", startsAt: Date.now() - 12 * 60000, endsAt: Date.now() + 18 * 60000, joinedAt: Date.now() - 11 * 60000 };

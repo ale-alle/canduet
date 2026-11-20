@@ -331,6 +331,11 @@ void ChannelGroup::processBlock (AudioBuffer<float>& frombuffer,
         _lastEqMix = eqMix;
 
 
+        // CanDuet (T-086): the input's VST3 effects
+        if (insertHook && destStartChan < tobufNumChan) {
+            insertHook->process(tobuffer, destStartChan, stereoOut ? 2 : 1, numSamples);
+        }
+
         // apply input limiter
         if (limiterParamsChanged) {
             commitLimiterParams();

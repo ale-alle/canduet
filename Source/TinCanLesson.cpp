@@ -122,6 +122,59 @@ ToolsPanel * LessonView::getTools() const
     return toolsWindow ? dynamic_cast<ToolsPanel *>(toolsWindow->getBody()) : nullptr;
 }
 
+// a strip's VST3 effect slot (T-086): no effect, the found effects by maker, its window, bypass, find
+void LessonView::showSlotMenu(int g, int s)
+{
+    auto & host = processor.getPluginHost();
+    const auto effects = host.getEffects();
+    const auto current = processor.getInputInsertName(g, s);
+    const bool bypassed = processor.getInputInsertBypass(g, s);
+    String currentId;
+    if (current.isNotEmpty())
+        for (auto & d : effects) if (d.name == current) { currentId = d.createIdentifierString(); break; }
+
+    PopupMenu menu;
+    if (current.isNotEmpty()) {
+        menu.addSectionHeader(current);
+        menu.addItem(2, TRANS("Show its window..."));
+        menu.addItem(3, TRANS("Bypass"), true, bypassed);
+        menu.addItem(1, TRANS("Remove"));
+        menu.addSeparator();
+    }
+    menu.addSectionHeader(TRANS("VST3 effects"));
+    if (effects.isEmpty()) menu.addItem(5, TRANS("None found yet: use Find plugins"), false, false);
+    // grouped by maker once there are many
+    std::map<String, PopupMenu> byMaker;
+    for (int k = 0; k < effects.size(); ++k) {
+        const auto & d = effects[k];
+        const bool ticked = d.createIdentifierString() == currentId;
+        if (effects.size() > 16) byMaker[d.manufacturerName.isNotEmpty() ? d.manufacturerName : TRANS("Other")].addItem(100 + k, d.name, true, ticked);
+        else menu.addItem(100 + k, d.name + (d.manufacturerName.isNotEmpty() ? "  (" + d.manufacturerName + ")" : String()), true, ticked);
+    }
+    for (auto & [maker, sub] : byMaker) menu.addSubMenu(maker, sub);
+    menu.addSeparator();
+    menu.addItem(4, TRANS("Find plugins..."));
+
+    Component::SafePointer<LessonView> safeThis(this);
+    menu.showMenuAsync(PopupMenu::Options().withMousePosition(), [safeThis, effects, g, s](int result) {
+        if (!safeThis || result == 0) return;
+        auto & proc = safeThis->processor;
+        if (result == 2) { proc.showInputInsertWindow(g, s); return; }
+        if (result == 3) { proc.setInputInsertBypass(g, s, !proc.getInputInsertBypass(g, s)); safeThis->sendState(); return; }
+        if (result == 4) { proc.getPluginHost().showPluginList(); return; }
+        String id;
+        if (result >= 100 && result - 100 < effects.size()) id = effects[result - 100].createIdentifierString();
+        else if (result != 1) return;
+        String error;
+        if (!proc.setInputInsert(g, s, id, error)) {
+            AlertWindow::showMessageBoxAsync(MessageBoxIconType::WarningIcon, TRANS("Couldn't load the effect"), error);
+            return;
+        }
+        safeThis->sendState();
+        if (id.isNotEmpty()) proc.showInputInsertWindow(g, s);   // to set it up
+    });
+}
+
 // ---- docking (T-085) ----
 
 void LessonView::loadLayout()
@@ -398,6 +451,17 @@ var LessonView::effectsState(int g)
     fx->setProperty("eq", var(e.get()));
     fx->setProperty("rev", processor.getInputReverbSend(g, true));
     fx->setProperty("dly", processor.getInputDelaySend(g));
+    // VST3 effect slots (T-086): the plugin's name and whether it's bypassed, or null when empty
+    Array<var> slots;
+    for (int s = 0; s < InsertChain::numSlots; ++s) {
+        const auto name = processor.getInputInsertName(g, s);
+        if (name.isEmpty()) { slots.add(var()); continue; }
+        DynamicObject::Ptr o = new DynamicObject();
+        o->setProperty("name", name.substring(0, 60));
+        o->setProperty("bypass", processor.getInputInsertBypass(g, s));
+        slots.add(var(o.get()));
+    }
+    fx->setProperty("slots", slots);
     return var(fx.get());
 }
 
@@ -732,6 +796,14 @@ void LessonView::handleMessage(const var & message)
             else processor.setInputDelaySend(g, on ? amount : 0.0f);
         }
         sendState();
+    }
+    else if (type == "slot") {
+        // a strip's VST3 effect slot (T-086): the choice opens as a menu of its own, above the page
+        const var iv = message.getProperty("i", var()), sv = message.getProperty("s", var());
+        if (!(iv.isInt() || iv.isDouble()) || !(sv.isInt() || sv.isDouble())) return;
+        const int g = (int) iv, s = (int) sv;
+        if (g < 0 || g >= processor.getInputGroupCount() || s < 0 || s >= InsertChain::numSlots) return;
+        showSlotMenu(g, s);
     }
     else if (type == "inputFx") {
         // an effect's pop-up (T-084): its settings, leaving the knob's amount alone

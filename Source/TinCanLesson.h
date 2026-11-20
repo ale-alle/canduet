@@ -36,6 +36,7 @@
 //                 {"t":"peer","id","k":"mute|solo|quality|buffer|resetBuffer|remove","v"}
 //                 {"t":"mic","off"} {"t":"inGain","v"} {"t":"volume","v"} {"t":"monitor","v"} {"t":"monitorLevel","v"} {"t":"outMute","v"} {"t":"recvMute","v"}
 //                 {"t":"input","i","k":"gain|pan|mute|pair","v"}   one input in the input mixer (T-077)
+//                 {"t":"slot","i","s"}                          a strip's VST3 effect slot: its menu (T-086)
 //                 {"t":"tools"} {"t":"board"} {"t":"score"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
 //                 {"t":"chat","text"}
@@ -121,6 +122,7 @@ private:
     void wireWindow(DockableWindow & w, const String & id);
     void dockTool(const String & id);
     void toggleDock(const String & id);
+    void showSlotMenu(int group, int slot);
     void loadLayout();
     void saveLayout();
     void rememberWindow(const String & id);
