@@ -231,6 +231,17 @@ body.tools-on { --dockb: calc(var(--dockh, 260px) + 12px); }
    above, the whole picture, never cropped (--ar is the camera's width/height, set when it starts) */
 body.tools-on .people .tile.fit { aspect-ratio: auto !important; max-height: none !important; flex: none; justify-self: center; align-self: center; margin: auto; }
 body.tools-on .face video.main, body.tools-on .face video.cam { object-fit: contain; }
+/* Board or Score docked (T-085): the people small, one above the other on the left; the native panel
+   sits exactly over #sideHole in the right two thirds */
+#sideHole { display: none; }
+body.side-on #sideHole { display: block; flex: 2 1 0; min-width: 0; border-radius: var(--r-tile); background: var(--surface); border: 1px solid var(--line); }
+body.side-on .people { flex: 1 1 0; flex-direction: column; gap: 40px; }
+body.side-on .others { flex: 1; min-height: 0; }
+body.side-on .mine { flex: 1; min-height: 0; max-width: none; justify-content: flex-start; }
+body.side-on .tile.self { aspect-ratio: auto; max-height: none; height: 100%; }
+body.side-on .people .tile.fit { aspect-ratio: auto !important; max-height: none !important; flex: none; justify-self: center; align-self: center; margin: auto; }
+body.side-on .face video.main, body.side-on .face video.cam { object-fit: contain; }
+body.side-on .tile .tbtns { display: none; }
 
 /* ---------- lesson bar ---------- */
 .bar { position: relative; flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 8px 16px 10px; margin-top: 10px;
@@ -437,6 +448,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       </article>
     </div>
   </main>
+
+  <div id="sideHole" aria-hidden="true"></div>
 
   <aside class="dock-r chat" aria-label="Chat">
     <div class="dhead"><h3>Chat</h3><button class="xbtn" type="button" data-act="chat" aria-label="Close chat"><i data-i="x"></i></button></div>
@@ -918,8 +931,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   // as tall as wide (the app keeps that shape); never more than half the window
   function sizeDock() {
     const keyW = Math.max(12, ((screen.availWidth || window.innerWidth) - 64) / 52);
-    const h = Math.min(Math.round(120 + keyW * 5.6), Math.round(window.innerHeight * 0.5));
-    body.style.setProperty("--dockh", Math.max(220, h) + "px");
+    const h = Math.min(Math.round(120 + keyW * 5.6), Math.round(window.innerHeight * 0.5)) + 32;   // + its header (T-085)
+    body.style.setProperty("--dockh", Math.max(252, h) + "px");
   }
   sizeDock();
   // With Tools open, a tile alone in its space takes the largest size of its camera's shape that
@@ -927,7 +940,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   // space (three people or more) keep their place and show the whole picture inside it.
   const parseAr = (v) => { const m = String(v).match(/([\d.]+)\s*\/\s*([\d.]+)/); return m && +m[2] ? +m[1] / +m[2] : 0; };
   function fitTiles() {
-    const on = body.classList.contains("tools-on");
+    const on = body.classList.contains("tools-on") || body.classList.contains("side-on");
     for (const t of document.querySelectorAll(".people .tile")) {
       // alone among the tiles shown there (the waiting card is a hidden tile too)
       const shown = t.parentElement ? [...t.parentElement.children].filter((c) => c.classList.contains("tile") && !c.hidden && getComputedStyle(c).display !== "none") : [];
@@ -1012,7 +1025,13 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     $("#toolsBtn").setAttribute("aria-pressed", String(!!docks.tools));
     $("#boardBtn").setAttribute("aria-pressed", String(!!docks.board));
     $("#scoreBtn").setAttribute("aria-pressed", String(!!docks.score));
-    if (body.classList.contains("tools-on") !== !!docks.tools) { body.classList.toggle("tools-on", !!docks.tools); sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); }); }
+    // which tool is docked (T-085); an app from before docking only docks Tools
+    const dk = typeof docks.docked === "string" ? docks.docked : (docks.tools ? "tools" : "");
+    const toolsOn = dk === "tools", sideOn = dk === "board" || dk === "score";
+    if (body.classList.contains("tools-on") !== toolsOn || body.classList.contains("side-on") !== sideOn) {
+      body.classList.toggle("tools-on", toolsOn); body.classList.toggle("side-on", sideOn);
+      sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); sendDock(); });
+    }
     checkLessonEnd(now);
   }
   setInterval(renderLesson, 1000);
@@ -1046,10 +1065,13 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   // where the native Tools panel goes, as fractions of the page
   let lastDock = "";
   function sendDock() {
-    const W = window.innerWidth || 1, H = window.innerHeight || 1, r = $("#dockHole").getBoundingClientRect();
-    const rect = body.classList.contains("tools-on") ? [r.left / W, r.top / H, r.width / W, r.height / H].map((v) => Math.round(v * 10000) / 10000) : [];
-    const json = JSON.stringify(rect);
-    if (json !== lastDock) { lastDock = json; send({ t: "dock", rect }); }
+    const W = window.innerWidth || 1, H = window.innerHeight || 1;
+    const frac = (el) => { const r = el.getBoundingClientRect(); return [r.left / W, r.top / H, r.width / W, r.height / H].map((v) => Math.round(v * 10000) / 10000); };
+    // the gaps the docked tool sits in: Tools along the bottom, Board or Score at the right (T-085)
+    const rect = body.classList.contains("tools-on") ? frac($("#dockHole")) : [];
+    const side = body.classList.contains("side-on") ? frac($("#sideHole")) : [];
+    const json = JSON.stringify([rect, side]);
+    if (json !== lastDock) { lastDock = json; send({ t: "dock", rect, side }); }
   }
 
   // ---- popovers (inside the page, anchored to their icon) ----
@@ -1773,6 +1795,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       pingMs: 14, bufferMs: 2.1, bufMode: "auto", quality: "auto", recvFormat: "Opus 256 kbps, stereo", sendFormat: "Opus 256 kbps, mono", dropped: 0 }));
     rec = params.get("rec") === "1" ? { phase: "recording", secs: 67 } : { phase: "idle", secs: 0 };
     docks.tools = params.get("tools") === "1";
+    if (params.get("dock")) { docks.docked = params.get("dock"); docks[docks.docked] = true; }
     camOn = true; showCam();
     renderMe(); render(); renderLesson();
     setInterval(() => {

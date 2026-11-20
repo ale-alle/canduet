@@ -40,30 +40,15 @@ String getPracticePage()
 
 #if JUCE_WEB_BROWSER && JUCE_USE_WIN_WEBVIEW2
 
-// The docked Tools panel: a borderless child window of the main window, laid exactly over the gap the
-// page leaves for it. Created after the web view, so Windows draws it on top.
-class LessonView::ToolsDock : public Component
+// The dock (T-085): a borderless child window of the main window, laid exactly over the gap the page
+// leaves for the docked tool. Created after the web view, so Windows draws it on top. It holds the
+// docked tool's DockHolder, which moves in and out of the tool's own window.
+class LessonView::DockFrame : public Component
 {
 public:
-    explicit ToolsDock(std::unique_ptr<ToolsPanel> panel_) : panel(std::move(panel_))
-    {
-        setOpaque(true);
-        addAndMakeVisible(panel.get());
-    }
-
-    void paint(Graphics & g) override
-    {
-        g.fillAll(TinCanTheme::surface);
-        g.setColour(TinCanTheme::line);
-        g.drawRect(getLocalBounds(), 1);
-    }
-
-    void resized() override { panel->setBounds(getLocalBounds().reduced(1)); }
-
-    ToolsPanel * getPanel() const { return panel.get(); }
-
-private:
-    std::unique_ptr<ToolsPanel> panel;
+    DockFrame() { setOpaque(true); }
+    void paint(Graphics & g) override { g.fillAll(TinCanTheme::surface); }
+    void resized() override { for (auto * c : getChildren()) c->setBounds(getLocalBounds()); }
 };
 
 std::unique_ptr<LessonView> LessonView::create(SonobusAudioProcessor & processor, const VideoInfo & video,
@@ -93,6 +78,8 @@ LessonView::LessonView(SonobusAudioProcessor & p, std::unique_ptr<VideoTilesView
     if (!info.practice) hooks.noteShare = nullptr;
     if (hooks.noteShare) hooks.noteShare->addListener(this);
     addAndMakeVisible(page.get());
+    loadLayout();
+    frame = std::make_unique<DockFrame>();
     startTimer(100);
 }
 
@@ -100,7 +87,22 @@ LessonView::~LessonView()
 {
     if (hooks.noteShare) hooks.noteShare->removeListener(this);
     stopTimer();
-    tools.reset();
+    // Board and Score outlive the lesson window: give a docked page back to its own window (hidden)
+    // before the dock goes, or its WebView2 would go with it
+    for (auto id : { "board", "score" }) {
+        if (auto * w = windowFor(id, false)) {
+            if (docked == id) w->takeBack();
+            else if (w->isVisible()) rememberWindow(id);
+            w->setVisible(false);
+            w->onToggleDock = nullptr;
+            w->onClose = nullptr;
+            w->getHolder().setCanDock(false);
+        }
+    }
+    if (toolsWindow && toolsWindow->isVisible()) rememberWindow("tools");
+    saveLayout();
+    toolsWindow.reset();
+    frame.reset();
     page.reset();
 }
 
@@ -112,54 +114,174 @@ void LessonView::paint(Graphics & g)
 void LessonView::resized()
 {
     page->setBounds(getLocalBounds());
-    placeTools();
+    placeFrame();
 }
 
 ToolsPanel * LessonView::getTools() const
 {
-    return tools ? tools->getPanel() : nullptr;
+    return toolsWindow ? dynamic_cast<ToolsPanel *>(toolsWindow->getBody()) : nullptr;
 }
 
-void LessonView::setToolsOpen(bool open)
+// ---- docking (T-085) ----
+
+void LessonView::loadLayout()
 {
-    if (open == toolsOpen) return;
-    toolsOpen = open;
-    if (!open) {
-        // closing destroys the panel, which stops the tuner and the MIDI copy
-        tools.reset();
-        toolsRect = {};
+    const var v = JSON::parse(processor.getDockLayout());
+    for (auto id : { "tools", "board", "score" }) {
+        const var t = v.getProperty(id, var());
+        if (!t.isObject()) continue;
+        const var d = t.getProperty("docked", var());
+        if (d.isBool()) wantDocked[id] = (bool) d;
+        const auto state = t.getProperty("window", var()).toString();
+        if (state.length() < 200) windowStates[id] = state;
     }
-    else if (hooks.makeTools) {
-        if (auto panel = hooks.makeTools()) tools = std::make_unique<ToolsDock>(std::move(panel));
+}
+
+void LessonView::saveLayout()
+{
+    DynamicObject::Ptr all = new DynamicObject();
+    for (auto id : { "tools", "board", "score" }) {
+        DynamicObject::Ptr t = new DynamicObject();
+        t->setProperty("docked", wantDocked.count(id) ? wantDocked[id] : true);
+        if (windowStates.count(id)) t->setProperty("window", windowStates[id]);
+        all->setProperty(id, var(t.get()));
     }
+    processor.setDockLayout(JSON::toString(var(all.get()), true));
+}
+
+void LessonView::rememberWindow(const String & id)
+{
+    if (auto * w = windowFor(id, false); w != nullptr && !w->isDocked() && !w->isMinimised())
+        windowStates[id] = w->saveState();
+}
+
+DockableWindow * LessonView::windowFor(const String & id, bool create)
+{
+    if (id == "tools") {
+        if (!toolsWindow && create && hooks.makeTools) {
+            if (auto panel = hooks.makeTools()) {
+                toolsWindow = std::make_unique<DockableWindow>(TRANS("Tools"), 1100, 400);
+                toolsWindow->setBody(std::move(panel));
+            }
+        }
+        if (toolsWindow && create) wireWindow(*toolsWindow, id);
+        return toolsWindow.get();
+    }
+    auto & hook = id == "board" ? hooks.boardWindow : hooks.scoreWindow;
+    if (!hook || (id != "board" && id != "score")) return nullptr;
+    auto * w = hook(create);
+    if (w != nullptr && create) wireWindow(*w, id);
+    return w;
+}
+
+void LessonView::wireWindow(DockableWindow & w, const String & id)
+{
+    // after the click returns: closing Tools deletes the window the button is in
+    Component::SafePointer<LessonView> safeThis(this);
+    w.onToggleDock = [safeThis, id]() { MessageManager::callAsync([safeThis, id]() { if (safeThis) safeThis->toggleDock(id); }); };
+    w.onClose = [safeThis, id]() { MessageManager::callAsync([safeThis, id]() { if (safeThis) safeThis->closeTool(id); }); };
+    w.getHolder().setCanDock(true);
+    if (!w.getProperties().contains("canduetPlaced") && !w.isVisible()) {
+        w.getProperties().set("canduetPlaced", true);
+        if (windowStates.count(id)) w.restoreState(windowStates[id]);
+    }
+}
+
+bool LessonView::isToolOpen(const String & id)
+{
+    if (docked == id) return true;
+    auto * w = windowFor(id, false);
+    return w != nullptr && w->isVisible();
+}
+
+void LessonView::openTool(const String & id)
+{
+    auto * w = windowFor(id, true);
+    if (w == nullptr) return;
+    const bool dockIt = wantDocked.count(id) ? wantDocked[id] : true;
+    if (dockIt) dockTool(id);
+    else if (docked != id) w->showFloating();
+    sendState();
+}
+
+void LessonView::closeTool(const String & id)
+{
+    if (auto * w = windowFor(id, false)) {
+        if (docked == id) {
+            w->takeBack();
+            docked.clear();
+        }
+        else if (w->isVisible()) rememberWindow(id);
+        w->setVisible(false);
+    }
+    if (id == "tools") toolsWindow.reset();   // stops the tuner and the MIDI copy
+    placeFrame();
+    saveLayout();
+    sendState();
+}
+
+void LessonView::dockTool(const String & id)
+{
+    // one docked tool at a time; tools in their own windows stay
+    if (docked.isNotEmpty() && docked != id) closeTool(docked);
+    auto * w = windowFor(id, true);
+    if (w == nullptr) return;
+    if (w->isVisible()) rememberWindow(id);
+    // on the main window before the page moves in, so its WebView2 has a window to move to
+    if (auto * top = getTopLevelComponent(); top != nullptr && top->getPeer() != nullptr && !frame->isOnDesktop())
+        frame->addToDesktop(0, top->getPeer()->getNativeHandle());
+    w->dockInto(*frame);
+    docked = id;
     sendState();   // the page opens the gap, then tells us where it is
-    placeTools();
+    placeFrame();
 }
 
-void LessonView::placeTools()
+void LessonView::toggleDock(const String & id)
 {
-    if (!tools) return;
+    auto * w = windowFor(id, false);
+    if (w == nullptr) return;
+    if (docked == id) {
+        // pop out: its own window, where it was; the people get the whole window again
+        wantDocked[id] = false;
+        w->takeBack();
+        docked.clear();
+        if (windowStates.count(id)) w->restoreState(windowStates[id]);
+        w->showFloating();
+        placeFrame();
+    }
+    else {
+        wantDocked[id] = true;
+        dockTool(id);
+    }
+    saveLayout();
+    sendState();
+}
+
+void LessonView::placeFrame()
+{
+    if (!frame) return;
     auto * top = getTopLevelComponent();
     auto * peer = top ? top->getPeer() : nullptr;
-    if (peer == nullptr || toolsRect.isEmpty()) {
-        tools->setVisible(false);
+    const auto rect = docked == "tools" ? toolsRect : sideRect;
+    if (docked.isEmpty() || peer == nullptr || rect.isEmpty()) {
+        frame->setVisible(false);
         return;
     }
-    if (!tools->isOnDesktop()) {
+    if (!frame->isOnDesktop()) {
         // a child of the main window's native window, created after the web view so it sits above it
-        tools->addToDesktop(0, peer->getNativeHandle());
+        frame->addToDesktop(0, peer->getNativeHandle());
     }
 
     auto area = page->getLocalBounds().toFloat();
-    juce::Rectangle<int> r = juce::Rectangle<float>(area.getWidth() * toolsRect.getX(), area.getHeight() * toolsRect.getY(),
-                                                    area.getWidth() * toolsRect.getWidth(), area.getHeight() * toolsRect.getHeight())
+    juce::Rectangle<int> r = juce::Rectangle<float>(area.getWidth() * rect.getX(), area.getHeight() * rect.getY(),
+                                                    area.getWidth() * rect.getWidth(), area.getHeight() * rect.getHeight())
                                  .getSmallestIntegerContainer();
     // child windows are placed in the main window's client coordinates
     auto bounds = top->getLocalArea(page.get(), r);
-    if (tools->getBounds() != bounds) tools->setBounds(bounds);
-    if (!tools->isVisible()) {
-        tools->setVisible(true);
-        tools->toFront(false);   // above the web view's own window
+    if (frame->getBounds() != bounds) frame->setBounds(bounds);
+    if (!frame->isVisible()) {
+        frame->setVisible(true);
+        frame->toFront(false);   // above the web view's own window
     }
 }
 
@@ -194,7 +316,7 @@ void LessonView::timerCallback()
     }
     sendState();
     sendNewChat();
-    placeTools();   // the main window may have moved or changed size
+    placeFrame();   // the main window may have moved or changed size
 }
 
 float LessonView::getParam(const String & id) const
@@ -445,9 +567,10 @@ void LessonView::sendState()
     rec->setProperty("secs", hooks.recordSeconds ? std::floor(hooks.recordSeconds()) : 0.0);
 
     DynamicObject::Ptr docks = new DynamicObject();
-    docks->setProperty("tools", toolsOpen);
-    docks->setProperty("board", hooks.boardOpen && hooks.boardOpen());
-    docks->setProperty("score", hooks.scoreOpen && hooks.scoreOpen());
+    docks->setProperty("tools", isToolOpen("tools"));
+    docks->setProperty("board", isToolOpen("board"));
+    docks->setProperty("score", isToolOpen("score"));
+    docks->setProperty("docked", docked);
 
     DynamicObject::Ptr msg = new DynamicObject();
     msg->setProperty("t", "state");
@@ -695,23 +818,29 @@ void LessonView::handleMessage(const var & message)
     else if (type == "recvMute") {
         setParam(SonobusAudioProcessor::paramMainRecvMute, (bool) value ? 1.0f : 0.0f);
     }
-    else if (type == "tools") {
-        setToolsOpen(!toolsOpen);
+    else if (type == "tools" || type == "board" || type == "score") {
+        // the lesson bar's buttons: open (docked or in its own window, as last left) or close
+        if (isToolOpen(type)) closeTool(type); else openTool(type);
     }
     else if (type == "dock") {
-        toolsRect = {};
-        if (auto * a = message.getProperty("rect", var()).getArray(); a != nullptr && a->size() == 4) {
-            float v[4];
-            bool ok = true;
-            for (int k = 0; k < 4; ++k) {
-                const var & x = (*a)[k];
-                v[k] = (x.isDouble() || x.isInt()) ? (float) x : NAN;
-                ok = ok && std::isfinite(v[k]);
+        auto readRect = [&message](const char * key) {
+            juce::Rectangle<float> out;
+            if (auto * a = message.getProperty(key, var()).getArray(); a != nullptr && a->size() == 4) {
+                float v[4];
+                bool ok = true;
+                for (int k = 0; k < 4; ++k) {
+                    const var & x = (*a)[k];
+                    v[k] = (x.isDouble() || x.isInt()) ? (float) x : NAN;
+                    ok = ok && std::isfinite(v[k]);
+                }
+                juce::Rectangle<float> r(v[0], v[1], v[2], v[3]);
+                if (ok && r.getWidth() > 0.0f && r.getHeight() > 0.0f) out = r.getIntersection({ 0.0f, 0.0f, 1.0f, 1.0f });
             }
-            juce::Rectangle<float> r(v[0], v[1], v[2], v[3]);
-            if (ok && r.getWidth() > 0.0f && r.getHeight() > 0.0f) toolsRect = r.getIntersection({ 0.0f, 0.0f, 1.0f, 1.0f });
-        }
-        placeTools();
+            return out;
+        };
+        toolsRect = readRect("rect");
+        sideRect = readRect("side");
+        placeFrame();
     }
     else if (type == "chat") {
         auto text = message.getProperty("text", var()).toString().trim().substring(0, 2000);
@@ -735,8 +864,6 @@ void LessonView::handleMessage(const var & message)
         if (a == "start" && hooks.markStart) hooks.markStart();
         if (a == "save" && hooks.markSave) hooks.markSave(message.getProperty("label", var()).toString().trim().substring(0, 80));
     }
-    else if (type == "board")    { if (hooks.toggleBoard) hooks.toggleBoard(); }
-    else if (type == "score")    { if (hooks.toggleScore) hooks.toggleScore(); }
     else if (type == "setup")    { if (hooks.openSetup) hooks.openSetup(); }
     else if (type == "settings") { if (hooks.openSettings) hooks.openSettings(); }
     else if (type == "effects")  { if (info.teacher && hooks.openEffects) hooks.openEffects(); }
@@ -776,7 +903,7 @@ void LessonView::handlePeerMessage(int i, const String & kind, const var & value
 
 #else
 
-class LessonView::ToolsDock : public Component {};
+class LessonView::DockFrame : public Component {};
 
 std::unique_ptr<LessonView> LessonView::create(SonobusAudioProcessor &, const VideoInfo &, const LessonInfo &, Hooks) { return nullptr; }
 LessonView::~LessonView() = default;
@@ -784,7 +911,9 @@ void LessonView::resized() {}
 void LessonView::paint(Graphics &) {}
 void LessonView::setPeerVideoId(const String &, const String &) {}
 void LessonView::showToast(const String &, int) {}
-void LessonView::setToolsOpen(bool) {}
+void LessonView::openTool(const String &) {}
+void LessonView::closeTool(const String &) {}
+bool LessonView::isToolOpen(const String &) { return false; }
 ToolsPanel * LessonView::getTools() const { return nullptr; }
 void LessonView::timerCallback() {}
 void LessonView::notesArrived(const std::vector<NoteEvent> &) {}

@@ -7,6 +7,7 @@
 #include "SonobusPluginProcessor.h"
 #include "TinCanVideoTiles.h"
 #include "TinCanTools.h"
+#include "TinCanDock.h"
 
 #include <functional>
 #include <map>
@@ -16,15 +17,18 @@
 // During a lesson one web page (video-page/lesson.html, served next to the video page) covers the
 // whole main window: the people as video tiles with the red string between them, each person's sound
 // on hover and behind the tile, the lesson bar and all its popovers. There are no SonoBus audio rows.
-// The only native part on screen is the Tools panel, docked into a gap the page leaves for it.
+// Tools, Board and Score each open docked inside the lesson window or in a window of their own, as each
+// was last left (T-085). One tool is docked at a time: Tools along the bottom, Board or Score in the right
+// two thirds with the people small on the left. Tools in their own windows stay open whatever is docked.
 //
 // WebView2 is a native window of its own, so nothing JUCE draws inside the main window can appear on
-// top of it. That is why everything that floats lives in the page, and why the docked Tools panel is a
-// borderless child window (created after the web view, so it sits above it).
+// top of it. That is why everything that floats lives in the page, and why the dock is a borderless
+// child window (created after the web view, so it sits above it) laid over a gap the page leaves.
 //
 // Messages (JSON, WebView2 postMessage):
 //   app  -> page  {"t":"state","me":{…},"inputs":[{"i","label","name","stereo","canPair","gain","pan","muted","level","levels"}],"conn":"connecting|connected|lost","lesson":{…},
-//                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board","score"}}      ~10 a second
+//                  "peers":[{…}],"rec":{"phase","secs"},"docks":{"tools","board","score","docked"}}   ~10 a second
+//                  (docks: which tools are open, and which one is docked: "tools", "board", "score" or "")
 //                 {"t":"chat","items":[{"from","text","me","sys"}]}                    new messages
 //                 {"t":"toast","text","ms"}                                           a short notice
 //   page -> app   {"t":"ready"}
@@ -35,7 +39,8 @@
 //                 {"t":"tools"} {"t":"board"} {"t":"score"} {"t":"setup"} {"t":"settings"} {"t":"effects"} {"t":"help"} {"t":"leave"}
 //                 {"t":"rec","a":"ask|stop"} {"t":"mark","a":"start|save","label"}
 //                 {"t":"chat","text"}
-//                 {"t":"dock","rect":[x,y,w,h]}                  the Tools gap, as fractions of the page ([] = closed)
+//                 {"t":"dock","rect":[x,y,w,h],"side":[x,y,w,h]}  the gaps for docked Tools (bottom) and Board or Score
+//                                                                (right), as fractions of the page ([] = none)
 namespace TinCan {
 
 // lesson page: TINCAN_LESSON_PAGE (https, or http to localhost), else <video page>lesson.html
@@ -61,12 +66,13 @@ class LessonView : public Component, private Timer, private NoteShare::Listener
 public:
     struct Hooks
     {
-        std::function<void()> toggleBoard, toggleScore, openSetup, openSettings, openEffects, openHelp, leave, shareVideoId;
+        std::function<void()> openSetup, openSettings, openEffects, openHelp, leave, shareVideoId;
+        // the Board and Score windows, made when create is true (else nullptr when there isn't one)
+        std::function<DockableWindow *(bool create)> boardWindow, scoreWindow;
         std::function<void()> recordAsk, recordStop, markStart;
         std::function<void(const String &)> markSave;
         std::function<String()> recordPhase;      // "idle", "asking", "asked" or "recording"
         std::function<double()> recordSeconds;
-        std::function<bool()> boardOpen, scoreOpen;
         std::function<void(String & in, String & out)> deviceNames;
         // the audio interface's inputs that are on, in order: device channel numbers (0-based) and names
         std::function<void(Array<int> & numbers, StringArray & names)> inputChannels;
@@ -87,13 +93,17 @@ public:
 
     void showToast(const String & text, int timeoutMs = 5000);
 
-    bool isToolsOpen() const { return toolsOpen; }
     bool isPractice() const { return info.practice; }
-    void setToolsOpen(bool open);
+    // "tools", "board" or "score": opened docked or in its own window, as it was last left
+    void openTool(const String & id);
+    void closeTool(const String & id);
+    bool isToolOpen(const String & id);
+    bool isToolsOpen() { return isToolOpen("tools"); }
+    void setToolsOpen(bool open) { if (open) openTool("tools"); else closeTool("tools"); }
     ToolsPanel * getTools() const;
 
 private:
-    class ToolsDock;
+    class DockFrame;
 
     LessonView(SonobusAudioProcessor & processor, std::unique_ptr<VideoTilesView> page, const LessonInfo & info, Hooks hooks);
 
@@ -106,7 +116,14 @@ private:
     var effectsState(int group);
     var busState();
     void sendNewChat();
-    void placeTools();
+    void placeFrame();
+    DockableWindow * windowFor(const String & id, bool create);
+    void wireWindow(DockableWindow & w, const String & id);
+    void dockTool(const String & id);
+    void toggleDock(const String & id);
+    void loadLayout();
+    void saveLayout();
+    void rememberWindow(const String & id);
     void setParam(const String & id, float value);
     float getParam(const String & id) const;
     int findPeerIndexByName(const String & name) const;
@@ -117,9 +134,12 @@ private:
     LessonInfo info;
     Hooks hooks;
 
-    std::unique_ptr<ToolsDock> tools;
-    bool toolsOpen = false;
-    juce::Rectangle<float> toolsRect;   // fractions of the page; empty: not laid out yet
+    std::unique_ptr<DockFrame> frame;             // the dock: a child window over the page's gap
+    std::unique_ptr<DockableWindow> toolsWindow;  // Tools (closing it stops the tuner and the MIDI copy)
+    String docked;                                // the tool in the dock, or empty
+    juce::Rectangle<float> toolsRect, sideRect;   // the page's gaps, as fractions; empty: not laid out yet
+    std::map<String, bool> wantDocked;            // each tool's last place (docked unless popped out)
+    std::map<String, String> windowStates;        // each tool's own window, where it was
 
     std::map<String, String> peerVideoIds;   // audio name -> video identity
     int lastPeerCount = -1;

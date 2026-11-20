@@ -5,6 +5,7 @@
 
 #include "JuceHeader.h"
 #include "TinCanNoteShare.h"
+#include "TinCanDock.h"
 #include "TinCanScoreCore.h"
 
 class SonobusAudioProcessor;
@@ -19,7 +20,7 @@ namespace TinCan {
 constexpr const char * kScoreTag = "canduet-score-1";
 constexpr int kScoreMaxPayload = 3000;
 
-class ScoreWindow : public DocumentWindow, private Timer, private NoteShare::Listener
+class ScoreWindow : public DockableWindow, private Timer, private NoteShare::Listener
 {
 public:
     struct Hooks
@@ -33,8 +34,8 @@ public:
     ScoreWindow(SonobusAudioProcessor & processor, NoteShare & noteShare, Hooks hooks);
     ~ScoreWindow() override;
 
-    // closing only hides it: the score (and the sharing) carry on until the lesson ends
-    void closeButtonPressed() override { setVisible(false); }
+    // closing only hides it: the score (and the sharing) carry on until the lesson ends; in a lesson
+    // it can dock inside the lesson window (T-085)
 
     // a score message from someone in the lesson (message thread)
     void receive(const String & from, const String & payload);

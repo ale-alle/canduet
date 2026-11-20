@@ -4,6 +4,7 @@
 #pragma once
 
 #include "JuceHeader.h"
+#include "TinCanDock.h"
 
 // Tin Can lesson workspace (T-037, D-019): the page in workspace-page/ (built into the app) shown
 // in WebView2. Images and whiteboards on a board, with pen, highlighter, arrows and text.
@@ -16,14 +17,13 @@ namespace TinCan {
 // for working on the page without rebuilding.
 String getWorkspacePageURL(const String & displayName);
 
-// Closing only hides the window, so the board is still there when it's opened again.
-class WorkspaceWindow : public DocumentWindow
+// Closing only hides the window, so the board is still there when it's opened again. In a lesson it
+// can dock inside the lesson window (T-085).
+class WorkspaceWindow : public DockableWindow
 {
 public:
     explicit WorkspaceWindow(const String & displayName);
     ~WorkspaceWindow() override;
-
-    void closeButtonPressed() override { setVisible(false); }
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WorkspaceWindow)

@@ -3456,13 +3456,22 @@ void SonobusAudioProcessorEditor::showAudioSetup(bool show)
     }, closeLater);
 }
 
-void SonobusAudioProcessorEditor::showWorkspace()
+TinCan::WorkspaceWindow * SonobusAudioProcessorEditor::getWorkspaceWindow(bool create)
 {
-    if (!mWorkspaceWindow) {
+    if (!mWorkspaceWindow && create) {
         mWorkspaceWindow = std::make_unique<TinCan::WorkspaceWindow>(processor.getCurrentUsername());
     }
-    mWorkspaceWindow->setVisible(true);
-    mWorkspaceWindow->toFront(true);
+    return mWorkspaceWindow.get();
+}
+
+void SonobusAudioProcessorEditor::showWorkspace()
+{
+    // in a lesson, docked or in its own window as last left (T-085)
+    if (mLessonView) {
+        mLessonView->openTool("board");
+        return;
+    }
+    if (auto * w = getWorkspaceWindow(true)) w->showFloating();
 }
 
 void SonobusAudioProcessorEditor::handleScoreMessages()
@@ -3492,7 +3501,17 @@ void SonobusAudioProcessorEditor::handleScoreMessages()
 
 void SonobusAudioProcessorEditor::showScore()
 {
-    if (!mScoreWindow) {
+    // in a lesson, docked or in its own window as last left (T-085)
+    if (mLessonView) {
+        mLessonView->openTool("score");
+        return;
+    }
+    if (auto * w = getScoreWindow(true)) w->showFloating();
+}
+
+TinCan::ScoreWindow * SonobusAudioProcessorEditor::getScoreWindow(bool create)
+{
+    if (!mScoreWindow && create) {
         Component::SafePointer<SonobusAudioProcessorEditor> safeThis(this);
         TinCan::ScoreWindow::Hooks hooks;
         hooks.practice = mLessonView == nullptr || mLessonView->isPractice();
@@ -3517,14 +3536,7 @@ void SonobusAudioProcessorEditor::showScore()
         };
         mScoreWindow = std::make_unique<TinCan::ScoreWindow>(processor, getNoteShare(), std::move(hooks));
     }
-    mScoreWindow->setVisible(true);
-    mScoreWindow->toFront(true);
-}
-
-void SonobusAudioProcessorEditor::toggleScore()
-{
-    if (mScoreWindow && mScoreWindow->isVisible() && mScoreWindow->isActiveWindow()) mScoreWindow->setVisible(false);
-    else showScore();
+    return mScoreWindow.get();
 }
 
 TinCan::TempoShare & SonobusAudioProcessorEditor::getTempoShare()
@@ -3555,6 +3567,11 @@ void SonobusAudioProcessorEditor::closeLessonVideo()
     const bool logSteps = mLessonView != nullptr;   // T-081: find where leaving froze (connection-log.txt)
     auto step = [logSteps](const char * what) { if (logSteps) SonobusAudioProcessor::logConnectionStep(String("leave: ") + what); };
     step("closing score");
+    // T-085: through the lesson window, which remembers where each was (and takes a docked page back)
+    if (mLessonView) {
+        mLessonView->closeTool("score");
+        mLessonView->closeTool("board");
+    }
     mScoreWindow.reset();
     // T-081: the board belongs to the lesson too (it stayed open after leaving)
     if (mWorkspaceWindow) mWorkspaceWindow->setVisible(false);
@@ -3678,14 +3695,8 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
                        TinCan::kVideoIdTag, TinCan::makeVideoIdMessage(safeThis->mVideoIdentity));
         proc.sendChatEvent(ev);
     };
-    h.toggleBoard = [safeThis]() {
-        if (!safeThis) return;
-        if (safeThis->mWorkspaceWindow && safeThis->mWorkspaceWindow->isVisible()) safeThis->mWorkspaceWindow->setVisible(false);
-        else safeThis->showWorkspace();
-    };
-    h.boardOpen = [safeThis]() { return safeThis && safeThis->mWorkspaceWindow && safeThis->mWorkspaceWindow->isVisible(); };
-    h.toggleScore = [safeThis]() { if (safeThis) safeThis->toggleScore(); };
-    h.scoreOpen = [safeThis]() { return safeThis && safeThis->mScoreWindow && safeThis->mScoreWindow->isVisible(); };
+    h.boardWindow = [safeThis](bool create) -> TinCan::DockableWindow * { return safeThis ? safeThis->getWorkspaceWindow(create) : nullptr; };
+    h.scoreWindow = [safeThis](bool create) -> TinCan::DockableWindow * { return safeThis ? safeThis->getScoreWindow(create) : nullptr; };
     getTempoShare();   // watching the tempo from the start of the lesson
     h.openSetup = [safeThis]() { if (safeThis) safeThis->showAudioSetup(true); };
     h.openSettings = [safeThis]() {

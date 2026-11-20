@@ -438,6 +438,8 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanMp3Format.cpp
         Source/TinCanMp3Format.h
         Source/TinCanDelay.h
+        Source/TinCanDock.cpp
+        Source/TinCanDock.h
         Source/TinCanSummaries.cpp
         Source/TinCanSummaries.h
         Source/VDONinjaView.h

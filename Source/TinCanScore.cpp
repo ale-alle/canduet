@@ -72,11 +72,9 @@ private:
 };
 
 ScoreWindow::ScoreWindow(SonobusAudioProcessor & p, NoteShare & ns, Hooks h)
-    : DocumentWindow(TRANS("Score"), TinCanTheme::night, DocumentWindow::allButtons),
+    : DockableWindow(TRANS("Score"), 1200, 720),
       processor(p), noteShare(ns), hooks(std::move(h))
 {
-    setUsingNativeTitleBar(true);
-    setResizable(true, false);
     setResizeLimits(560, 320, 10000, 10000);
 
     auto options = makeWebViewOptions();
@@ -86,17 +84,15 @@ ScoreWindow::ScoreWindow(SonobusAudioProcessor & p, NoteShare & ns, Hooks h)
         String name = hooks.myName ? hooks.myName().substring(0, 80) : String();
         b->goToURL(url + "#name=" + URL::addEscapeChars(name, true) + (hooks.practice ? "&practice=1" : ""));
         browser = b.get();
-        setContentOwned(b.release(), false);
+        setBody(std::move(b));
     }
     else {
-        auto * label = new Label({}, TRANS("The score needs Microsoft Edge WebView2, which isn't installed on this computer."));
+        auto label = std::make_unique<Label>(String(), TRANS("The score needs Microsoft Edge WebView2, which isn't installed on this computer."));
         label->setJustificationType(Justification::centred);
-        setContentOwned(label, false);
+        setBody(std::move(label));
     }
 
     noteShare.addListener(this);
-    centreWithSize(1200, 720);
-    setVisible(true);
     startTimerHz(30);
 }
 
@@ -348,15 +344,12 @@ void ScoreWindow::notesArrived(const std::vector<NoteEvent> & events)
 class ScoreWindow::Browser : public Component {};
 
 ScoreWindow::ScoreWindow(SonobusAudioProcessor & p, NoteShare & ns, Hooks h)
-    : DocumentWindow(TRANS("Score"), TinCanTheme::night, DocumentWindow::allButtons),
+    : DockableWindow(TRANS("Score"), 480, 240),
       processor(p), noteShare(ns), hooks(std::move(h))
 {
-    setUsingNativeTitleBar(true);
-    auto * label = new Label({}, TRANS("The score isn't available in this build."));
+    auto label = std::make_unique<Label>(String(), TRANS("The score isn't available in this build."));
     label->setJustificationType(Justification::centred);
-    setContentOwned(label, false);
-    centreWithSize(480, 200);
-    setVisible(true);
+    setBody(std::move(label));
 }
 
 ScoreWindow::~ScoreWindow() = default;

@@ -57,40 +57,30 @@ private:
 }
 
 WorkspaceWindow::WorkspaceWindow(const String & displayName)
-    : DocumentWindow(TRANS("Lesson workspace"), TinCanTheme::night, DocumentWindow::allButtons)
+    : DockableWindow(TRANS("Board"), 1200, 800)
 {
-    setUsingNativeTitleBar(true);
-    setResizable(true, false);
-    setResizeLimits(480, 320, 10000, 10000);
-
     auto options = makeWebViewOptions();
     if (WebBrowserComponent::areOptionsSupported(options)) {
         auto url = getWorkspacePageURL(displayName);
         auto browser = std::make_unique<WorkspaceBrowser>(options, url.upToFirstOccurrenceOf("#", false, false));
         browser->goToURL(url);
-        setContentOwned(browser.release(), false);
+        setBody(std::move(browser));
     }
     else {
-        auto * label = new Label({}, TRANS("The workspace needs Microsoft Edge WebView2, which isn't installed on this computer."));
+        auto label = std::make_unique<Label>(String(), TRANS("The workspace needs Microsoft Edge WebView2, which isn't installed on this computer."));
         label->setJustificationType(Justification::centred);
-        setContentOwned(label, false);
+        setBody(std::move(label));
     }
-
-    centreWithSize(1200, 800);
-    setVisible(true);
 }
 
 #else
 
 WorkspaceWindow::WorkspaceWindow(const String &)
-    : DocumentWindow(TRANS("Lesson workspace"), TinCanTheme::night, DocumentWindow::allButtons)
+    : DockableWindow(TRANS("Board"), 480, 240)
 {
-    setUsingNativeTitleBar(true);
-    auto * label = new Label({}, TRANS("The workspace isn't available in this build."));
+    auto label = std::make_unique<Label>(String(), TRANS("The workspace isn't available in this build."));
     label->setJustificationType(Justification::centred);
-    setContentOwned(label, false);
-    centreWithSize(480, 200);
-    setVisible(true);
+    setBody(std::move(label));
 }
 
 #endif

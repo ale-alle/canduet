@@ -524,6 +524,24 @@ public:
 
     void componentPeerChanged() override
     {
+        // Tin Can patch: follow the component into another window (docking a page into the lesson
+        // window and back, T-085). The controller was made for the old peer's HWND; without this it
+        // stays there, hidden or destroyed with it.
+        if (webViewController != nullptr)
+        {
+            if (auto* peer = owner.getTopLevelComponent()->getPeer())
+            {
+                HWND parent = nullptr;
+                webViewController->get_ParentWindow (&parent);
+
+                if (parent != (HWND) peer->getNativeHandle())
+                {
+                    webViewController->put_ParentWindow ((HWND) peer->getNativeHandle());
+                    setControlVisible (owner.isShowing());
+                }
+            }
+        }
+
         componentMovedOrResized (true, true);
     }
 

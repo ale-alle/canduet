@@ -121,6 +121,7 @@ static String fxDelayTimeKey("fxDelayTimeMs");
 static String fxDelayFeedbackKey("fxDelayFeedback");
 static String fxDelayToneKey("fxDelayToneHz");
 static String fxDelayLevelKey("fxDelayLevel");
+static String dockLayoutKey("tinCanDockLayout");
 static String langOverrideCodeKey("langOverrideCode");
 static String useUnivFontKey("useUnivFont");
 static String lastWindowWidthKey("lastWindowWidth");
@@ -8944,6 +8945,7 @@ void SonobusAudioProcessor::getStateInformationWithOptions(MemoryBlock& destData
     extraTree.setProperty(fxDelayFeedbackKey, mInputDelay.feedback.load(), nullptr);
     extraTree.setProperty(fxDelayToneKey, mInputDelay.toneHz.load(), nullptr);
     extraTree.setProperty(fxDelayLevelKey, mInputDelay.level.load(), nullptr);
+    extraTree.setProperty(dockLayoutKey, mDockLayout, nullptr);
     extraTree.setProperty(lastUsernameKey, mCurrentUsername, nullptr);
     extraTree.setProperty(langOverrideCodeKey, mLangOverrideCode, nullptr);
     extraTree.setProperty(useUnivFontKey, mUseUniversalFont, nullptr);
@@ -9067,6 +9069,7 @@ void SonobusAudioProcessor::setStateInformationWithOptions (const void* data, in
             mInputDelay.feedback = (float) extraTree.getProperty(fxDelayFeedbackKey, mInputDelay.feedback.load());
             mInputDelay.toneHz = (float) extraTree.getProperty(fxDelayToneKey, mInputDelay.toneHz.load());
             mInputDelay.level = (float) extraTree.getProperty(fxDelayLevelKey, mInputDelay.level.load());
+            mDockLayout = extraTree.getProperty(dockLayoutKey, mDockLayout).toString();
 
             bool linkmon = extraTree.getProperty(linkMonitoringDelayTimesKey, mLinkMonitoringDelayTimes);
             setLinkMonitoringDelayTimes(linkmon);

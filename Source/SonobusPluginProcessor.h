@@ -603,6 +603,10 @@ public:
     void setInputDelaySend(int changroup, float sendgain);
     float getInputDelaySend(int changroup);
     TinCan::Delay & getInputDelay() { return mInputDelay; }
+
+    // CanDuet: where Tools, Board and Score go (docked or their own window, and where), as JSON (T-085)
+    String getDockLayout() const { return mDockLayout; }
+    void setDockLayout(const String & json) { mDockLayout = json; }
     float getInputReverbSend(int changroup, bool input=false);
 
     void setInputPolarityInvert(int changroup, bool invert);
@@ -1083,6 +1087,7 @@ private:
     bool mReverbParamsChanged = false;
     bool mLastHasMainFx = false;
     bool mLastInputReverbEnabled = false;
+    String mDockLayout;
     int64 mInputDelayTailSamples = 0;   // CanDuet: keeps the delay running while its echoes die away
     bool mFreshInit = true;
     

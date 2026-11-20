@@ -605,10 +605,11 @@ private:
     // lesson workspace (T-037); kept when closed so the board survives
     std::unique_ptr<TinCan::WorkspaceWindow> mWorkspaceWindow;
     void showWorkspace();
+    TinCan::WorkspaceWindow * getWorkspaceWindow(bool create);
+    TinCan::ScoreWindow * getScoreWindow(bool create);
     // shared score (T-080): one per lesson or practice, kept when closed, gone when the lesson ends
     std::unique_ptr<TinCan::ScoreWindow> mScoreWindow;
     void showScore();
-    void toggleScore();
     // shared metronome tempo (T-080): anyone in the lesson can change it
     std::unique_ptr<TinCan::TempoShare> mTempoShare;
     TinCan::TempoShare & getTempoShare();
