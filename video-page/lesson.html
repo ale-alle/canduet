@@ -976,8 +976,35 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     $("#boardBtn").setAttribute("aria-pressed", String(!!docks.board));
     $("#scoreBtn").setAttribute("aria-pressed", String(!!docks.score));
     if (body.classList.contains("tools-on") !== !!docks.tools) { body.classList.toggle("tools-on", !!docks.tools); sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); }); }
+    checkLessonEnd(now);
   }
   setInterval(renderLesson, 1000);
+
+  // T-081: the room closes 15 minutes after the end (rooms-worker, D-008). Both people are told
+  // 5 minutes before the end and 5 minutes before the room closes; at the close everyone leaves.
+  // (declared with the function so an early renderLesson() can't reach them before they exist)
+  function checkLessonEnd(now) {
+    const ROOM_GRACE_MS = 15 * 60000, WARN_MS = 5 * 60000;
+    const endWarned = checkLessonEnd.state || (checkLessonEnd.state = { end: false, close: false, left: false });
+    const e = lessonInfo.endsAt;
+    if (practice || demo || !e || endWarned.left) return;
+    const close = e + ROOM_GRACE_MS;
+    const at = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    if (now >= close) {
+      endWarned.left = true;
+      toast("The lesson room has closed. Taking you back to My lessons…", 6000);
+      setTimeout(() => send({ t: "leave", why: "closed" }), 2500);
+    } else if (now >= close - WARN_MS) {
+      if (!endWarned.close) {
+        endWarned.close = endWarned.end = true;
+        toast("Lesson room closing at " + at(close) + " — you'll be taken back to My lessons then", 15000);
+      }
+    } else if (now >= e - WARN_MS && !endWarned.end) {
+      endWarned.end = true;
+      toast(now < e ? "About " + Math.max(1, Math.round((e - now) / 60000)) + " minutes left in this lesson."
+                    : "Lesson time is up. The room stays open until " + at(close), 12000);
+    }
+  }
 
   // where the native Tools panel goes, as fractions of the page
   let lastDock = "";
