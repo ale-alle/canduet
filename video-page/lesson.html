@@ -261,6 +261,8 @@ body.tools-on .face video.main, body.tools-on .face video.cam { object-fit: cont
 .split .ib .disc { border-radius: 13px 0 0 13px; }
 .ib[data-tip]:hover::before, .ib[data-tip]:focus-visible::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--night); padding: 4px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; z-index: 20; pointer-events: none; }
+/* with Tools docked, tips rise above the native Tools panel (it covers anything drawn in its gap) */
+body.tools-on .ib[data-tip]:hover::before, body.tools-on .ib[data-tip]:focus-visible::before { bottom: calc(100% + 16px + var(--dockb)); }
 body.nolabels .ib .lbl { display: none; }
 .ib .lbl { white-space: nowrap; }
 /* narrower windows: the lesson title gives way first, then the icons tighten */
@@ -941,7 +943,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const lvl = me.micOff ? 0 : Math.max(0, Math.min(1, me.level || 0));
     $$("[data-meter=me]").forEach((el) => { el.style.transform = `scaleX(${lvl})`; });
     if (performance.now() > meBusyUntil) $("#recvMute").checked = !!me.recvMute;
-    $("#inDev").textContent = me.inDevice ? "Microphone: " + me.inDevice : "Microphone";
+    $("#inDev").textContent = me.inDevice ? "Audio Device: " + me.inDevice : "Audio Device";
     $("#outDev").textContent = me.outDevice ? "Sound out: " + me.outDevice : "Headphones or speakers";
   }
   let meBusyUntil = 0;
