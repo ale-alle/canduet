@@ -16,9 +16,32 @@ using namespace juce;
 static int failures = 0;
 #define CHECK(cond) do { if (!(cond)) { std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); ++failures; } } while (0)
 
+// T-087: each Instrument strip hears all MIDI keyboards or just its own
+static void midiRouterTest()
+{
+    TinCan::MidiRouter router;
+    router.prepare(48000.0);
+    router.setDevice(1, "kbd-A");
+    router.setDevice(2, "kbd-B");
+    MidiBuffer out;
+    for (int k = 0; k < 4; ++k) router.pull(k, out, 512);   // start each strip's clock
+    auto note = MidiMessage::noteOn(1, 60, (uint8) 100);
+    note.setTimeStamp(Time::getMillisecondCounterHiRes() * 0.001);
+    router.route("kbd-A", note);
+    int got[4] = {};
+    for (int k = 0; k < 4; ++k) { router.pull(k, out, 512); got[k] = out.getNumEvents(); }
+    CHECK(got[0] == 1);   // all keyboards
+    CHECK(got[1] == 1);   // keyboard A
+    CHECK(got[2] == 0);   // keyboard B
+    CHECK(got[3] == 1);   // all keyboards
+    CHECK(router.getDevice(1) == "kbd-A");
+    std::printf("  midi router: %s\n", (got[0] == 1 && got[1] == 1 && got[2] == 0 && got[3] == 1) ? "ok" : "FAILED");
+}
+
 int runVstTests()
 {
     const int before = failures;
+    midiRouterTest();
 #if JUCE_PLUGINHOST_VST3
     File plugin(SystemStats::getEnvironmentVariable("TINCAN_TEST_VST3", "C:\\Program Files\\Common Files\\VST3\\Surge Synth Team\\Surge XT.vst3"));
     if (!plugin.exists()) { std::printf("  vst3 instrument: skipped (no %s)\n", plugin.getFullPathName().toRawUTF8()); return 0; }

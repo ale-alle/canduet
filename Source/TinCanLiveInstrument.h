@@ -42,3 +42,38 @@ private:
 };
 
 }
+
+// T-087: up to four Instrument strips, each played by all MIDI keyboards or one. The app's
+// MIDI comes to the processor as one merged stream, so this listens to every enabled MIDI
+// device itself (with the device it came from) and hands each strip only its own keyboard's notes.
+namespace TinCan {
+
+class MidiRouter : public MidiInputCallback
+{
+public:
+    static constexpr int maxTracks = 4;
+
+    // not the audio thread
+    void prepare(double sampleRate);
+
+    // message thread: the strip's device identifier, empty = all devices
+    void setDevice(int track, const String & identifier);
+    String getDevice(int track) const;
+
+    // MIDI thread(s)
+    void handleIncomingMidiMessage(MidiInput * source, const MidiMessage & message) override;
+    void route(const String & fromDevice, const MidiMessage & message);   // what that does (tests call it)
+
+    // audio thread: this block's notes for a strip
+    void pull(int track, MidiBuffer & out, int numSamples);
+
+    std::atomic<bool> attached { false };   // listening to the devices (the app, not a plugin build)
+
+private:
+    mutable SpinLock lock;
+    String ids[maxTracks];
+    MidiMessageCollector collectors[maxTracks];
+    std::atomic<bool> prepared { false };
+};
+
+}

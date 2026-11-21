@@ -124,7 +124,8 @@ private:
     void dockTool(const String & id);
     void toggleDock(const String & id);
     void showSlotMenu(int group, int slot);
-    void showInstrumentMenu();
+    void showInstrumentMenu(int track);
+    void showMidiDeviceMenu(int track);
     void loadLayout();
     void saveLayout();
     void rememberWindow(const String & id);

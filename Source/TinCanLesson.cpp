@@ -122,18 +122,19 @@ ToolsPanel * LessonView::getTools() const
     return toolsWindow ? dynamic_cast<ToolsPanel *>(toolsWindow->getBody()) : nullptr;
 }
 
-// the Instrument strip's menu (T-086): no instrument, the found instruments, its window, find
-void LessonView::showInstrumentMenu()
+// an Instrument strip's menu (T-086/T-087): no instrument, the found instruments, its window, find, remove the strip
+void LessonView::showInstrumentMenu(int track)
 {
+    if (track < 0 || track >= processor.getNumLiveInstruments()) return;
     auto & host = processor.getPluginHost();
     const auto instruments = host.getInstruments();
-    const auto current = processor.getLiveInstrumentName();
+    const auto current = processor.getLiveInstrumentName(track);
 
     PopupMenu menu;
     if (current.isNotEmpty()) {
         menu.addSectionHeader(current);
         menu.addItem(2, TRANS("Show its window..."));
-        menu.addItem(1, TRANS("Remove"));
+        menu.addItem(1, TRANS("Remove the instrument"));
         menu.addSeparator();
     }
     menu.addSectionHeader(TRANS("VST3 instruments: play them with your MIDI keyboard"));
@@ -143,23 +144,60 @@ void LessonView::showInstrumentMenu()
                      true, instruments[k].name == current);
     menu.addSeparator();
     menu.addItem(4, TRANS("Find plugins..."));
+    if (track > 0) {
+        menu.addSeparator();
+        menu.addItem(6, TRANS("Remove this strip"));
+    }
 
     Component::SafePointer<LessonView> safeThis(this);
-    menu.showMenuAsync(PopupMenu::Options().withMousePosition(), [safeThis, instruments](int result) {
+    menu.showMenuAsync(PopupMenu::Options().withMousePosition(), [safeThis, instruments, track](int result) {
         if (!safeThis || result == 0) return;
         auto & proc = safeThis->processor;
-        if (result == 2) { proc.showLiveInstrumentWindow(); return; }
+        if (track >= proc.getNumLiveInstruments()) return;
+        if (result == 2) { proc.showLiveInstrumentWindow(track); return; }
         if (result == 4) { proc.getPluginHost().showPluginList(); return; }
+        if (result == 6) { proc.removeLiveInstrumentTrack(track); safeThis->sendState(); return; }
         String id;
         if (result >= 100 && result - 100 < instruments.size()) id = instruments[result - 100].createIdentifierString();
         else if (result != 1) return;
         String error;
-        if (!proc.setLiveInstrument(id, error)) {
+        if (!proc.setLiveInstrument(track, id, error)) {
             AlertWindow::showMessageBoxAsync(MessageBoxIconType::WarningIcon, TRANS("Couldn't load the instrument"), error);
             return;
         }
         safeThis->sendState();
-        if (id.isNotEmpty()) proc.showLiveInstrumentWindow();   // to pick its sound
+        if (id.isNotEmpty()) proc.showLiveInstrumentWindow(track);   // to pick its sound
+    });
+}
+
+// which MIDI keyboard plays an Instrument strip (T-087): all of them, or one
+void LessonView::showMidiDeviceMenu(int track)
+{
+    if (track < 0 || track >= processor.getNumLiveInstruments()) return;
+    const auto devices = MidiInput::getAvailableDevices();
+    const auto current = processor.getLiveInstrumentDevice(track);
+
+    PopupMenu menu;
+    menu.addSectionHeader(TRANS("Played by"));
+    menu.addItem(1, TRANS("All MIDI keyboards"), true, current.isEmpty());
+    bool found = current.isEmpty();
+    for (int k = 0; k < devices.size(); ++k) {
+        const bool on = devices[k].identifier == current;
+        found = found || on;
+        menu.addItem(100 + k, devices[k].name, true, on);
+    }
+    if (!found) menu.addItem(2, processor.getLiveInstrumentDeviceName(track) + "  " + TRANS("(not connected)"), false, true);
+    if (devices.isEmpty()) menu.addItem(3, TRANS("No MIDI keyboard found: plug one in"), false, false);
+
+    Component::SafePointer<LessonView> safeThis(this);
+    menu.showMenuAsync(PopupMenu::Options().withMousePosition(), [safeThis, devices, track](int result) {
+        if (!safeThis || result == 0) return;
+        auto & proc = safeThis->processor;
+        if (track >= proc.getNumLiveInstruments()) return;
+        if (result == 1) proc.setLiveInstrumentDevice(track, String());
+        else if (result >= 100 && result - 100 < devices.size()) proc.setLiveInstrumentDevice(track, devices[result - 100].identifier);
+        else return;
+        safeThis->sendState();
     });
 }
 
@@ -683,14 +721,34 @@ void LessonView::sendState()
     msg->setProperty("inputs", inputsState());
     msg->setProperty("fxBus", busState());
     {
-        // the Instrument strip (T-086)
-        auto & li = processor.getLiveInstrument();
-        DynamicObject::Ptr inst = new DynamicObject();
-        inst->setProperty("name", processor.getLiveInstrumentName().substring(0, 60));
-        inst->setProperty("gain", li.gain.load());
-        inst->setProperty("muted", li.muted.load());
-        inst->setProperty("level", std::round(li.meter.load() * 100.0f) / 100.0f);
-        msg->setProperty("instrument", var(inst.get()));
+        // the Instrument strips (T-086/T-087) and which keyboard plays each
+        Array<var> list;
+        // the device list is looked up once a second, not on every state message
+        static Array<MidiDeviceInfo> devices;
+        static uint32 devicesAt = 0;
+        const uint32 nowMs = Time::getMillisecondCounter();
+        if (devicesAt == 0 || nowMs - devicesAt > 1000) { devices = MidiInput::getAvailableDevices(); devicesAt = nowMs; }
+        for (int k = 0; k < processor.getNumLiveInstruments(); ++k) {
+            auto & li = processor.getLiveInstrument(k);
+            const auto devId = processor.getLiveInstrumentDevice(k);
+            bool connected = devId.isEmpty();
+            for (auto & d : devices) connected = connected || d.identifier == devId;
+            DynamicObject::Ptr inst = new DynamicObject();
+            inst->setProperty("name", processor.getLiveInstrumentName(k).substring(0, 60));
+            inst->setProperty("gain", li.gain.load());
+            inst->setProperty("muted", li.muted.load());
+            inst->setProperty("level", std::round(li.meter.load() * 100.0f) / 100.0f);
+            inst->setProperty("device", devId.isEmpty() ? String() : processor.getLiveInstrumentDeviceName(k).substring(0, 60));
+            inst->setProperty("connected", connected);
+            list.add(var(inst.get()));
+        }
+        msg->setProperty("instruments", list);
+        msg->setProperty("maxInstruments", (int) SonobusAudioProcessor::maxLiveInstruments);
+        // T-087: how busy the audio is, and dropouts since the sound device started
+        DynamicObject::Ptr cpu = new DynamicObject();
+        cpu->setProperty("load", std::round(processor.getAudioLoad() * 100.0f) / 100.0f);
+        cpu->setProperty("dropouts", processor.getAudioDropouts());
+        msg->setProperty("cpu", var(cpu.get()));
     }
     msg->setProperty("conn", conn);
     msg->setProperty("lesson", var(lesson.get()));
@@ -849,12 +907,18 @@ void LessonView::handleMessage(const var & message)
         sendState();
     }
     else if (type == "instrument") {
-        // the Instrument strip (T-086): level, mute, or its menu
+        // an Instrument strip (T-086/T-087): level, mute, its menu, its keyboard; or a new strip
         const auto k = message.getProperty("k", var()).toString();
-        auto & li = processor.getLiveInstrument();
-        if (k == "gain" && isNumber) li.gain = jlimit(0.0f, 4.0f, (float) value);
-        else if (k == "mute") li.muted = (bool) value;
-        else if (k == "menu") showInstrumentMenu();
+        const var nv = message.getProperty("n", var(0));
+        const int n = (nv.isInt() || nv.isInt64() || nv.isDouble()) ? (int) nv : -1;
+        if (k == "add") processor.addLiveInstrumentTrack();
+        else if (n >= 0 && n < processor.getNumLiveInstruments()) {
+            auto & li = processor.getLiveInstrument(n);
+            if (k == "gain" && isNumber) li.gain = jlimit(0.0f, 4.0f, (float) value);
+            else if (k == "mute") li.muted = (bool) value;
+            else if (k == "menu") showInstrumentMenu(n);
+            else if (k == "device") showMidiDeviceMenu(n);
+        }
         sendState();
     }
     else if (type == "slot") {

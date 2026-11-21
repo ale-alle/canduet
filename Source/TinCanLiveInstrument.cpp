@@ -77,3 +77,51 @@ bool LiveInstrument::render(const MidiBuffer & midiIn, int numSamples)
 }
 
 }
+
+namespace TinCan {
+
+void MidiRouter::prepare(double sampleRate)
+{
+    for (auto & c : collectors) c.reset(sampleRate > 0 ? sampleRate : 48000.0);
+    prepared = true;
+}
+
+void MidiRouter::setDevice(int track, const String & identifier)
+{
+    if (track < 0 || track >= maxTracks) return;
+    const SpinLock::ScopedLockType sl(lock);
+    ids[track] = identifier;
+}
+
+String MidiRouter::getDevice(int track) const
+{
+    if (track < 0 || track >= maxTracks) return {};
+    const SpinLock::ScopedLockType sl(lock);
+    return ids[track];
+}
+
+void MidiRouter::handleIncomingMidiMessage(MidiInput * source, const MidiMessage & message)
+{
+    route(source != nullptr ? source->getIdentifier() : String(), message);
+}
+
+void MidiRouter::route(const String & from, const MidiMessage & message)
+{
+    if (!prepared.load()) return;
+    bool want[maxTracks];
+    {
+        const SpinLock::ScopedLockType sl(lock);
+        for (int k = 0; k < maxTracks; ++k) want[k] = ids[k].isEmpty() || ids[k] == from;
+    }
+    for (int k = 0; k < maxTracks; ++k)
+        if (want[k]) collectors[k].addMessageToQueue(message);
+}
+
+void MidiRouter::pull(int track, MidiBuffer & out, int numSamples)
+{
+    out.clear();
+    if (!prepared.load() || track < 0 || track >= maxTracks || numSamples <= 0) return;
+    collectors[track].removeNextBlockOfMessages(out, numSamples);
+}
+
+}

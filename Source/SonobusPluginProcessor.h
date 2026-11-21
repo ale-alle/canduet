@@ -371,11 +371,25 @@ public:
     bool getInputInsertBypass(int changroup, int slot) const;
     void showInputInsertWindow(int changroup, int slot);
 
-    // the mixer's Instrument strip (T-086): a VST3 instrument played by the MIDI keyboard, heard by everyone
-    bool setLiveInstrument(const String & identifier, String & error);
-    String getLiveInstrumentName() const;
-    void showLiveInstrumentWindow();
-    TinCan::LiveInstrument & getLiveInstrument() { return mLiveInstrument; }
+    // the mixer's Instrument strips (T-086, T-087): up to four VST3 instruments, each played by
+    // all MIDI keyboards or one, heard by everyone. Strip 0 is always there; more are added/removed.
+    static constexpr int maxLiveInstruments = TinCan::MidiRouter::maxTracks;
+    bool setLiveInstrument(int track, const String & identifier, String & error);
+    String getLiveInstrumentName(int track) const;
+    void showLiveInstrumentWindow(int track);
+    TinCan::LiveInstrument & getLiveInstrument(int track) { return mLiveInstruments[jlimit(0, maxLiveInstruments - 1, track)]; }
+    int getNumLiveInstruments() const { return mNumLiveInstruments.load(); }
+    bool addLiveInstrumentTrack();             // false: already four
+    void removeLiveInstrumentTrack(int track); // the ones after it move up; strip 0 only empties
+    void setLiveInstrumentDevice(int track, const String & midiDeviceIdentifier);   // empty: all devices
+    String getLiveInstrumentDevice(int track) const { return mMidiRouter.getDevice(track); }
+    String getLiveInstrumentDeviceName(int track) const;   // kept so an unplugged keyboard can still be named
+    // the app's audio devices (standalone): MIDI for the strips comes from here, keyed by device
+    void attachMidiDevices(AudioDeviceManager * dm);
+    AudioDeviceManager * getAttachedDeviceManager() const { return mMidiDeviceManager; }
+    // T-087: how busy the audio thread is (0..1+) and blocks that were too late since the device started
+    float getAudioLoad() const { return (float) mAudioLoad.getLoadAsProportion(); }
+    int getAudioDropouts() const;
     bool disconnectFromServer();
     // Tin Can: one line in connection-log.txt (no names, addresses or keys)
     static void logConnectionStep(const String & text);
@@ -1371,7 +1385,16 @@ private:
     std::unique_ptr<TinCan::PluginHost> mPluginHost;     // T-086
     String mScoreInstrumentId, mScoreInstrumentState;    // kept while it isn't loaded (not found yet)
     TinCan::InsertChain mInputInserts[MAX_CHANGROUPS];   // T-086: each input's VST3 effects
-    TinCan::LiveInstrument mLiveInstrument;              // T-086: the Instrument strip
+    TinCan::LiveInstrument mLiveInstruments[TinCan::MidiRouter::maxTracks];   // T-086/T-087: the Instrument strips
+    std::atomic<int> mNumLiveInstruments { 1 };
+    TinCan::MidiRouter mMidiRouter;                                           // T-087: each strip's keyboard
+    MidiBuffer mLiveMidi;                                                     // audio thread, one strip at a time
+    AudioDeviceManager * mMidiDeviceManager = nullptr;
+    AudioProcessLoadMeasurer mAudioLoad;                                      // T-087: CPU meter
+    int mDeviceXrunBase = -1;
+    String mLiveDeviceNames[TinCan::MidiRouter::maxTracks];                   // message thread
+    String saveLiveInstruments();
+    void restoreLiveInstruments(const String & json);
     String saveInputInserts();
     void restoreInputInserts(const String & json);
    

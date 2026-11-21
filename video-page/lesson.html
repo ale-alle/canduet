@@ -382,6 +382,17 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .instb:hover { color: var(--text); border-color: var(--string); }
 .instb.on { border-style: solid; border-color: var(--line); background: color-mix(in srgb, var(--string) 22%, var(--surface)); color: var(--text); }
 .instw p { margin: 0; font-size: 10px; line-height: 1.3; color: var(--subtle); text-align: center; }
+/* T-087: which MIDI keyboard plays the strip, and adding strips (up to four) */
+.devb { min-height: 22px; padding: 3px 5px; border-radius: 5px; border: 1px solid var(--line); background: transparent; color: var(--muted);
+  font: 600 10.5px/1.2 var(--font-sans); white-space: normal; overflow-wrap: anywhere; }
+.devb:hover { color: var(--text); border-color: var(--string); }
+.devb.miss { color: var(--subtle); border-style: dashed; }
+.addgap { flex: none; width: 34px; display: flex; justify-content: center; padding-top: 8px; }
+.addinst { width: 26px; height: 26px; border-radius: 50%; border: 1px dashed var(--line-strong); background: transparent; color: var(--muted);
+  font: 700 15px/1 var(--font-sans); padding: 0; }
+.addinst:hover { color: var(--text); border-color: var(--string); }
+.cpu { flex: none; font: 600 11.5px/1 var(--font-sans); color: var(--subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cpu.warn { color: var(--warn, #c77700); }
 /* an effect's settings: a small window over the mixer, next to its strip */
 .pop.fxwin { z-index: 16; width: 286px; gap: 10px; padding: 14px 16px; }
 .fxwin .fh { display: flex; align-items: center; gap: 8px; }
@@ -506,6 +517,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   <div class="pop mixer" id="pop-mixer" role="dialog" aria-label="Mixer">
     <div class="mhead"><h3>Mixer</h3>
       <span class="dev"><span id="inDev"></span> <button class="link" type="button" data-act="setup">Change…</button></span>
+      <span class="cpu" id="cpuMeter" title="How busy this computer's audio is, and sound dropouts since the device started"></span>
       <button class="xbtn" type="button" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
     <div class="console" id="inList"></div>
   </div>
@@ -1008,6 +1020,10 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     $$("[data-meter=me]").forEach((el) => { el.style.transform = `scaleX(${lvl})`; });
     if (performance.now() > meBusyUntil) $("#recvMute").checked = !!me.recvMute;
     $("#inDev").textContent = me.inDevice ? "Audio Device: " + me.inDevice : "Audio Device";
+    // T-087: how busy the audio is (a strip's instruments and effects all run on this computer)
+    const load = Math.round((+cpu.load || 0) * 100), drops = Math.max(0, +cpu.dropouts || 0);
+    $("#cpuMeter").textContent = "CPU " + load + "%" + (drops ? " · " + drops + (drops === 1 ? " dropout" : " dropouts") : "");
+    $("#cpuMeter").classList.toggle("warn", load >= 70 || drops > 0);
     $("#outDev").textContent = me.outDevice ? "Sound out: " + me.outDevice : "Headphones or speakers";
   }
   let meBusyUntil = 0;
@@ -1229,11 +1245,18 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   function setOutMute(m) { me.outMute = m; renderMe(); renderInputs(); send({ t: "outMute", v: m }); }
   const monOn = () => typeof me.monitorLevel === "number" ? me.monitorLevel > 0.001 : !!me.monitor;
   // the strips after the inputs: what the whole sound does
-  let inst = { name: "", gain: 1, muted: false, level: 0 };   // the Instrument strip (T-086)
-  const BUSES = [
-    { id: "inst", label: "Instrument", sub: "MIDI keyboard", ticks: [12, 6, 0, -6, -12, -24, -40], toPos: inGainToPos, fromPos: inPosToGain,
-      get: () => inst.gain, level: () => inst.muted ? 0 : inst.level, muted: () => !!inst.muted, muteTip: "Mute the instrument",
-      set: (g) => { inst.gain = g; sendSoon({ t: "instrument", k: "gain", v: g }); }, mute: (m) => { inst.muted = m; send({ t: "instrument", k: "mute", v: m }); } },
+  // the Instrument strips (T-086/T-087): up to four, each played by all MIDI keyboards or one
+  let insts = [{ name: "", gain: 1, muted: false, level: 0, device: "", connected: true }];
+  let maxInsts = 4;
+  let cpu = { load: 0, dropouts: 0 };
+  function instBus(n) {
+    const it = () => insts[n] || {};
+    return { id: "inst" + n, n, label: insts.length > 1 ? "Instrument " + (n + 1) : "Instrument", sub: "MIDI keyboard", ticks: [12, 6, 0, -6, -12, -24, -40], toPos: inGainToPos, fromPos: inPosToGain,
+      get: () => it().gain, level: () => it().muted ? 0 : it().level, muted: () => !!it().muted, muteTip: "Mute the instrument",
+      set: (g) => { it().gain = g; sendSoon({ t: "instrument", n, k: "gain", v: g }); }, mute: (m) => { it().muted = m; send({ t: "instrument", n, k: "mute", v: m }); } };
+  }
+  let BUSES = [];
+  const FIXED_BUSES = [
     { id: "mic", label: "Microphone level", sub: "All inputs", ticks: [12, 6, 0, -6, -12, -24, -40], toPos: inGainToPos, fromPos: inPosToGain,
       get: () => me.inGain, level: () => me.micOff ? 0 : me.level, muted: () => !!me.micOff, muteTip: "Mute my microphone",
       set: (g) => sendSoon({ t: "inGain", v: g }), mute: (m) => { me.micOff = m; renderMe(); send({ t: "mic", off: m }); } },
@@ -1244,6 +1267,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       get: () => me.volume, level: () => me.outMute ? 0 : (me.outLevel || 0), muted: () => !!me.outMute, muteTip: "Mute what I hear",
       set: (g) => sendSoon({ t: "volume", v: g }), mute: (m) => setOutMute(m) },
   ];
+  const makeBuses = () => { BUSES = insts.map((_, n) => instBus(n)).concat(FIXED_BUSES); };
+  makeBuses();
   const busById = (id) => BUSES.find((b) => b.id === id);
   function stripEl(r, bus) {
     const el = document.createElement("div");
@@ -1252,7 +1277,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     const bars = r.stereo ? 2 : 1;
     const scale = bus ? scaleHtml(bus.ticks, bus.toPos) : scaleHtml([12, 6, 0, -6, -12, -24, -40], inGainToPos);
     el.innerHTML = `<div class="lk"></div>
-      <div class="fx${bus ? " none" : ""}">${bus && bus.id === "inst" ? '<div class="instw"><button class="instb" type="button" aria-haspopup="menu">+ Instrument</button><p>For your MIDI keyboard. Everyone hears it.</p></div>' : ""}${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
+      <div class="fx${bus ? " none" : ""}">${bus && typeof bus.n === "number" ? '<div class="instw"><button class="instb" type="button" aria-haspopup="menu">+ Instrument</button><button class="devb" type="button" aria-haspopup="menu">All keyboards</button><p>Everyone hears it.</p></div>' : ""}${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
       <div class="slots${bus ? " none" : ""}">${[0, 1].map((s) => `<button class="slb" type="button" data-s="${s}" aria-haspopup="menu">+ Effect</button>`).join("")}</div>
       <div class="pn${bus ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
       <div class="fz"><div class="scale">${scale}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
@@ -1288,7 +1313,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   }
   function renderInputs() {
     const list = $("#inList");
-    const layout = inputs.map((r) => r.label + (r.stereo ? "s" : "") + (r.canPair ? "+" : "")).join("|");
+    const layout = inputs.map((r) => r.label + (r.stereo ? "s" : "") + (r.canPair ? "+" : "")).join("|") + "#" + insts.length + "/" + maxInsts;
     if (layout !== inLayout || !list.firstChild) {
       inLayout = layout;
       list.textContent = "";
@@ -1303,8 +1328,18 @@ body:not([data-rec=recording]) .rec-only { display: none; }
         list.append(gap);
       });
       if (inputs.length) { const g = document.createElement("div"); g.className = "busgap"; list.append(g); }
+      makeBuses();
       BUSES.forEach((b, k) => {
-        if (k) { const g = document.createElement("div"); g.className = "lkgap"; list.append(g); }
+        if (k) {
+          const g = document.createElement("div");
+          // after the last Instrument strip: add another (up to four)
+          if (k === insts.length && insts.length < maxInsts) {
+            g.className = "addgap";
+            g.innerHTML = '<button class="addinst" type="button" title="Add an Instrument strip for another MIDI keyboard (up to ' + maxInsts + ')" aria-label="Add an Instrument strip">+</button>';
+          }
+          else g.className = "lkgap";
+          list.append(g);
+        }
         list.append(stripEl({}, b));
       });
     }
@@ -1340,11 +1375,16 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       meter(el, [b.level()]);
       el.classList.toggle("off", b.muted());
       el.querySelector(".mb").setAttribute("aria-pressed", String(b.muted()));
-      if (b.id === "inst") {
+      if (typeof b.n === "number") {
+        const it = insts[b.n] || {};
         const ib = el.querySelector(".instb");
-        ib.textContent = inst.name || "+ Instrument"; ib.classList.toggle("on", !!inst.name);
-        ib.title = inst.name ? inst.name + ": its window, or another instrument" : "Choose a VST3 instrument to play with your MIDI keyboard";
-        el.querySelector(".nm small").textContent = inst.name || "MIDI keyboard";
+        ib.textContent = it.name || "+ Instrument"; ib.classList.toggle("on", !!it.name);
+        ib.title = it.name ? it.name + ": its window, another instrument" + (b.n ? " or remove the strip" : "") : "Choose a VST3 instrument to play with your MIDI keyboard";
+        const db = el.querySelector(".devb");
+        const devName = it.device ? it.device + (it.connected ? "" : " (not connected)") : "All keyboards";
+        db.textContent = devName; db.classList.toggle("miss", !!it.device && !it.connected);
+        db.title = "Played by: " + devName + ". Click to choose the MIDI keyboard.";
+        el.querySelector(".nm small").textContent = it.name || (it.device || "MIDI keyboard");
       }
       if (now > meBusyUntil) { el.querySelector(".g").value = b.toPos(b.get()); el.querySelector(".gO").textContent = dbShort(b.get()); }
     }
@@ -1587,7 +1627,14 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (btn) btn.focus({ preventScroll: true });
   }
   $("#inList").addEventListener("click", (e) => { const b = e.target.closest(".fxb"); if (b) { e.stopPropagation(); openFx(b); } });
-  $("#inList").addEventListener("click", (e) => { if (e.target.closest(".instb")) { e.stopPropagation(); send({ t: "instrument", k: "menu" }); } });
+  // an Instrument strip's menus (the app shows them where the mouse is), and adding a strip
+  $("#inList").addEventListener("click", (e) => {
+    const strip = e.target.closest(".strip");
+    const n = strip ? (busById(strip.dataset.bus) || {}).n : undefined;
+    if (e.target.closest(".instb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "menu" }); }
+    else if (e.target.closest(".devb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "device" }); }
+    else if (e.target.closest(".addinst")) { e.stopPropagation(); send({ t: "instrument", k: "add" }); }
+  });
   // a VST3 effect slot (T-086): the app shows the choices as its own menu, where the mouse is
   $("#inList").addEventListener("click", (e) => {
     const b = e.target.closest(".slb"); if (!b) return;
@@ -1602,7 +1649,9 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (m.me && typeof m.me === "object") me = Object.assign(me, m.me);
     if (Array.isArray(m.inputs)) inputs = m.inputs.filter((r) => r && typeof r.i === "number").slice(0, 64);
     if (m.fxBus && typeof m.fxBus === "object") fxBus = Object.assign(fxBus, m.fxBus);
-    if (m.instrument && typeof m.instrument === "object") inst = Object.assign(inst, m.instrument);
+    if (Array.isArray(m.instruments) && m.instruments.length) insts = m.instruments.filter((x) => x && typeof x === "object").slice(0, 4);
+    if (typeof m.maxInstruments === "number") maxInsts = Math.max(1, Math.min(4, m.maxInstruments));
+    if (m.cpu && typeof m.cpu === "object") cpu = Object.assign(cpu, m.cpu);
     if (typeof m.conn === "string") conn = m.conn;
     if (m.lesson && typeof m.lesson === "object") lessonInfo = Object.assign(lessonInfo, m.lesson);
     if (m.rec && typeof m.rec === "object") rec = Object.assign(rec, m.rec);

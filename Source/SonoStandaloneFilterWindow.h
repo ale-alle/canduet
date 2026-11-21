@@ -161,6 +161,10 @@ public:
 
         processor->setRateAndBufferSizeDetails (48000, 256);
 
+        // CanDuet (T-087): the mixer's Instrument strips listen to each MIDI keyboard themselves
+        if (auto * sono = dynamic_cast<SonobusAudioProcessor*> (processor.get()))
+            sono->attachMidiDevices (&deviceManager);
+
         int inChannels = (channelConfiguration.size() > 0 ? channelConfiguration[0].numIns
                                                           : processor->getMainBusNumInputChannels());
 
@@ -175,6 +179,8 @@ public:
     virtual void deletePlugin()
     {
         stopPlaying();
+        if (auto * sono = dynamic_cast<SonobusAudioProcessor*> (processor.get()))
+            sono->attachMidiDevices (nullptr);
         processor = nullptr;
     }
 
