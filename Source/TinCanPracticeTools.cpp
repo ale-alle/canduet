@@ -13,14 +13,6 @@ static const Colour accent(TinCanTheme::stringLight);
 static const Colour accentBar(0xfff0a030);
 static const Colour inTune(0xff5ccf72);
 
-static void styleLabel(Label & l, const String & text)
-{
-    l.setText(text, dontSendNotification);
-    l.setFont(Font(13.0f));
-    l.setColour(Label::textColourId, Colour(0xccffffff));
-    l.setJustificationType(Justification::centredLeft);
-}
-
 //==============================================================================
 
 void BeatIndicator::update(double pos, int bpb, int sub, double countInRemaining, bool isRunning)
@@ -80,63 +72,86 @@ void BeatIndicator::paint(Graphics & g)
 
 //==============================================================================
 
+static void setUpCircle(IconCircle & c, Icons::Icon icon, const String & tip)
+{
+    c.setIcon(std::move(icon));
+    c.setTooltip(tip);
+    c.setTitle(tip);
+}
+
 MetronomePanel::MetronomePanel(SonobusAudioProcessor & proc) : processor(proc)
 {
     auto & state = processor.getValueTreeState();
 
-    addAndMakeVisible(enableButton);
-    enableAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(state, SonobusAudioProcessor::paramMetEnabled, enableButton);
+    // start and stop: bright red while it runs
+    setUpCircle(playCircle, Icons::play(), TRANS("Start the metronome. The clicks follow the audio clock, so they stay steady"));
+    playCircle.setClickingTogglesState(true);
+    playCircle.onStateChange = [this]() {
+        const bool on = playCircle.getToggleState();
+        playCircle.setIcon(on ? Icons::stop() : Icons::play());
+        playCircle.setTooltip(on ? TRANS("Stop the metronome") : TRANS("Start the metronome. The clicks follow the audio clock, so they stay steady"));
+    };
+    enableAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(state, SonobusAudioProcessor::paramMetEnabled, playCircle);
 
-    styleLabel(tempoLabel, TRANS("Tempo"));
-    addAndMakeVisible(tempoLabel);
+    // tempo: slower, the number (drag it), faster, tap
+    setUpCircle(slowerCircle, Icons::minus(), TRANS("Slower"));
+    setUpCircle(fasterCircle, Icons::plus(), TRANS("Faster"));
+    slowerCircle.onClick = [this]() { setTempo(roundToInt(tempoSlider.getValue()) - 1); };
+    fasterCircle.onClick = [this]() { setTempo(roundToInt(tempoSlider.getValue()) + 1); };
     tempoSlider.setTitle(TRANS("Tempo"));
-    addAndMakeVisible(tempoSlider);
+    tempoSlider.setTooltip(TRANS("Tempo in beats per minute: drag, or use the wheel"));
+    tempoSlider.setColour(Slider::trackColourId, TinCanTheme::string.withAlpha(0.35f));
+    tempoSlider.setColour(Slider::backgroundColourId, TinCanTheme::raised);
+    tempoSlider.setColour(Slider::textBoxTextColourId, TinCanTheme::text);
     tempoAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(state, SonobusAudioProcessor::paramMetTempo, tempoSlider);
+    tempoSlider.setNumDecimalPlacesToDisplay(0);
+    setUpCircle(tapCircle, Icons::tap(), TRANS("Tap a few times in time to set the tempo"));
+    tapCircle.onClick = [this]() { tapTempo(); };
 
-    tapButton.setTooltip(TRANS("Tap a few times in time to set the tempo"));
-    tapButton.onClick = [this]() { tapTempo(); };
-    addAndMakeVisible(tapButton);
+    // beats in a bar
+    std::vector<IconPicker::Option> beats;
+    for (int i = 1; i <= 12; ++i) beats.push_back({ i, {}, String(i), {}, i == 1 ? TRANS("1 beat in a bar: no accent") : String(i) + " " + TRANS("beats in a bar") });
+    beatsPicker.setOptions(std::move(beats), 4);
+    beatsPicker.onChange = [this](int id) { setIntParam(SonobusAudioProcessor::paramMetBeatsPerBar, id); };
 
-    styleLabel(beatsLabel, TRANS("Beats per bar"));
-    for (int i = 1; i <= 12; ++i) beatsChoice.addItem(i == 1 ? TRANS("1 (no accent)") : String(i), i);
-    beatsChoice.setTitle(TRANS("Beats per bar"));
-    beatsChoice.onChange = [this]() { setIntParam(SonobusAudioProcessor::paramMetBeatsPerBar, beatsChoice.getSelectedId()); };
+    // clicks per beat
+    subdivisionPicker.setOptions({ { 1, Icons::quarter(), {}, {}, TRANS("One click per beat") },
+                                   { 2, Icons::eighths(), {}, {}, TRANS("Two clicks per beat: eighths") },
+                                   { 3, Icons::triplet(), {}, {}, TRANS("Three clicks per beat: triplets") },
+                                   { 4, Icons::sixteenths(), {}, {}, TRANS("Four clicks per beat: sixteenths") } }, 1);
+    subdivisionPicker.onChange = [this](int id) { setIntParam(SonobusAudioProcessor::paramMetSubdivision, id); };
 
-    styleLabel(subdivisionLabel, TRANS("Clicks per beat"));
-    subdivisionChoice.addItem(TRANS("1"), 1);
-    subdivisionChoice.addItem(TRANS("2 (eighths)"), 2);
-    subdivisionChoice.addItem(TRANS("3 (triplets)"), 3);
-    subdivisionChoice.addItem(TRANS("4 (sixteenths)"), 4);
-    subdivisionChoice.setTitle(TRANS("Clicks per beat"));
-    subdivisionChoice.onChange = [this]() { setIntParam(SonobusAudioProcessor::paramMetSubdivision, subdivisionChoice.getSelectedId()); };
+    // count-in: bars of accented clicks when it starts
+    countInPicker.setOptions({ { 1, Icons::metronome(), {}, "0", TRANS("No count-in") },
+                               { 2, Icons::metronome(), {}, "1", TRANS("Count in one bar when it starts") },
+                               { 3, Icons::metronome(), {}, "2", TRANS("Count in two bars when it starts") } }, 1);
+    countInPicker.onChange = [this](int id) { setIntParam(SonobusAudioProcessor::paramMetCountIn, id - 1); };
 
-    styleLabel(countInLabel, TRANS("Count-in"));
-    countInChoice.addItem(TRANS("None"), 1);
-    countInChoice.addItem(TRANS("1 bar"), 2);
-    countInChoice.addItem(TRANS("2 bars"), 3);
-    countInChoice.setTitle(TRANS("Count-in"));
-    countInChoice.setTooltip(TRANS("Bars of accented clicks when the metronome starts"));
-    countInChoice.onChange = [this]() { setIntParam(SonobusAudioProcessor::paramMetCountIn, countInChoice.getSelectedId() - 1); };
+    for (auto * p : { &beatsPicker, &subdivisionPicker, &countInPicker })
+        p->onOpenChanged = [p](bool open) { if (open) p->toFront(false); };
 
-    for (auto * c : { &beatsLabel, &subdivisionLabel, &countInLabel }) addAndMakeVisible(c);
-    for (auto * c : { &beatsChoice, &subdivisionChoice, &countInChoice }) addAndMakeVisible(c);
-
-    styleLabel(volumeLabel, TRANS("Click volume"));
-    addAndMakeVisible(volumeLabel);
+    // click volume, and whether the lesson hears it
+    setUpCircle(volumeIcon, Icons::volume(), TRANS("Click volume"));
+    volumeIcon.setInterceptsMouseClicks(false, false);
     volumeSlider.setTitle(TRANS("Click volume"));
-    addAndMakeVisible(volumeSlider);
+    volumeSlider.setTooltip(TRANS("Click volume"));
+    volumeSlider.setPopupDisplayEnabled(true, true, this);
     volumeAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(state, SonobusAudioProcessor::paramMetGain, volumeSlider);
+    setUpCircle(sendCircle, Icons::cast(), TRANS("Let the other person hear the clicks (off: only you hear them)"));
+    sendCircle.setClickingTogglesState(true);
+    sendAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(state, SonobusAudioProcessor::paramSendMetAudio, sendCircle);
 
-    sendButton.setTooltip(TRANS("Off: only you hear the clicks. On: they are sent to the lesson too."));
-    addAndMakeVisible(sendButton);
-    sendAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(state, SonobusAudioProcessor::paramSendMetAudio, sendButton);
-
-    styleLabel(infoLabel, TRANS("Same metronome as the toolbar. The clicks follow the audio clock, so they stay steady."));
-    infoLabel.setColour(Label::textColourId, Colour(0x88ffffff));
-    addAndMakeVisible(infoLabel);
-
-    addAndMakeVisible(indicator);
+    for (Component * c : std::initializer_list<Component *> { &playCircle, &slowerCircle, &tempoSlider, &fasterCircle, &tapCircle, &beatsPicker,
+                                                              &subdivisionPicker, &countInPicker, &volumeIcon, &volumeSlider, &sendCircle, &indicator })
+        addAndMakeVisible(c);
+    playCircle.onStateChange();
     timerCallback();
+}
+
+void MetronomePanel::setTempo(int bpm)
+{
+    if (auto * p = processor.getValueTreeState().getParameter(SonobusAudioProcessor::paramMetTempo))
+        p->setValueNotifyingHost(p->convertTo0to1((float) jlimit(10, 400, bpm)));
 }
 
 MetronomePanel::~MetronomePanel()
@@ -182,11 +197,11 @@ void MetronomePanel::timerCallback()
     int bpb = getIntParam(SonobusAudioProcessor::paramMetBeatsPerBar);
     int sub = getIntParam(SonobusAudioProcessor::paramMetSubdivision);
     int countIn = getIntParam(SonobusAudioProcessor::paramMetCountIn);
-    if (beatsChoice.getSelectedId() != bpb) beatsChoice.setSelectedId(bpb, dontSendNotification);
-    if (subdivisionChoice.getSelectedId() != sub) subdivisionChoice.setSelectedId(sub, dontSendNotification);
-    if (countInChoice.getSelectedId() != countIn + 1) countInChoice.setSelectedId(countIn + 1, dontSendNotification);
+    if (beatsPicker.getSelected() != bpb) beatsPicker.setSelected(bpb);
+    if (subdivisionPicker.getSelected() != sub) subdivisionPicker.setSelected(sub);
+    if (countInPicker.getSelected() != countIn + 1) countInPicker.setSelected(countIn + 1);
 
-    bool running = enableButton.getToggleState();
+    bool running = playCircle.getToggleState();
     indicator.update(processor.getMetronomeBeatPosition(), bpb, sub, processor.getMetronomeCountInRemaining(), running);
 }
 
@@ -197,37 +212,33 @@ void MetronomePanel::paint(Graphics & g)
 
 void MetronomePanel::resized()
 {
-    auto r = getLocalBounds().reduced(10);
-    auto left = r.removeFromLeft(jmin(430, r.getWidth() / 2 + 60));
+    auto r = getLocalBounds().reduced(8);
+    const int d = IconCircle::size;
+    auto row = ToolRail::row(*this, r, 8);
+    row = row.withSizeKeepingCentre(row.getWidth(), d + 4);
+    auto place = [&](Component & c, int w) { c.setBounds(row.removeFromLeft(w).withSizeKeepingCentre(w, w == d ? d : 30)); row.removeFromLeft(6); };
+    auto placePicker = [&](IconPicker & p) {
+        p.setBounds(row.getX(), row.getY(), p.getOpenWidth(), d + 4);
+        row.removeFromLeft(p.getClosedWidth() + 4);
+    };
+    place(playCircle, d);
+    row.removeFromLeft(10);
+    place(slowerCircle, d);
+    place(tempoSlider, 86);
+    place(fasterCircle, d);
+    place(tapCircle, d);
+    row.removeFromLeft(10);
+    placePicker(beatsPicker);
+    placePicker(subdivisionPicker);
+    placePicker(countInPicker);
+    row.removeFromLeft(10);
+    place(volumeIcon, d);
+    place(volumeSlider, jlimit(80, 160, row.getWidth() - d - 12));
+    place(sendCircle, d);
+    // an open picker draws over the icons after it
+    for (auto * p : { &beatsPicker, &subdivisionPicker, &countInPicker }) if (p->isOpen()) p->toFront(false);
 
-    auto row = left.removeFromTop(26);
-    enableButton.setBounds(row.removeFromLeft(150));
-    row.removeFromLeft(8);
-    sendButton.setBounds(row);
-
-    left.removeFromTop(8);
-    row = left.removeFromTop(26);
-    tempoLabel.setBounds(row.removeFromLeft(100));
-    tapButton.setBounds(row.removeFromRight(50));
-    row.removeFromRight(6);
-    tempoSlider.setBounds(row);
-
-    for (auto pair : { std::make_pair(&beatsLabel, &beatsChoice), std::make_pair(&subdivisionLabel, &subdivisionChoice),
-                       std::make_pair(&countInLabel, &countInChoice) }) {
-        left.removeFromTop(6);
-        row = left.removeFromTop(26);
-        pair.first->setBounds(row.removeFromLeft(100));
-        pair.second->setBounds(row.removeFromLeft(160));
-    }
-
-    left.removeFromTop(6);
-    row = left.removeFromTop(26);
-    volumeLabel.setBounds(row.removeFromLeft(100));
-    volumeSlider.setBounds(row);
-
-    infoLabel.setBounds(r.removeFromBottom(22));
-    r.removeFromLeft(10);
-    indicator.setBounds(r);
+    indicator.setBounds(r.reduced(0, 4));
 }
 
 //==============================================================================
@@ -307,33 +318,46 @@ void TunerDisplay::paint(Graphics & g)
 
 TunerPanel::TunerPanel(SonobusAudioProcessor & proc) : Thread("CanDuet tuner"), processor(proc)
 {
-    styleLabel(inputLabel, TRANS("Input"));
-    addAndMakeVisible(inputLabel);
-    inputChoice.setTitle(TRANS("Tuner input"));
-    inputChoice.setTooltip(TRANS("Which of your inputs the tuner listens to"));
-    inputChoice.onChange = [this]() {
-        if (isThreadRunning()) processor.setTunerChannel(inputChoice.getSelectedId() - 1);
-    };
-    addAndMakeVisible(inputChoice);
+    // which input it listens to: a microphone with the input's number
+    inputPicker.onChange = [this](int id) { if (isThreadRunning()) processor.setTunerChannel(id - 1); };
+    inputPicker.onOpenChanged = [this](bool open) { if (open) inputPicker.toFront(false); };
+    addAndMakeVisible(inputPicker);
 
-    styleLabel(refLabel, TRANS("A4 ="));
-    refLabel.setJustificationType(Justification::centredRight);
-    addAndMakeVisible(refLabel);
-    refSlider.setRange(415.0, 466.0, 1.0);
-    refSlider.setValue(440.0, dontSendNotification);
-    refSlider.setTextValueSuffix(" Hz");
-    refSlider.setTitle(TRANS("Reference pitch"));
-    refSlider.setTooltip(TRANS("Reference pitch for A4 (usually 440 Hz)"));
-    addAndMakeVisible(refSlider);
+    // the reference A: lower, the number, higher
+    setUpCircle(refDown, Icons::minus(), TRANS("Lower the reference A by 1 Hz"));
+    setUpCircle(refUp, Icons::plus(), TRANS("Raise the reference A by 1 Hz"));
+    refDown.onClick = [this]() { setReference(reference - 1.0); };
+    refUp.onClick = [this]() { setReference(reference + 1.0); };
+    refLabel.setJustificationType(Justification::centred);
+    refLabel.setFont(Font(15.0f, Font::bold));
+    refLabel.setColour(Label::textColourId, TinCanTheme::text);
+    refLabel.setTooltip(TRANS("Reference pitch for A4 (usually 440 Hz). Double-click for 440"));
+    refLabel.addMouseListener(this, false);
+    for (auto * c : std::initializer_list<Component *> { &refDown, &refLabel, &refUp }) addAndMakeVisible(c);
+    setReference(440.0);
 
-    addAndMakeVisible(flatsToggle);
+    // note names with sharps or flats
+    flatsCircle.setText(String::fromUTF8("\xe2\x99\xad"));
+    flatsCircle.setTooltip(TRANS("Name notes with flats"));
+    flatsCircle.setTitle(TRANS("Name notes with flats"));
+    flatsCircle.setClickingTogglesState(true);
+    addAndMakeVisible(flatsCircle);
+
+    display.setTooltip(TRANS("Listens to your own input only. The tuner makes no sound and sends nothing to the lesson."));
     addAndMakeVisible(display);
 
-    styleLabel(noteLabel, TRANS("Listens to your own input only. The tuner makes no sound and sends nothing to the lesson."));
-    noteLabel.setColour(Label::textColourId, Colour(0x88ffffff));
-    addAndMakeVisible(noteLabel);
-
     updateInputs();
+}
+
+void TunerPanel::setReference(double hz)
+{
+    reference = jlimit(415.0, 466.0, std::round(hz));
+    refLabel.setText("A " + String((int) reference), dontSendNotification);
+}
+
+void TunerPanel::mouseDoubleClick(const MouseEvent & e)
+{
+    if (e.eventComponent == &refLabel) setReference(440.0);
 }
 
 TunerPanel::~TunerPanel()
@@ -346,11 +370,13 @@ void TunerPanel::updateInputs()
     int n = processor.getTotalNumInputChannels();
     if (n == numInputs) return;
     numInputs = n;
-    int sel = jmax(1, inputChoice.getSelectedId());
-    inputChoice.clear(dontSendNotification);
-    for (int i = 1; i <= n; ++i) inputChoice.addItem(TRANS("Input") + " " + String(i), i);
-    inputChoice.setSelectedId(jmin(sel, jmax(1, n)), dontSendNotification);
-    if (isThreadRunning() && n > 0) processor.setTunerChannel(inputChoice.getSelectedId() - 1);
+    const int sel = jmin(getInput(), jmax(1, n));
+    std::vector<IconPicker::Option> inputs;
+    for (int i = 1; i <= jmax(1, n); ++i)
+        inputs.push_back({ i, Icons::mic(), {}, String(i), TRANS("Listen to input") + " " + String(i) });
+    inputPicker.setOptions(std::move(inputs), sel);
+    resized();
+    if (isThreadRunning() && n > 0) processor.setTunerChannel(getInput() - 1);
 }
 
 void TunerPanel::visibilityChanged()
@@ -363,7 +389,7 @@ void TunerPanel::startListening()
 {
     if (isThreadRunning()) return;
     updateInputs();
-    processor.setTunerChannel(jmax(0, inputChoice.getSelectedId() - 1));
+    processor.setTunerChannel(getInput() - 1);
     startThread(Thread::Priority::low);  // the tuner never competes with audio or the UI
     startTimerHz(20);
 }
@@ -412,7 +438,7 @@ void TunerPanel::timerCallback()
         r = latest;
         hasNew = false;
     }
-    display.setResult(r, refSlider.getValue(), flatsToggle.getToggleState());
+    display.setResult(r, reference, flatsCircle.getToggleState());
 }
 
 void TunerPanel::paint(Graphics & g)
@@ -422,19 +448,21 @@ void TunerPanel::paint(Graphics & g)
 
 void TunerPanel::resized()
 {
-    auto r = getLocalBounds().reduced(10);
-    auto row = r.removeFromTop(26);
-    inputLabel.setBounds(row.removeFromLeft(50));
-    inputChoice.setBounds(row.removeFromLeft(140));
-    row.removeFromLeft(20);
-    refLabel.setBounds(row.removeFromLeft(50));
-    refSlider.setBounds(row.removeFromLeft(130));
-    row.removeFromLeft(12);
-    flatsToggle.setBounds(row.removeFromLeft(80));
+    auto r = getLocalBounds().reduced(8);
+    const int d = IconCircle::size;
+    auto row = ToolRail::row(*this, r, 8);
+    row = row.withSizeKeepingCentre(row.getWidth(), d + 4);
+    inputPicker.setBounds(row.getX(), row.getY(), inputPicker.getOpenWidth(), d + 4);
+    row.removeFromLeft(inputPicker.getClosedWidth() + 14);
+    auto place = [&](Component & c, int w) { c.setBounds(row.removeFromLeft(w).withSizeKeepingCentre(w, d)); row.removeFromLeft(4); };
+    place(refDown, d);
+    place(refLabel, 64);
+    place(refUp, d);
+    row.removeFromLeft(10);
+    place(flatsCircle, d);
+    if (inputPicker.isOpen()) inputPicker.toFront(false);
 
-    noteLabel.setBounds(r.removeFromBottom(22));
-    r.removeFromTop(6);
-    display.setBounds(r);
+    display.setBounds(r.reduced(0, 4));
 }
 
 }

@@ -190,8 +190,13 @@ public:
     void refreshSummaries();
 
 private:
-    std::unique_ptr<TabbedComponent> tabs;
+    // the panels share one icon bar (T-089): the picker at its left chooses which one shows
+    void showTool(int index);
+
+    IconPicker toolPicker;
+    OwnedArray<Component> panels;
     SummariesPanel * summaries = nullptr;
+    int summariesIndex = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToolsPanel)
 };

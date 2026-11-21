@@ -80,6 +80,63 @@ Icon close()
     return i;
 }
 
+static Icon lineIcon(const char * d) { Icon i; i.line = svg(d); return i; }
+
+Icon tuner()
+{
+    Icon i;
+    i.line = svg("M4 16a8 8 0 0 1 16 0M12 16l3.5-5.5");
+    i.solid.addEllipse(10.6f, 14.6f, 2.8f, 2.8f);
+    return i;
+}
+Icon metronome() { return lineIcon("M8.5 3h7l4 18h-15zM12 17l4.5-9.5M6.6 14h10.8"); }
+Icon notes()
+{
+    Icon i;
+    i.line = svg("M9 18V5l12-2v13");
+    i.solid.addEllipse(3.2f, 15.2f, 5.8f, 5.6f);
+    i.solid.addEllipse(15.2f, 13.2f, 5.8f, 5.6f);
+    return i;
+}
+Icon summaries() { return lineIcon("M8 6h13M8 12h13M8 18h13M3.5 6h.5M3.5 12h.5M3.5 18h.5"); }
+Icon board() { return lineIcon("M3 4h18v13H3zM8 21l4-4 4 4M7 13l3-3 2 2 4-4"); }
+Icon play() { Icon i; i.solid = svg("M7 4.5 19.5 12 7 19.5z"); return i; }
+Icon stop() { Icon i; i.solid.addRoundedRectangle(6.5f, 6.5f, 11.0f, 11.0f, 1.5f); return i; }
+Icon minus() { return lineIcon("M5 12h14"); }
+Icon plus() { return lineIcon("M12 5v14M5 12h14"); }
+Icon tap()
+{
+    Icon i;
+    i.line = svg("M6.3 8.5a6.5 6.5 0 0 1 11.4 0M3.6 6a9.8 9.8 0 0 1 16.8 0M12 11v10");
+    i.solid.addEllipse(9.5f, 8.5f, 5.0f, 5.0f);
+    return i;
+}
+static Icon beamed(int n)
+{
+    // n notes on one or two beams (two for sixteenths), small and filled
+    Icon i;
+    const float x0 = n == 1 ? 9.0f : 4.0f, step = n == 1 ? 0.0f : 16.0f / (float) (n - 1);
+    for (int k = 0; k < n; ++k) {
+        const float x = x0 + k * step;
+        i.solid.addEllipse(x - 2.6f, 16.2f, 5.0f, 3.8f);
+        i.line.startNewSubPath(x + 2.2f, 18.0f); i.line.lineTo(x + 2.2f, 5.0f);
+    }
+    if (n > 1) {
+        i.solid.addRectangle(x0 + 1.4f, 4.0f, step * (n - 1) + 1.6f, 2.2f);
+        if (n == 4) i.solid.addRectangle(x0 + 1.4f, 7.6f, step * (n - 1) + 1.6f, 2.0f);
+    }
+    return i;
+}
+Icon quarter() { return beamed(1); }
+Icon eighths() { return beamed(2); }
+Icon triplet() { return beamed(3); }
+Icon sixteenths() { return beamed(4); }
+Icon flag() { return lineIcon("M5 21V4M5 4h12l-2.5 4 2.5 4H5"); }
+Icon folder() { return lineIcon("M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"); }
+Icon trash() { return lineIcon("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"); }
+Icon volume() { return lineIcon("M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"); }
+Icon mic() { return lineIcon("M9 5.5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0zM5 10.5a7 7 0 0 0 14 0M12 17.5V21M8.5 21h7"); }
+
 Icon midi()
 {
     // a 5-pin DIN socket, as on MIDI cables

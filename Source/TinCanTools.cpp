@@ -650,8 +650,10 @@ void InstrumentPanel::resized()
     const int d = IconCircle::size;
 
     // icons: the instrument and its menus on the left, naming and sharing on the right, and the
-    // MIDI status, chord and last note in the middle of the same row (the keys get the room)
-    auto row = r.removeFromTop(d + 4);
+    // MIDI status, chord and last note in the middle of the same row (the keys get the room);
+    // the row is the Tools bar, between its picker and the dock icons (T-089)
+    auto row = ToolRail::row(*this, r, 8);
+    row = row.withSizeKeepingCentre(row.getWidth(), d + 4);
     auto place = [&](Component & c, int width) { c.setBounds(row.removeFromLeft(width).withSizeKeepingCentre(width, d)); row.removeFromLeft(6); };
     auto placeRight = [&](Component & c) { c.setBounds(row.removeFromRight(d).withSizeKeepingCentre(d, d)); row.removeFromRight(6); };
     // a picker is as wide as when it's open (it draws over its neighbours then), but takes only
@@ -910,35 +912,64 @@ private:
 ToolsPanel::ToolsPanel(SonobusAudioProcessor & processor, std::function<AudioDeviceManager*()> getDeviceManager,
                        NoteShare & noteShare, std::function<void()> openWorkspace, SummaryHooks summaryHooks)
 {
-    tabs = std::make_unique<TabbedComponent>(TabbedButtonBar::TabsAtTop);
-    tabs->setTabBarDepth(DockHolder::cornerIcon + 4);   // the dock icons sit at its right end (T-089)
-    tabs->addTab(TRANS("Tuner"), TinCanTheme::surface, new TunerPanel(processor), true);
-    tabs->addTab(TRANS("Metronome"), TinCanTheme::surface, new MetronomePanel(processor), true);
-    tabs->addTab(TRANS("Instrument"), TinCanTheme::surface, new InstrumentPanel(processor, getDeviceManager, noteShare), true);
-    if (openWorkspace)
-        tabs->addTab(TRANS("Workspace"), TinCanTheme::surface, new WorkspacePanel(std::move(openWorkspace)), true);
+    static_assert(ToolRail::height == DockHolder::railHeight, "the Tools bar and the dock icons line up");
+    std::vector<IconPicker::Option> options;
+    auto add = [&](Component * panel, Icons::Icon icon, const String & tip) {
+        options.push_back({ panels.size(), std::move(icon), {}, {}, tip });
+        panels.add(panel);
+        addChildComponent(panel);
+    };
+    add(new TunerPanel(processor), Icons::tuner(), TRANS("Tuner"));
+    add(new MetronomePanel(processor), Icons::metronome(), TRANS("Metronome"));
+    add(new InstrumentPanel(processor, getDeviceManager, noteShare), Icons::notes(), TRANS("Instrument: piano, guitar, bass"));
+    if (openWorkspace) add(new WorkspacePanel(std::move(openWorkspace)), Icons::board(), TRANS("Workspace"));
     summaries = new SummariesPanel(std::move(summaryHooks));
-    tabs->addTab(TRANS("Summaries"), TinCanTheme::surface, summaries, true);
-    addAndMakeVisible(tabs.get());
-    // development aid (see TINCAN_DEMO_NOTES in InstrumentPanel): start on the instrument
-    if (SystemStats::getEnvironmentVariable("TINCAN_DEMO_NOTES", {}).isNotEmpty()) tabs->setCurrentTabIndex(2);
+    summariesIndex = panels.size();
+    add(summaries, Icons::summaries(), TRANS("Summaries: your recordings and highlights"));
+
+    // the panels lay their own icons between the picker and the dock icons
+    for (auto * p : panels) {
+        p->getProperties().set("railLeft", 8 + toolPicker.getClosedWidth() + 14);
+        p->getProperties().set("railRight", DockHolder::cornerWidth);
+    }
+    // the instrument first; then whichever was showing last time (this run of the app)
+    static int lastTool = 2;
+    toolPicker.setOptions(std::move(options), jlimit(0, panels.size() - 1, lastTool));
+    toolPicker.onChange = [this](int id) { lastTool = id; showTool(id); };
+    toolPicker.onOpenChanged = [this](bool) { toolPicker.toFront(false); };
+    addAndMakeVisible(toolPicker);
+    showTool(toolPicker.getSelected());
 }
 
 ToolsPanel::~ToolsPanel() = default;
 
+void ToolsPanel::showTool(int index)
+{
+    // hiding one stops what it runs (the tuner's listening, the metronome's lights)
+    for (int i = 0; i < panels.size(); ++i) panels[i]->setVisible(i == index);
+    toolPicker.setSelected(index);
+    toolPicker.toFront(false);
+}
+
 void ToolsPanel::paint(Graphics & g)
 {
     g.fillAll(TinCanTheme::surface);
+    // the bar's lower edge
+    g.setColour(TinCanTheme::line);
+    g.fillRect(0, ToolRail::height - 1, getWidth(), 1);
 }
 
 void ToolsPanel::resized()
 {
-    tabs->setBounds(getLocalBounds());
+    for (auto * p : panels) p->setBounds(getLocalBounds());
+    const int d = IconCircle::size + 4;
+    toolPicker.setBounds(8, (ToolRail::height - d) / 2, toolPicker.getOpenWidth(), d);
+    toolPicker.toFront(false);
 }
 
 void ToolsPanel::showSummary(const File & summaryFile)
 {
-    tabs->setCurrentTabIndex(tabs->getNumTabs() - 1);
+    showTool(summariesIndex);
     summaries->refresh(summaryFile);
 }
 

@@ -80,7 +80,7 @@ void DockHolder::resized()
     auto r = getLocalBounds();
     if (body != nullptr) body->setBounds(docked ? r.reduced(1) : r);
     // the corner: at the right end of the tool's own bar
-    auto corner = r.reduced(docked ? 1 : 0).removeFromTop(cornerIcon + 4).reduced(4, 2);
+    auto corner = r.reduced(docked ? 1 : 0).removeFromTop(railHeight).reduced(6, (railHeight - cornerIcon) / 2);
     if (closeButton.isVisible()) {
         closeButton.setBounds(corner.removeFromRight(cornerIcon));
         corner.removeFromRight(4);

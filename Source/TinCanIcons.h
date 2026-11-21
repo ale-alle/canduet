@@ -31,6 +31,45 @@ namespace Icons {
     Icon popOut();    // a box with an arrow leaving it: into a window of its own
     Icon dockIn();    // a box with an arrow going down into it: back inside the lesson window
     Icon close();     // an X
+    // Tools (T-089)
+    Icon tuner();     // a gauge with a needle
+    Icon metronome();
+    Icon notes();     // two beamed notes: the instrument
+    Icon summaries(); // a list
+    Icon board();
+    Icon play();
+    Icon stop();
+    Icon minus();
+    Icon plus();
+    Icon tap();       // a finger tapping: ripples round a dot
+    Icon quarter();   // one click per beat
+    Icon eighths();   // two
+    Icon triplet();   // three
+    Icon sixteenths();// four
+    Icon flag();      // a highlight
+    Icon folder();
+    Icon trash();
+    Icon volume();
+    Icon mic();
+}
+
+// The Tools panels' icon bar (T-089): one row this tall across the top of every panel. The Tools
+// picker sits at its left and the dock icons at its right; a panel lays its own icons between,
+// leaving the room the Tools panel gives it (properties "railLeft" and "railRight").
+namespace ToolRail {
+    constexpr int height = 52;
+    inline int left(const Component & c) { return (int) c.getProperties().getWithDefault("railLeft", 0); }
+    inline int right(const Component & c) { return (int) c.getProperties().getWithDefault("railRight", 0); }
+    // the row between them, inside a panel's area r (already reduced by its margin)
+    // (r starts margin px in from the panel's top; the row is the full bar height from the top)
+    inline juce::Rectangle<int> row(const Component & c, juce::Rectangle<int> & r, int margin)
+    {
+        juce::Rectangle<int> row(r.getX(), r.getY() - margin, r.getWidth(), height);
+        r.removeFromTop(height - margin);
+        row.removeFromLeft(jmax(0, left(c) - margin));
+        row.removeFromRight(jmax(0, right(c) - margin));
+        return row;
+    }
 }
 
 class IconCircle : public Button

@@ -42,7 +42,9 @@ public:
     std::function<void()> onToggleDock, onClose;
 
     // the room the corner icons take at the top right of a tool's bar
-    static constexpr int cornerIcon = 30, cornerWidth = 2 * cornerIcon + 10;
+    static constexpr int cornerIcon = 30, cornerWidth = 2 * cornerIcon + 14;
+    // a tool made of components keeps its icon bar this tall, so the corner icons sit centred in it
+    static constexpr int railHeight = 52;
 
     void paint(Graphics & g) override;
     void resized() override;

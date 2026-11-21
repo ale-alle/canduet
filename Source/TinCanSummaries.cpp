@@ -134,6 +134,14 @@ SummariesPanel::SummariesPanel(SummaryHooks h)
     highlightsHeading.setColour(Label::textColourId, kMuted);
     for (auto * l : { &titleLabel, &infoLabel, &highlightsHeading }) addAndMakeVisible(l);
 
+    auto setUp = [](IconCircle & c, Icons::Icon icon, const String & tip, const String & badge = {}) {
+        c.setIcon(std::move(icon)); c.setBadge(badge); c.setTooltip(tip); c.setTitle(tip);
+    };
+    setUp(playStartButton, Icons::play(), TRANS("Play the recording from the start"));
+    setUp(playHighlightButton, Icons::flag(), TRANS("Play the highlight chosen below"));
+    setUp(stopButton, Icons::stop(), TRANS("Stop playing"));
+    setUp(folderButton, Icons::folder(), TRANS("Show the recording in its folder"));
+    setUp(deleteButton, Icons::trash(), TRANS("Delete this recording and its summary..."));
     playStartButton.onClick = [this]() {
         if (auto * s = selected()) if (hooks.play) hooks.play(s->getAudioFile(), 0.0);
     };
@@ -266,21 +274,23 @@ void SummariesPanel::paint(Graphics & g)
 void SummariesPanel::resized()
 {
     auto r = getLocalBounds().reduced(10);
-    emptyLabel.setBounds(r.removeFromTop(80));
-    r = getLocalBounds().reduced(10);
+    // the icons on the Tools bar: play, highlight, stop, then the folder and delete
+    auto row = ToolRail::row(*this, r, 10);
+    const int d = IconCircle::size;
+    for (auto * b : { &playStartButton, &playHighlightButton, &stopButton }) {
+        b->setBounds(row.removeFromLeft(d).withSizeKeepingCentre(d, d));
+        row.removeFromLeft(6);
+    }
+    row.removeFromLeft(14);
+    for (auto * b : { &folderButton, &deleteButton }) {
+        b->setBounds(row.removeFromLeft(d).withSizeKeepingCentre(d, d));
+        row.removeFromLeft(6);
+    }
+    r.removeFromTop(6);
+    emptyLabel.setBounds(r.withHeight(80));
 
     lessons.setBounds(r.removeFromLeft(jlimit(220, 360, r.getWidth() / 3)));
     r.removeFromLeft(12);
-
-    auto buttons = r.removeFromBottom(30);
-    for (auto * b : { &playStartButton, &playHighlightButton, &stopButton }) {
-        b->setBounds(buttons.removeFromLeft(jmin(120, buttons.getWidth() / 5)));
-        buttons.removeFromLeft(6);
-    }
-    deleteButton.setBounds(buttons.removeFromRight(jmin(90, buttons.getWidth() / 2)));
-    buttons.removeFromRight(6);
-    folderButton.setBounds(buttons.removeFromRight(jmin(120, buttons.getWidth())));
-    r.removeFromBottom(8);
 
     titleLabel.setBounds(r.removeFromTop(24));
     infoLabel.setBounds(r.removeFromTop(48));

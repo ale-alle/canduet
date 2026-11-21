@@ -5,6 +5,7 @@
 
 #include "JuceHeader.h"
 #include "TinCanPitch.h"
+#include "TinCanIcons.h"
 
 class SonobusAudioProcessor;
 
@@ -45,16 +46,15 @@ private:
     int getIntParam(const String & id) const;
     void tapTempo();
 
+    void setTempo(int bpm);
+
     SonobusAudioProcessor & processor;
 
-    ToggleButton enableButton { TRANS("Metronome on") };
-    Slider tempoSlider { Slider::LinearHorizontal, Slider::TextBoxRight };
-    TextButton tapButton { TRANS("Tap") };
-    ComboBox beatsChoice, subdivisionChoice, countInChoice;
-    Label beatsLabel, subdivisionLabel, countInLabel, tempoLabel, volumeLabel;
-    Slider volumeSlider { Slider::LinearHorizontal, Slider::TextBoxRight };
-    ToggleButton sendButton { TRANS("Let the other person hear it") };
-    Label infoLabel;
+    // one bar of round icons (T-089): start, tempo, tap, beats, clicks per beat, count-in, volume, send
+    IconCircle playCircle, slowerCircle, fasterCircle, tapCircle, volumeIcon, sendCircle;
+    Slider tempoSlider { Slider::LinearBar, Slider::TextBoxLeft };   // a bar with the number on it
+    IconPicker beatsPicker, subdivisionPicker, countInPicker;
+    Slider volumeSlider { Slider::LinearHorizontal, Slider::NoTextBox };
     BeatIndicator indicator;
 
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> enableAttachment, sendAttachment;
@@ -65,7 +65,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MetronomePanel)
 };
 
-class TunerDisplay : public Component
+class TunerDisplay : public Component, public SettableTooltipClient
 {
 public:
     void setResult(const PitchResult & result, double a4, bool useFlats);
@@ -87,6 +87,7 @@ public:
     void resized() override;
     void paint(Graphics & g) override;
     void visibilityChanged() override;
+    void mouseDoubleClick(const MouseEvent & e) override;   // on the reference A: back to 440
 
 private:
     void timerCallback() override;
@@ -95,14 +96,17 @@ private:
     void stopListening();
     void updateInputs();
 
+    void setReference(double hz);
+    int getInput() const { return jmax(1, inputPicker.getSelected()); }
+
     SonobusAudioProcessor & processor;
 
-    ComboBox inputChoice;
-    Label inputLabel, refLabel;
-    Slider refSlider { Slider::IncDecButtons, Slider::TextBoxLeft };
-    ToggleButton flatsToggle { TRANS("Flats") };
+    // one bar of round icons (T-089): which input, the reference A, sharps or flats
+    IconPicker inputPicker;
+    IconCircle refDown, refUp, flatsCircle;
+    Label refLabel;
+    double reference = 440.0;
     TunerDisplay display;
-    Label noteLabel;
 
     // result handed from the analysis thread to the UI
     SpinLock resultLock;

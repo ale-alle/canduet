@@ -5,6 +5,7 @@
 
 #include "JuceHeader.h"
 #include "TinCanRecording.h"
+#include "TinCanIcons.h"
 
 #include <functional>
 
@@ -50,8 +51,8 @@ private:
     std::unique_ptr<HighlightList> highlightModel;
     ListBox lessons, highlights;
     Label emptyLabel, titleLabel, infoLabel, highlightsHeading;
-    TextButton playStartButton { TRANS("Play from start") }, playHighlightButton { TRANS("Play highlight") },
-               stopButton { TRANS("Stop") }, folderButton { TRANS("Show in folder") }, deleteButton { TRANS("Delete...") };
+    // round icons on the Tools bar (T-089)
+    IconCircle playStartButton, playHighlightButton, stopButton, folderButton, deleteButton;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SummariesPanel)
 };
