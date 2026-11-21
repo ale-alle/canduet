@@ -253,36 +253,51 @@ body.side-on .tile .tbtns { display: none; }
 .linfo div > span { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tprog { display: block; height: 2.5px; width: 150px; background: var(--line); border-radius: 9px; margin-top: 5px; position: relative; overflow: hidden; }
 .tprog i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--string); border-radius: 9px; }
-.icons { display: flex; align-items: flex-start; gap: 4px; }
-.icons .gap { width: 1px; align-self: stretch; background: var(--line); margin: 4px 8px; }
-.ib { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 62px; background: none; border: 0; padding: 0; color: var(--muted); font-size: 11px; font-weight: 500; }
-.ib .disc { position: relative; width: 44px; height: 38px; border-radius: 13px; background: var(--raised); border: 1px solid var(--line); display: grid; place-items: center; color: var(--text);
-  transition: background .12s, border-color .12s; }
-.ib:hover .disc { border-color: var(--line-strong); background: color-mix(in srgb, var(--raised) 80%, var(--text) 8%); }
-.ib[aria-pressed=true] .disc, .ib[aria-expanded=true] .disc { border-color: var(--string); box-shadow: inset 0 -2.5px 0 var(--string); }
-.ib.off .disc { background: var(--string-strong); border-color: var(--string-strong); }
-.ib.off .disc::after { content: ""; position: absolute; width: 26px; height: 2px; background: #fff; transform: rotate(-45deg); border-radius: 2px; }
-.ib .badge { position: absolute; top: -4px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--string-strong); color: #fff; font-size: 11px; font-weight: 700;
+/* Redesign (T-089): the bar is round icons only, the site's soft red circle, bright red when on;
+   names and keys are in the tooltips. Three groups: me (left), teaching tools (centre), the lesson (right).
+   A circle with a dot opens more icons beside it (they slide out; the native dock covers anything
+   drawn above the bar, so nothing opens upward). */
+.cluster { display: flex; align-items: center; gap: 8px; }
+.cluster.c { padding: 4px; gap: 6px; border-radius: 28px; background: var(--night); border: 1px solid var(--line); }
+.lside { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.ib { position: relative; flex: none; width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--string) 14%, transparent); border: 1px solid color-mix(in srgb, var(--string) 42%, transparent); color: var(--string-light);
+  transition: background .15s, border-color .15s, color .15s, transform .15s; }
+.ib:hover { background: color-mix(in srgb, var(--string) 28%, transparent); border-color: color-mix(in srgb, var(--string-light) 80%, transparent); }
+.ib:active { transform: scale(.94); }
+.ib .disc { display: contents; }
+.ib .ic { width: 21px; height: 21px; }
+.ib[aria-pressed=true], .ib[aria-expanded=true], .ib.on, .ib.off { background: var(--string-strong); border-color: #ff4f62; color: #fff; }
+.ib.off::after { content: ""; position: absolute; width: 24px; height: 2px; background: #fff; transform: rotate(-45deg); border-radius: 2px; box-shadow: 0 0 0 1.5px var(--string-strong); }
+.ib.sm { width: 34px; height: 34px; } .ib.sm .ic { width: 17px; height: 17px; }
+.ib .badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #fff; color: var(--string-strong); font-size: 11px; font-weight: 700;
   display: grid; place-items: center; padding: 0 5px; }
-.split { display: flex; align-items: flex-start; }
-.split .ib { width: 50px; }
-.caret { width: 20px; height: 38px; margin-left: -3px; border-radius: 0 13px 13px 0; border: 1px solid var(--line); border-left: 0; background: var(--raised); color: var(--muted);
-  display: grid; place-items: center; padding: 0; font-size: 9px; }
-.caret:hover, .caret[aria-expanded=true] { color: var(--text); border-color: var(--string); }
-.split .ib .disc { border-radius: 13px 0 0 13px; }
+.ib .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ib .more { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--string-light); box-shadow: 0 0 0 2px var(--surface); }
+.grp { position: relative; display: flex; align-items: center; flex: none; }
+.grp.rev { flex-direction: row-reverse; }
+.grp .opts { display: flex; align-items: center; gap: 6px; max-width: 0; opacity: 0; overflow: hidden; padding: 4px 0; margin: -4px 0;
+  transition: max-width .28s cubic-bezier(.2,.8,.2,1), opacity .2s, padding .28s cubic-bezier(.2,.8,.2,1); }
+.grp.rev .opts { flex-direction: row-reverse; }
+.grp .opts > * { opacity: 0; transform: translateX(-10px) scale(.8); transition: transform .24s cubic-bezier(.2,.8,.2,1), opacity .18s; transition-delay: calc(var(--i, 0) * 26ms); }
+.grp.rev .opts > * { transform: translateX(10px) scale(.8); }
+.grp.open .opts { opacity: 1; padding-left: 6px; }
+.grp.rev.open .opts { padding-left: 0; padding-right: 6px; }
+.grp.open .opts > * { opacity: 1; transform: none; }
+.grp.shown .opts { overflow: visible; }   /* once open, so the tooltips aren't cut off */
 .ib[data-tip]:hover::before, .ib[data-tip]:focus-visible::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--night); padding: 4px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; z-index: 20; pointer-events: none; }
 /* with Tools docked, tips rise above the native Tools panel (it covers anything drawn in its gap) */
 body.tools-on .ib[data-tip]:hover::before, body.tools-on .ib[data-tip]:focus-visible::before { bottom: calc(100% + 16px + var(--dockb)); }
-body.nolabels .ib .lbl { display: none; }
-.ib .lbl { white-space: nowrap; }
+/* at the right edge the tips line up with the button's right side, so they stay in the window */
+.rside .ib[data-tip]:hover::before, .rside .ib[data-tip]:focus-visible::before { left: auto; right: 0; transform: none; }
 /* narrower windows: the lesson title gives way first, then the icons tighten */
-@media (max-width: 1180px) { .linfo b, .tprog { display: none; } .linfo img { height: 28px; } .bar { gap: 10px; padding-inline: 10px; } }
-@media (max-width: 940px) { .ib { width: 54px; } .split .ib { width: 46px; } .icons .gap { margin: 4px 3px; } .leave { padding: 0 12px; } }
-.rside { display: flex; justify-content: flex-end; align-items: flex-start; gap: 10px; }
-.leave { height: 38px; padding: 0 16px; border-radius: 13px; border: 0; background: var(--string-strong); color: #fff; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-.leave:hover { background: var(--string-ink); }
-.recpill { display: none; align-items: center; gap: 10px; height: 38px; padding: 0 6px 0 12px; border-radius: 13px; background: color-mix(in srgb, var(--string-strong) 22%, var(--raised));
+@media (max-width: 1180px) { .linfo b, .tprog { display: none; } .linfo img { height: 28px; } .bar { gap: 10px; padding-inline: 10px; } .lside { gap: 10px; } }
+@media (max-width: 940px) { .ib { width: 38px; height: 38px; } .cluster { gap: 5px; } }
+.rside { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ib.leave { background: var(--string-strong); border-color: #ff4f62; color: #fff; }
+.ib.leave:hover { background: var(--string-ink); }
+.recpill { display: none; align-items: center; gap: 8px; height: 44px; padding: 0 4px 0 14px; border-radius: 22px; background: color-mix(in srgb, var(--string-strong) 22%, var(--raised));
   border: 1px solid var(--string); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
 #recT { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .recpill::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--string-light); animation: blink 1.2s infinite; }
@@ -303,7 +318,12 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 .pop .acts { display: flex; gap: 8px; justify-content: flex-end; }
 .pop.conn { bottom: auto; width: 300px; }
 /* the input mixer (T-077): a console of channel strips across the bottom, like a DAW's mixer */
-.pop.mixer { width: max-content; max-width: calc(100vw - 24px); padding: 12px 14px 14px; gap: 10px; }
+.pop.mixer { width: max-content; max-width: var(--mixmax, calc(100vw - 24px)); padding: 12px 14px 14px; gap: 10px; }
+/* the mixer always opens in the bottom-left corner, just above the bar (T-089): a docked Tools panel
+   moves right to make room (the page can't draw over it) instead of pushing the mixer up */
+#pop-mixer { left: 12px; bottom: calc(100% + 10px); max-height: calc(100vh - 120px); }
+#dockHole { transition: margin-left .3s cubic-bezier(.2,.8,.2,1); }
+body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 .mixer .mhead { width: 0; min-width: 100%; display: flex; align-items: center; gap: 10px; }
 .mixer .mhead h3 { flex: none; }
 .mixer .mhead .dev { flex: 1; min-width: 0; font-size: 12.5px; }
@@ -488,29 +508,42 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 <div id="dockHole" aria-hidden="true"></div>
 
 <div class="bar" id="bar">
-  <div class="linfo"><img src="cans/can-small.svg" alt="">
-    <div><b id="ltitle">Your lesson</b><span id="ltime"></span><i class="tprog"><i id="lprog"></i></i></div></div>
-
-  <div class="icons" aria-label="Lesson controls">
-    <button class="ib" type="button" id="micBtn" data-tip="Mute my microphone (M)" aria-pressed="false"><span class="disc"><i data-i="mic"></i></span><span class="lbl">Mute</span></button>
-    <button class="ib" type="button" id="outBtn" data-tip="Mute what I hear (O)" aria-pressed="false"><span class="disc"><i data-i="volume"></i></span><span class="lbl">Output</span></button>
-    <button class="ib" type="button" id="mixBtn" data-pop="mixer" data-tip="Mixer: inputs, microphone level, monitoring, output (X)" aria-expanded="false"><span class="disc"><i data-i="mixer"></i></span><span class="lbl">Mixer</span></button>
-    <span class="split"><button class="ib" type="button" id="camBtn" data-tip="Turn my camera off (V)" aria-pressed="false"><span class="disc"><i data-i="video"></i></span><span class="lbl">Camera</span></button><button class="caret" type="button" data-pop="cam" data-anchor="camBtn" aria-label="Camera options" aria-expanded="false">&#9650;</button></span>
-    <button class="ib" type="button" id="shareBtn" data-pop="share" data-tip="Share a screen or a second camera" aria-expanded="false"><span class="disc"><i data-i="share"></i></span><span class="lbl">Share</span></button>
-    <span class="gap"></span>
-    <button class="ib" type="button" id="toolsBtn" data-act="tools" data-tip="Tuner, metronome, instrument (T)" aria-pressed="false"><span class="disc"><i data-i="music"></i></span><span class="lbl">Tools</span></button>
-    <button class="ib" type="button" id="boardBtn" data-act="board" data-tip="Shared board for music and notes (B)" aria-pressed="false"><span class="disc"><i data-i="board"></i></span><span class="lbl">Board</span></button>
-    <button class="ib" type="button" id="scoreBtn" data-act="score" data-tip="Shared score: write music together, play it at the metronome's tempo (S)" aria-pressed="false"><span class="disc"><i data-i="score"></i></span><span class="lbl">Score</span></button>
-    <button class="ib" type="button" id="chatBtn" data-act="chat" data-tip="Chat (C)" aria-pressed="false"><span class="disc"><i data-i="chat"></i><span class="badge" id="chatBadge" hidden></span></span><span class="lbl">Chat</span></button>
-    <button class="ib" type="button" id="recBtn" data-pop="rec" data-tip="Record this lesson (asks first)" aria-expanded="false"><span class="disc"><i data-i="record"></i></span><span class="lbl">Record</span></button>
-    <span class="recpill" role="status"><span id="recT"></span>
-      <button class="pill rec-only" type="button" id="markBtn" data-pop="mark" data-anchor="recBtnPill" title="Add a highlight at this moment (H)"><i data-i="flag" style="vertical-align:-3px"></i> Mark</button>
-      <button class="pill" type="button" data-act="recstop" id="recStop">Stop</button></span>
+  <div class="lside">
+    <div class="linfo"><img src="cans/can-small.svg" alt="">
+      <div><b id="ltitle">Your lesson</b><span id="ltime"></span><i class="tprog"><i id="lprog"></i></i></div></div>
+    <div class="cluster" aria-label="Me">
+      <button class="ib" type="button" id="micBtn" data-tip="Mute my microphone (M)" aria-pressed="false"><span class="disc"><i data-i="mic"></i></span><span class="lbl">Mute</span></button>
+      <button class="ib" type="button" id="outBtn" data-tip="Mute what I hear (O)" aria-pressed="false"><span class="disc"><i data-i="volume"></i></span><span class="lbl">Output</span></button>
+      <div class="grp" id="camGrp">
+        <button class="ib cur" type="button" id="camBtn" data-tip="Turn my camera off (V)" aria-pressed="false"><span class="disc"><i data-i="video"></i></span><span class="lbl">Camera</span></button>
+        <div class="opts">
+          <button class="ib sm" type="button" id="camOpts" data-pop="cam" data-anchor="camBtn" data-tip="Choose a camera, mirror my picture" aria-expanded="false"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Camera options</span></button>
+          <button class="ib sm" type="button" id="shareBtn" data-pop="share" data-tip="Share a screen or a second camera" aria-expanded="false"><span class="disc"><i data-i="share"></i></span><span class="lbl">Share</span></button>
+        </div>
+      </div>
+      <button class="ib" type="button" id="mixBtn" data-pop="mixer" data-tip="Mixer: inputs, microphone level, monitoring, output (X)" aria-expanded="false"><span class="disc"><i data-i="mixer"></i></span><span class="lbl">Mixer</span></button>
+    </div>
   </div>
 
-  <div class="rside">
+  <div class="icons cluster c" aria-label="Teaching tools">
+    <button class="ib" type="button" id="toolsBtn" data-act="tools" data-tip="Tools: tuner, metronome, instrument (T)" aria-pressed="false"><span class="disc"><i data-i="music"></i></span><span class="lbl">Tools</span></button>
+    <button class="ib" type="button" id="scoreBtn" data-act="score" data-tip="Score: write music together, play it at the metronome's tempo (S)" aria-pressed="false"><span class="disc"><i data-i="score"></i></span><span class="lbl">Score</span></button>
+    <button class="ib" type="button" id="boardBtn" data-act="board" data-tip="Board: pictures and notes (B)" aria-pressed="false"><span class="disc"><i data-i="board"></i></span><span class="lbl">Board</span></button>
+    <button class="ib" type="button" id="chatBtn" data-act="chat" data-tip="Chat (C)" aria-pressed="false"><span class="disc"><i data-i="chat"></i><span class="badge" id="chatBadge" hidden></span></span><span class="lbl">Chat</span></button>
+  </div>
+
+  <div class="rside" aria-label="The lesson">
+    <button class="ib" type="button" id="recBtn" data-pop="rec" data-tip="Record this lesson (asks first)" aria-expanded="false"><span class="disc"><i data-i="record"></i></span><span class="lbl">Record</span></button>
+    <span class="recpill" role="status"><span id="recT"></span>
+      <button class="ib sm rec-only" type="button" id="markBtn" data-pop="mark" data-anchor="recT" data-tip="Mark this moment (H)"><span class="disc"><i data-i="flag"></i></span><span class="lbl">Mark</span></button>
+      <button class="ib sm on" type="button" data-act="recstop" id="recStop" data-tip="Stop recording"><span class="disc"><i data-i="stop"></i></span><span class="lbl">Stop</span></button></span>
     <button class="ib" type="button" id="setBtn" data-pop="set" data-tip="Settings" aria-expanded="false"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Settings</span></button>
-    <button class="leave" type="button" id="leaveBtn" data-pop="leave" aria-expanded="false"><i data-i="leave"></i>Leave</button>
+    <div class="grp rev" id="leaveGrp">
+      <button class="ib leave cur" type="button" id="leaveBtn" data-tip="Leave the lesson"><span class="disc"><i data-i="leave"></i></span><span class="lbl">Leave</span></button>
+      <div class="opts">
+        <button class="ib sm on" type="button" id="leaveYes" data-act="leave" data-tip="Yes, leave. You can come back until 15 minutes after the end"><span class="disc"><i data-i="check"></i></span><span class="lbl">Yes, leave</span></button>
+      </div>
+    </div>
   </div>
 
   <!-- popovers -->
@@ -551,18 +584,12 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     <h3>Quick settings</h3>
     <div class="dev"><span id="outDev"></span><button class="link" type="button" data-act="setup">Change…</button></div>
     <div class="line"><span>Mute everything I hear</span><input type="checkbox" class="sw" id="recvMute" aria-label="Mute everything I hear"></div>
-    <div class="line t-only"><span>Labels under the icons</span><input type="checkbox" class="sw" id="labels" checked aria-label="Labels under the icons"></div>
     <hr>
     <div class="menu">
       <button type="button" data-act="settings"><i data-i="settings"></i><span>All settings<small>Sound card, recording<span class="t-only">, advanced</span></small></span></button>
       <button type="button" data-act="setup"><i data-i="headphones"></i><span>Set up your sound again</span></button>
       <button type="button" data-act="help"><i data-i="help"></i><span>Help<small>Opens tincanstudios.ca/help</small></span></button>
     </div>
-  </div>
-  <div class="pop" id="pop-leave" role="dialog" aria-label="Leave the lesson" style="width:270px">
-    <h3>Leave the lesson?</h3>
-    <p>You can come back with Join lesson until 15 minutes after it ends.</p>
-    <div class="acts"><button class="pill" type="button" data-act="closepop">Stay</button><button class="btn sm" type="button" data-act="leave">Leave</button></div>
   </div>
 </div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
@@ -578,11 +605,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   const practice = params.get("practice") === "1";
   if (practice) {
     body.dataset.mode = "practice";
-    $("#leaveBtn").lastChild.textContent = "End practice";
-    $("#pop-leave h3").textContent = "End practice?";
-    $("#pop-leave").setAttribute("aria-label", "End practice");
-    $("#pop-leave p").textContent = "A recording that's still going stops and is saved. Your recordings and highlights stay in Tools › Summaries.";
-    $("#pop-leave [data-act=leave]").textContent = "End practice";
+    $("#leaveBtn").dataset.tip = "End practice";
+    $("#leaveYes").dataset.tip = "Yes, end practice. A recording still going stops and is saved";
     $("#pop-rec h3").textContent = "Record your practice?";
     $("#recAskP").textContent = "It's saved on this computer only. Mark the good moments as you go; everything shows up in Tools › Summaries.";
     $("#pop-rec [data-act=recask]").textContent = "Start recording";
@@ -627,6 +651,33 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     $$("i[data-i]", root).forEach((el) => { if (!el.firstChild) el.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[el.dataset.i] || "") + "</svg>"; });
   }
   icons(document);
+
+  // ---- icon groups in the bar (T-089): hover or click a circle with a dot, more icons slide out ----
+  function openGrp(g, open) {
+    if (open === g.classList.contains("open")) return;
+    const o = g.querySelector(".opts");
+    if (open) {
+      $$(".bar .grp.open").forEach((x) => x !== g && openGrp(x, false));
+      g.classList.add("open"); g._at = performance.now();
+      o.style.maxWidth = o.scrollWidth + 12 + "px";
+    } else {
+      g.classList.remove("open", "shown");
+      o.style.maxWidth = "";
+    }
+  }
+  $$(".bar .grp").forEach((g) => {
+    g.querySelector(".cur").insertAdjacentHTML("beforeend", '<span class="more" aria-hidden="true"></span>');
+    const o = g.querySelector(".opts");
+    [...o.children].forEach((c, i) => c.style.setProperty("--i", i));
+    let timer = 0;
+    // stays open while one of its pop-ups is
+    const busy = () => !!g.querySelector("[aria-expanded=true]");
+    g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(timer); timer = setTimeout(() => openGrp(g, true), 90); });
+    g.addEventListener("pointerleave", (e) => { if (e.pointerType === "touch") return; clearTimeout(timer); timer = setTimeout(() => { if (!busy()) openGrp(g, false); }, 420); });
+    g.addEventListener("focusin", () => openGrp(g, true));
+    g.addEventListener("focusout", (e) => { if (!g.contains(e.relatedTarget) && !busy()) openGrp(g, false); });
+    o.addEventListener("transitionend", (e) => { if (e.target === o && e.propertyName === "max-width" && g.classList.contains("open")) g.classList.add("shown"); });
+  });
   // every bar button has a spoken name, even when the labels under the icons are hidden
   function nameFromTip(b) { if (b.dataset.tip) b.setAttribute("aria-label", b.dataset.tip); }
   $$(".ib[data-tip]").forEach(nameFromTip);
@@ -1035,8 +1086,6 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (firstOne) setTimeout(() => { send(meQueue[msg.t]); delete meQueue[msg.t]; }, 33);
   }
   $("#recvMute").addEventListener("change", (e) => { meBusy(); send({ t: "recvMute", v: e.target.checked }); });
-  $("#labels").addEventListener("change", (e) => { body.classList.toggle("nolabels", !e.target.checked); try { localStorage.setItem("canduet.labels", e.target.checked ? "1" : "0"); } catch (_) {} });
-  try { if (localStorage.getItem("canduet.labels") === "0") { $("#labels").checked = false; body.classList.add("nolabels"); } } catch (_) {}
 
   // ---- the lesson: title, time ----
   function renderLesson() {
@@ -1052,7 +1101,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
       $("#lprog").style.width = "0";
     }
     $("#recT").textContent = rec.phase === "recording" ? mmss(rec.secs) : rec.phase === "asked" ? "Record?" : "Asking…";
-    $("#recStop").textContent = rec.phase === "recording" ? "Stop" : "Cancel";
+    $("#recStop").dataset.tip = rec.phase === "recording" ? "Stop recording" : "Cancel";
+    nameFromTip($("#recStop"));
     body.dataset.rec = rec.phase;
     $("#toolsBtn").setAttribute("aria-pressed", String(!!docks.tools));
     $("#boardBtn").setAttribute("aria-pressed", String(!!docks.board));
@@ -1108,8 +1158,26 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 
   // ---- popovers (inside the page, anchored to their icon) ----
   let popOpener = null;
+  // the docked Tools panel follows its gap while it slides aside for the mixer
+  function followDock(ms) {
+    const end = performance.now() + (ms || 380);
+    const step = () => { sendDock(); if (performance.now() < end) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  function placeMixer() {
+    const pop = $("#pop-mixer");
+    if (!pop.classList.contains("open")) return;
+    // with Board or Score docked, the mixer stays left of it (the page can't draw over the native panel)
+    if (body.classList.contains("side-on")) body.style.setProperty("--mixmax", Math.max(260, $("#sideHole").getBoundingClientRect().left - 24) + "px");
+    else body.style.removeProperty("--mixmax");
+    const w = Math.round(pop.offsetWidth);
+    if (w && w + "px" !== body.style.getPropertyValue("--mixw")) { body.style.setProperty("--mixw", w + "px"); followDock(); }
+  }
+  new ResizeObserver(placeMixer).observe($("#pop-mixer"));
   function closePops() {
     const wasOpen = $$(".pop.open").length > 0;
+    if ($("#pop-mixer").classList.contains("open")) { body.classList.remove("mix-on"); followDock(); }
+    $$(".bar .grp.open").forEach((g) => { if (!g.matches(":hover")) openGrp(g, false); });
     $$(".pop.open").forEach((p) => p.classList.remove("open"));
     fxOpen = null;
     $$("[aria-expanded=true]").forEach((b) => b.setAttribute("aria-expanded", "false"));
@@ -1126,7 +1194,8 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (id === "mark") { $("#markIn").value = ""; send({ t: "mark", a: "start" }); }
     pop.classList.add("open"); btn.setAttribute("aria-expanded", "true");
     popOpener = btn;
-    if (pop.parentElement.id === "bar") {
+    if (id === "mixer") { body.classList.add("mix-on"); placeMixer(); followDock(); }
+    else if (pop.parentElement.id === "bar") {
       const bar = $("#bar").getBoundingClientRect();
       const anchor = btn.dataset.anchor ? ($("#" + btn.dataset.anchor) || btn) : btn;
       const r = (anchor.offsetParent ? anchor : btn).getBoundingClientRect();
@@ -1202,6 +1271,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
     if (t.id === "micBtn") { me.micOff = !me.micOff; renderMe(); renderInputs(); send({ t: "mic", off: me.micOff }); }
     if (t.id === "outBtn") { setOutMute(!me.outMute); }
     if (t.id === "camBtn") toggleCamera();
+    if (t.id === "leaveBtn") { const g = $("#leaveGrp"); openGrp(g, !g.classList.contains("open") || performance.now() - g._at < 500); }
   });
   $("#pop-mark").addEventListener("submit", (e) => { e.preventDefault(); send({ t: "mark", a: "save", label: $("#markIn").value.trim().slice(0, 80) }); closePops(); toast("Highlight saved", 2500); });
 
