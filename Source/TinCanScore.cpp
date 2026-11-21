@@ -92,23 +92,29 @@ ScoreWindow::ScoreWindow(SonobusAudioProcessor & p, NoteShare & ns, Hooks h)
         setBody(std::move(label));
     }
 
-    soundButton = std::make_unique<DockHeaderButton>();
-    soundButton->onClick = [this]() { showSoundMenu(); };
-    updateSoundButton();
-    getHolder().addHeaderItem(soundButton.get());
+    // the page draws its dock icons at the end of its own bar
+    if (browser != nullptr)
+        getHolder().setControlsInBody([this](bool docked, bool canDock) { postDock(docked, canDock); });
 
     noteShare.addListener(this);
     startTimerHz(30);
 }
 
-void ScoreWindow::updateSoundButton()
+void ScoreWindow::postSound()
 {
-    if (!soundButton) return;
-    const auto name = processor.getScoreInstrumentName();
-    soundButton->set(TRANS("Sound") + ": " + (name.isNotEmpty() ? name : TRANS("Built-in")), DockHeaderButton::Glyph::menu,
-                     TRANS("Choose the sound the score plays with: the built-in sounds or a VST3 instrument"));
-    soundButton->setSize(jmin(280, soundButton->idealWidth()), DockHolder::headerHeight);
-    getHolder().relayout();
+    DynamicObject::Ptr m = new DynamicObject();
+    m->setProperty("t", "sound");
+    m->setProperty("name", processor.getScoreInstrumentName().substring(0, 120));
+    post(var(m.get()));
+}
+
+void ScoreWindow::postDock(bool docked, bool canDock)
+{
+    DynamicObject::Ptr m = new DynamicObject();
+    m->setProperty("t", "dock");
+    m->setProperty("docked", docked);
+    m->setProperty("canDock", canDock);
+    post(var(m.get()));
 }
 
 void ScoreWindow::showSoundMenu()
@@ -130,7 +136,7 @@ void ScoreWindow::showSoundMenu()
     menu.addItem(3, TRANS("Find plugins..."));
 
     Component::SafePointer<ScoreWindow> safeThis(this);
-    menu.showMenuAsync(PopupMenu::Options().withTargetComponent(soundButton.get()), [safeThis, instruments](int result) {
+    menu.showMenuAsync(PopupMenu::Options().withMousePosition(), [safeThis, instruments](int result) {
         if (!safeThis || result == 0) return;
         auto & proc = safeThis->processor;
         if (result == 2) { proc.showScoreInstrumentWindow(); return; }
@@ -143,7 +149,7 @@ void ScoreWindow::showSoundMenu()
             AlertWindow::showMessageBoxAsync(MessageBoxIconType::WarningIcon, TRANS("Couldn't load the instrument"), error);
             return;
         }
-        safeThis->updateSoundButton();
+        safeThis->postSound();
         if (id.isNotEmpty()) proc.showScoreInstrumentWindow();   // to pick its sound
     });
 }
@@ -191,6 +197,20 @@ void ScoreWindow::handleMessage(const var & m)
         auto pending = std::move(early);
         early.clear();
         for (auto & e : pending) receive(e.first, e.second);
+        postSound();
+        postDock(getHolder().isDocked(), getHolder().canDockIn());
+    }
+    // the icons the page draws for the app (T-089)
+    else if (type == "dockToggle") {
+        getHolder().requestToggleDock();
+    }
+    else if (type == "dockClose") {
+        // in its own window the page has no close icon (the title bar does), but just in case
+        if (getHolder().isDocked()) getHolder().requestClose();
+        else closeButtonPressed();
+    }
+    else if (type == "soundMenu") {
+        showSoundMenu();
     }
     else if (type == "send") {
         auto data = m.getProperty("data", var()).toString();

@@ -28,6 +28,9 @@ namespace Icons {
     Icon cast();      // sharing my keys
     Icon eye();       // showing the other person's keys
     Icon midi();      // a 5-pin MIDI socket
+    Icon popOut();    // a box with an arrow leaving it: into a window of its own
+    Icon dockIn();    // a box with an arrow going down into it: back inside the lesson window
+    Icon close();     // an X
 }
 
 class IconCircle : public Button

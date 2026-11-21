@@ -959,7 +959,7 @@ body:not([data-rec=recording]) .rec-only { display: none; }
   // as tall as wide (the app keeps that shape); never more than half the window
   function sizeDock() {
     const keyW = Math.max(12, ((screen.availWidth || window.innerWidth) - 64) / 52);
-    const h = Math.min(Math.round(120 + keyW * 5.6), Math.round(window.innerHeight * 0.5)) + 32;   // + its header (T-085)
+    const h = Math.min(Math.round(120 + keyW * 5.6), Math.round(window.innerHeight * 0.5)) + 6;   // + its taller tab row; no header (T-089)
     body.style.setProperty("--dockh", Math.max(252, h) + "px");
   }
   sizeDock();

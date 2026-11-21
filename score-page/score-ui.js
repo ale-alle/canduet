@@ -2289,6 +2289,25 @@
   // ---------------------------------------------------------------------------
   // messages from the app
   // ---------------------------------------------------------------------------
+  // the dock icons (T-089): docked, pop out and close; in its own window, dock in when there's a lesson
+  const DOCK_ICONS = {
+    popOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+    dockIn: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18M12 6.5v5.5M9 9.5l3 3 3-3"/></svg>',
+  };
+  function showDock(docked, canDock) {
+    const b = $("#dockBtn");
+    b.innerHTML = docked ? DOCK_ICONS.popOut : DOCK_ICONS.dockIn;
+    b.title = docked ? "Pop out: a window of its own" : "Dock in the lesson window";
+    b.setAttribute("aria-label", b.title);
+    b.hidden = !(docked || canDock);
+    $("#closeBtn").hidden = !docked;   // its own window has the title bar's close
+  }
+  if (host) {
+    $("#soundBtn").addEventListener("click", () => send({ t: "soundMenu" }));
+    $("#dockBtn").addEventListener("click", () => send({ t: "dockToggle" }));
+    $("#closeBtn").addEventListener("click", () => send({ t: "dockClose" }));
+  }
+
   function onHost(raw) {
     let m = raw;
     if (typeof m === "string") { try { m = JSON.parse(m); } catch (e) { return; } }
@@ -2316,6 +2335,17 @@
         break;
       case "tempo":
         if (typeof m.bpm === "number") setTempo(m.bpm);
+        break;
+      case "sound": {
+        const b = $("#soundBtn");
+        const name = typeof m.name === "string" && m.name ? m.name.slice(0, 120) : "built-in";
+        b.title = "Sound: " + name + ". Click to choose the built-in sounds or a VST3 instrument";
+        b.setAttribute("aria-label", "Sound: " + name);
+        b.hidden = false;
+        break;
+      }
+      case "dock":
+        showDock(!!m.docked, !!m.canDock);
         break;
       case "pos":
         if (typeof m.beat === "number") {

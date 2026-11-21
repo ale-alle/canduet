@@ -57,6 +57,29 @@ Icon eye()
     return i;
 }
 
+// the dock icons, the same drawings as the pages' (redesign T-089)
+Icon popOut()
+{
+    Icon i;
+    i.line = svg("M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5");
+    return i;
+}
+
+Icon dockIn()
+{
+    Icon i;
+    i.line.addRoundedRectangle(3.0f, 4.0f, 18.0f, 16.0f, 2.0f);
+    i.line.addPath(svg("M3 15h18M12 6.5v5.5M9 9.5l3 3 3-3"));
+    return i;
+}
+
+Icon close()
+{
+    Icon i;
+    i.line = svg("M6.5 6.5l11 11M17.5 6.5l-11 11");
+    return i;
+}
+
 Icon midi()
 {
     // a 5-pin DIN socket, as on MIDI cables

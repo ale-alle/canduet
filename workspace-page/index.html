@@ -36,6 +36,13 @@
   .swatch[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
   #colours { display: flex; gap: 4px; flex: none; }
   #hint[hidden], .card[hidden] { display: none; }
+  /* round icons, the app's one button (redesign T-089): soft red, bright red when on */
+  .ic { width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+        background: rgba(229,72,77,.16); border: 1px solid rgba(229,72,77,.45); color: #ff6b70; transition: background .15s, border-color .15s; }
+  .ic:hover { background: rgba(229,72,77,.30); border-color: rgba(229,72,77,.8); }
+  .ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .dockend { display: flex; gap: 4px; align-items: center; flex: none; margin-left: 4px; }
+  .ic[hidden] { display: none; }
   #status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; padding-left: 8px;
             flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
   #side { position: absolute; left: 0; top: 0; bottom: 0; width: 210px; background: var(--panel); border-right: 1px solid var(--line);
@@ -91,6 +98,11 @@
   <button id="clearAll" title="Remove all marks on every card">Clear all</button>
   <button id="reset" title="Remove every card and mark">Reset</button>
   <span id="status" role="status"></span>
+  <!-- the app's icons for this tool (T-089): pop out or dock, close -->
+  <span class="dockend">
+    <button class="ic" id="dockBtn" hidden title="Pop out" aria-label="Pop out"></button>
+    <button class="ic" id="closeBtn" hidden title="Close the board" aria-label="Close the board"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+  </span>
 </div>
 <div id="middle">
 <aside id="side" aria-labelledby="sideHeading">

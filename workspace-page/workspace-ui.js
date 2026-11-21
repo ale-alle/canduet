@@ -525,6 +525,32 @@
   });
   render();
 
+  // the dock icons at the end of the bar (T-089): the app says whether the board is docked; the
+  // icons ask it to pop out, dock in or close
+  const host = window.chrome && window.chrome.webview;
+  const toHost = (msg) => { if (host) host.postMessage(JSON.stringify(msg)); };
+  const DOCK_ICONS = {
+    popOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+    dockIn: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18M12 6.5v5.5M9 9.5l3 3 3-3"/></svg>',
+  };
+  if (host) {
+    const dockBtn = document.getElementById("dockBtn"), closeBtn = document.getElementById("closeBtn");
+    dockBtn.addEventListener("click", () => toHost({ t: "dockToggle" }));
+    closeBtn.addEventListener("click", () => toHost({ t: "dockClose" }));
+    host.addEventListener("message", (e) => {
+      let m = e.data;
+      if (typeof m === "string") { try { m = JSON.parse(m); } catch (err) { return; } }
+      if (!m || m.t !== "dock") return;
+      const docked = !!m.docked;
+      dockBtn.innerHTML = docked ? DOCK_ICONS.popOut : DOCK_ICONS.dockIn;
+      dockBtn.title = docked ? "Pop out: a window of its own" : "Dock in the lesson window";
+      dockBtn.setAttribute("aria-label", dockBtn.title);
+      dockBtn.hidden = !(docked || m.canDock);
+      closeBtn.hidden = !docked;   // its own window has the title bar's close
+    });
+    toHost({ t: "ready" });
+  }
+
   // for checks from the app or a test harness
   window.canduetWorkspace = { state, addCard, setTool, digest: () => W.digest(state), apply: send, session: me };
 })();

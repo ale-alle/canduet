@@ -6,83 +6,16 @@
 
 namespace TinCan {
 
-DockHeaderButton::DockHeaderButton() : Button({}) { setMouseCursor(MouseCursor::PointingHandCursor); }
-
-void DockHeaderButton::set(const String & text, Glyph g, const String & tip)
-{
-    setButtonText(text);
-    glyph = g;
-    setTooltip(tip);
-    setTitle(tip);
-    repaint();
-}
-
-int DockHeaderButton::idealWidth() const
-{
-    const auto t = getButtonText();
-    if (t.isEmpty()) return 28;
-    return 14 + (glyph != Glyph::none ? 18 : 0)
-           + Font(13.0f, Font::bold).getStringWidth(t);
-}
-
-void DockHeaderButton::paintButton(Graphics & g, bool over, bool down)
-{
-    auto r = getLocalBounds().toFloat().reduced(0.5f, 3.5f);
-    g.setColour(down ? TinCanTheme::lineStrong : over ? TinCanTheme::raised.brighter(0.15f) : TinCanTheme::raised);
-    g.fillRoundedRectangle(r, 7.0f);
-    g.setColour(over ? TinCanTheme::string : TinCanTheme::line);
-    g.drawRoundedRectangle(r, 7.0f, 1.0f);
-
-    g.setColour(over ? TinCanTheme::text : TinCanTheme::muted);
-    auto inner = r.reduced(7.0f, 0.0f);
-    const bool hasText = getButtonText().isNotEmpty();
-    Path p;
-    if (glyph == Glyph::menu) {
-        // a small down arrow at the right, after the text
-        auto a = inner.removeFromRight(10.0f).withSizeKeepingCentre(10.0f, 6.0f);
-        inner.removeFromRight(6.0f);
-        p.startNewSubPath(a.getX(), a.getY()); p.lineTo(a.getCentreX(), a.getBottom()); p.lineTo(a.getRight(), a.getY());
-    }
-    else if (glyph != Glyph::none) {
-        auto box = hasText ? inner.removeFromLeft(12.0f).withSizeKeepingCentre(12.0f, 12.0f)
-                           : inner.withSizeKeepingCentre(12.0f, 12.0f);
-        if (hasText) inner.removeFromLeft(6.0f);
-        const float x = box.getX(), y = box.getY(), w = box.getWidth();
-        if (glyph == Glyph::close) {
-            p.startNewSubPath(x + 1, y + 1); p.lineTo(x + w - 1, y + w - 1);
-            p.startNewSubPath(x + w - 1, y + 1); p.lineTo(x + 1, y + w - 1);
-        }
-        else {
-            // a box with an arrow leaving it (pop out) or entering it (dock in)
-            p.startNewSubPath(x + w * 0.45f, y + 1); p.lineTo(x + 1, y + 1); p.lineTo(x + 1, y + w - 1);
-            p.lineTo(x + w - 1, y + w - 1); p.lineTo(x + w - 1, y + w * 0.55f);
-            if (glyph == Glyph::popOut) {
-                p.startNewSubPath(x + w * 0.45f, y + w * 0.55f); p.lineTo(x + w - 1, y + 1);
-                p.startNewSubPath(x + w * 0.62f, y + 1); p.lineTo(x + w - 1, y + 1); p.lineTo(x + w - 1, y + w * 0.38f);
-            }
-            else {
-                p.startNewSubPath(x + w - 1, y + 1); p.lineTo(x + w * 0.45f, y + w * 0.55f);
-                p.startNewSubPath(x + w * 0.45f, y + w * 0.2f); p.lineTo(x + w * 0.45f, y + w * 0.55f); p.lineTo(x + w * 0.8f, y + w * 0.55f);
-            }
-        }
-    }
-    if (!p.isEmpty()) g.strokePath(p, PathStrokeType(1.7f, PathStrokeType::curved, PathStrokeType::rounded));
-    if (hasText) {
-        g.setFont(Font(13.0f, Font::bold));
-        g.drawText(getButtonText(), inner, Justification::centredLeft, true);
-    }
-}
-
 DockHolder::DockHolder(const String & t) : title(t)
 {
     setOpaque(true);
-    dockButton = std::make_unique<DockHeaderButton>();
-    closeButton = std::make_unique<DockHeaderButton>();
-    closeButton->set({}, DockHeaderButton::Glyph::close, TRANS("Close") + " " + title);
-    dockButton->onClick = [this]() { if (onToggleDock) onToggleDock(); };
-    closeButton->onClick = [this]() { if (onClose) onClose(); };
-    addChildComponent(dockButton.get());
-    addChildComponent(closeButton.get());
+    closeButton.setIcon(Icons::close());
+    closeButton.setTooltip(TRANS("Close") + " " + title);
+    closeButton.setTitle(TRANS("Close") + " " + title);
+    dockButton.onClick = [this]() { requestToggleDock(); };
+    closeButton.onClick = [this]() { requestClose(); };
+    addChildComponent(dockButton);
+    addChildComponent(closeButton);
     setDocked(false);
 }
 
@@ -93,42 +26,49 @@ void DockHolder::setBody(Component * newBody)
     if (body != nullptr) removeChildComponent(body);
     body = newBody;
     if (body != nullptr) addAndMakeVisible(body);
+    // the corner icons stay over the tool
+    dockButton.toFront(false);
+    closeButton.toFront(false);
     resized();
+}
+
+void DockHolder::setControlsInBody(std::function<void(bool, bool)> onStateChanged)
+{
+    bodyControls = std::move(onStateChanged);
+    stateChanged();
 }
 
 void DockHolder::setDocked(bool d)
 {
     docked = d;
-    if (docked) dockButton->set(TRANS("Pop out"), DockHeaderButton::Glyph::popOut, TRANS("Move") + " " + title + " " + TRANS("to a window of its own"));
-    else dockButton->set(TRANS("Dock in lesson"), DockHeaderButton::Glyph::dockIn, TRANS("Put") + " " + title + " " + TRANS("back inside the lesson window"));
-    dockButton->setVisible(docked || canDock);
-    closeButton->setVisible(docked);   // its own window has the title bar's close
-    resized();
-    repaint();
-}
-
-void DockHolder::addHeaderItem(Component * item)
-{
-    headerItems.add(item);
-    addAndMakeVisible(item);
-    resized();
+    stateChanged();
 }
 
 void DockHolder::setCanDock(bool can)
 {
     canDock = can;
-    setDocked(docked);
+    stateChanged();
+}
+
+void DockHolder::stateChanged()
+{
+    const auto tip = docked ? TRANS("Pop out") + " " + title + ": " + TRANS("a window of its own")
+                            : TRANS("Dock") + " " + title + " " + TRANS("in the lesson window");
+    dockButton.setIcon(docked ? Icons::popOut() : Icons::dockIn());
+    dockButton.setTooltip(tip);
+    dockButton.setTitle(tip);
+    // in its own window the title bar has the close button
+    const bool drawn = !bodyControls;
+    dockButton.setVisible(drawn && (docked || canDock));
+    closeButton.setVisible(drawn && docked);
+    if (bodyControls) bodyControls(docked, canDock);
+    resized();
+    repaint();
 }
 
 void DockHolder::paint(Graphics & g)
 {
     g.fillAll(TinCanTheme::surface);
-    auto head = getLocalBounds().removeFromTop(headerHeight);
-    g.setColour(TinCanTheme::line);
-    g.fillRect(head.removeFromBottom(1));
-    g.setColour(TinCanTheme::text);
-    g.setFont(Font(14.0f, Font::bold));
-    g.drawText(title, head.withTrimmedLeft(12).withTrimmedRight(160), Justification::centredLeft, true);
     if (docked) {
         g.setColour(TinCanTheme::line);
         g.drawRect(getLocalBounds(), 1);
@@ -138,21 +78,14 @@ void DockHolder::paint(Graphics & g)
 void DockHolder::resized()
 {
     auto r = getLocalBounds();
-    auto head = r.removeFromTop(headerHeight).reduced(6, 0);
-    if (closeButton->isVisible()) {
-        closeButton->setBounds(head.removeFromRight(30));
-        head.removeFromRight(6);
+    if (body != nullptr) body->setBounds(docked ? r.reduced(1) : r);
+    // the corner: at the right end of the tool's own bar
+    auto corner = r.reduced(docked ? 1 : 0).removeFromTop(cornerIcon + 4).reduced(4, 2);
+    if (closeButton.isVisible()) {
+        closeButton.setBounds(corner.removeFromRight(cornerIcon));
+        corner.removeFromRight(4);
     }
-    if (dockButton->isVisible()) {
-        dockButton->setBounds(head.removeFromRight(dockButton->idealWidth()));
-        head.removeFromRight(6);
-    }
-    for (auto * item : headerItems) {
-        const int w = item->getWidth() > 0 ? item->getWidth() : 160;
-        item->setBounds(head.removeFromRight(jmin(w, jmax(0, head.getWidth() - 120))));
-        head.removeFromRight(6);
-    }
-    if (body != nullptr) body->setBounds(docked ? r.reduced(1, 0).withTrimmedBottom(1) : r);
+    if (dockButton.isVisible()) dockButton.setBounds(corner.removeFromRight(cornerIcon));
 }
 
 DockableWindow::DockableWindow(const String & title, int w, int h)

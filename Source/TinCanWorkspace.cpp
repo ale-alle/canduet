@@ -41,7 +41,8 @@ namespace {
 class WorkspaceBrowser : public WebBrowserComponent
 {
 public:
-    WorkspaceBrowser(const Options & options, const String & page_) : WebBrowserComponent(options), page(page_) {}
+    WorkspaceBrowser(const Options & options, const String & page_, std::function<void(const var &)> onMessage_)
+        : WebBrowserComponent(options), page(page_), onMessage(std::move(onMessage_)) {}
 
     bool pageAboutToLoad(const String & newURL) override
     {
@@ -50,8 +51,17 @@ public:
 
     void newWindowAttemptingToLoad(const String &) override {}
 
+    void webMessageReceived(const String & sourceURL, const String & message) override
+    {
+        if (sourceURL.upToFirstOccurrenceOf("#", false, false) != page || message.length() > 4096) return;
+        var m;
+        if (JSON::parse(message, m).failed() || !m.isObject()) return;
+        if (onMessage) onMessage(m);
+    }
+
 private:
     String page;
+    std::function<void(const var &)> onMessage;
 };
 
 }
@@ -62,15 +72,42 @@ WorkspaceWindow::WorkspaceWindow(const String & displayName)
     auto options = makeWebViewOptions();
     if (WebBrowserComponent::areOptionsSupported(options)) {
         auto url = getWorkspacePageURL(displayName);
-        auto browser = std::make_unique<WorkspaceBrowser>(options, url.upToFirstOccurrenceOf("#", false, false));
-        browser->goToURL(url);
-        setBody(std::move(browser));
+        auto b = std::make_unique<WorkspaceBrowser>(options, url.upToFirstOccurrenceOf("#", false, false),
+                                                    [this](const var & m) { handleMessage(m); });
+        b->goToURL(url);
+        browser = b.get();
+        setBody(std::move(b));
+        getHolder().setControlsInBody([this](bool docked, bool canDock) { postDock(docked, canDock); });
     }
     else {
         auto label = std::make_unique<Label>(String(), TRANS("The workspace needs Microsoft Edge WebView2, which isn't installed on this computer."));
         label->setJustificationType(Justification::centred);
         setBody(std::move(label));
     }
+}
+
+void WorkspaceWindow::handleMessage(const var & m)
+{
+    const auto type = m.getProperty("t", var()).toString();
+    if (type == "ready") {
+        ready = true;
+        postDock(getHolder().isDocked(), getHolder().canDockIn());
+    }
+    else if (type == "dockToggle") getHolder().requestToggleDock();
+    else if (type == "dockClose") {
+        if (getHolder().isDocked()) getHolder().requestClose();
+        else closeButtonPressed();
+    }
+}
+
+void WorkspaceWindow::postDock(bool docked, bool canDock)
+{
+    if (browser == nullptr || !ready) return;
+    DynamicObject::Ptr m = new DynamicObject();
+    m->setProperty("t", "dock");
+    m->setProperty("docked", docked);
+    m->setProperty("canDock", canDock);
+    browser->postWebMessage(JSON::toString(var(m.get()), true));
 }
 
 #else
@@ -82,6 +119,9 @@ WorkspaceWindow::WorkspaceWindow(const String &)
     label->setJustificationType(Justification::centred);
     setBody(std::move(label));
 }
+
+void WorkspaceWindow::handleMessage(const var &) {}
+void WorkspaceWindow::postDock(bool, bool) {}
 
 #endif
 

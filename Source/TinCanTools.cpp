@@ -7,6 +7,7 @@
 #include "TinCanTheme.h"
 #include "TinCanChords.h"
 #include "TinCanPracticeTools.h"
+#include "TinCanDock.h"
 #include "SonobusPluginProcessor.h"
 
 namespace TinCan {
@@ -910,7 +911,7 @@ ToolsPanel::ToolsPanel(SonobusAudioProcessor & processor, std::function<AudioDev
                        NoteShare & noteShare, std::function<void()> openWorkspace, SummaryHooks summaryHooks)
 {
     tabs = std::make_unique<TabbedComponent>(TabbedButtonBar::TabsAtTop);
-    tabs->setTabBarDepth(28);
+    tabs->setTabBarDepth(DockHolder::cornerIcon + 4);   // the dock icons sit at its right end (T-089)
     tabs->addTab(TRANS("Tuner"), TinCanTheme::surface, new TunerPanel(processor), true);
     tabs->addTab(TRANS("Metronome"), TinCanTheme::surface, new MetronomePanel(processor), true);
     tabs->addTab(TRANS("Instrument"), TinCanTheme::surface, new InstrumentPanel(processor, getDeviceManager, noteShare), true);

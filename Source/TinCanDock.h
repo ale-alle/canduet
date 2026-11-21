@@ -4,30 +4,20 @@
 #pragma once
 
 #include "JuceHeader.h"
+#include "TinCanIcons.h"
 
 #include <functional>
 #include <memory>
 
 // Dockable tools (T-085): Tools, Board and Score each live in a window of their own, or docked inside
-// the lesson window. The tool itself sits in a DockHolder (a thin header over it) that moves between
-// its own DockableWindow and the lesson window's dock frame. Moving a web page between windows needs
-// the WebView2 to follow its component (patched in deps/juce, juce_WebBrowserComponent_windows.cpp).
+// the lesson window. The tool itself sits in a DockHolder that moves between its own DockableWindow
+// and the lesson window's dock frame. Moving a web page between windows needs the WebView2 to follow
+// its component (patched in deps/juce, juce_WebBrowserComponent_windows.cpp).
+//
+// Redesign (T-089): no title row. Two round icons, pop out / dock and close, sit at the right end of
+// the tool's own bar: drawn here in the top-right corner over a tool made of components, or drawn by
+// a web page itself (nothing native can be drawn over a WebView2), which asks for them by message.
 namespace TinCan {
-
-// a small pill for a tool's header: text with an optional line icon in front
-class DockHeaderButton : public Button
-{
-public:
-    enum class Glyph { none, popOut, dockIn, close, menu };
-
-    DockHeaderButton();
-    void set(const String & text, Glyph glyph, const String & tip);
-    int idealWidth() const;
-    void paintButton(Graphics & g, bool over, bool down) override;
-
-private:
-    Glyph glyph = Glyph::none;
-};
 
 class DockHolder : public Component
 {
@@ -38,28 +28,33 @@ public:
     void setBody(Component * body);   // not owned
     Component * getBody() const { return body; }
 
-    // docked: "Pop out" and close; in its own window: "Dock in lesson" (when there is a lesson)
+    // docked: pop out and close; in its own window: dock in (when there is a lesson)
     void setDocked(bool docked);
     void setCanDock(bool can);
+    bool isDocked() const { return docked; }
+    bool canDockIn() const { return canDock; }
 
-    // a tool's own control in the header, left of Dock / Pop out (not owned); call relayout() after
-    // its size changes
-    void addHeaderItem(Component * item);
-    void relayout() { resized(); }
+    // a tool that draws the two icons itself (a web page): told the state, and calls the requests
+    void setControlsInBody(std::function<void(bool docked, bool canDock)> onStateChanged);
+    void requestToggleDock() { if (onToggleDock) onToggleDock(); }
+    void requestClose() { if (onClose) onClose(); }
 
     std::function<void()> onToggleDock, onClose;
 
-    static constexpr int headerHeight = 32;
+    // the room the corner icons take at the top right of a tool's bar
+    static constexpr int cornerIcon = 30, cornerWidth = 2 * cornerIcon + 10;
 
     void paint(Graphics & g) override;
     void resized() override;
 
 private:
+    void stateChanged();
+
     String title;
     Component * body = nullptr;
     bool docked = false, canDock = false;
-    std::unique_ptr<DockHeaderButton> dockButton, closeButton;
-    Array<Component *> headerItems;
+    IconCircle dockButton, closeButton;
+    std::function<void(bool, bool)> bodyControls;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DockHolder)
 };

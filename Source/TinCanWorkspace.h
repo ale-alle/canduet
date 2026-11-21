@@ -26,6 +26,12 @@ public:
     ~WorkspaceWindow() override;
 
 private:
+    // the page draws the dock icons at the end of its bar (T-089) and asks for these by message
+    void handleMessage(const var & message);
+    void postDock(bool docked, bool canDock);
+    WebBrowserComponent * browser = nullptr;   // owned by the window
+    bool ready = false;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WorkspaceWindow)
 };
 
