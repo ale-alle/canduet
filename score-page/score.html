@@ -20,46 +20,31 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
                font: 14px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
   body { display: flex; flex-direction: column; }
-  #bar { flex: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-         padding: 7px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
-  #bar .group { display: flex; gap: 3px; align-items: center; flex: none; }
-  /* T-088: tool groups */
-  #tabs { display: flex; gap: 2px; flex: none; padding: 2px; border-radius: 8px; background: var(--bg); }
-  #tabs .tab { display: inline-flex; align-items: center; gap: 5px; min-width: 34px; padding: 0 7px; border-color: transparent;
-               background: transparent; color: var(--muted); }
-  #tabs .tab:hover { color: var(--text); border-color: var(--line); }
-  #tabs .tab .tl { display: none; font-size: 13px; font-weight: 600; }
-  #tabs .tab[aria-selected="true"] { background: var(--panel2); border-color: var(--line); color: var(--text); }
-  #tabs .tab[aria-selected="true"] .tl { display: inline; }
-  #tabs .tab.live { color: #ff6b6b; }
-  #tabs .tab.live::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-  #panels { display: flex; flex: 0 1 auto; min-width: 0; }
-  .panel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .panel.peek { position: fixed; z-index: 20; padding: 7px 10px; background: var(--panel); border: 1px solid var(--line);
-                border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.5); max-width: calc(100vw - 16px); }
-  #bar .always { margin-left: 4px; }
-  #bar .sep { width: 1px; height: 28px; background: var(--line); margin: 0 3px; flex: none; }
-  button, select, input { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
-                          border-radius: 6px; min-height: 32px; flex: none; }
-  button { padding: 2px 9px; cursor: pointer; }
-  select { padding: 2px 4px; cursor: pointer; }
-  button:hover, select:hover { border-color: var(--muted); }
-  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button[aria-pressed="true"] { background: #233052; border-color: var(--accent); }
-  button:disabled { opacity: 0.45; cursor: default; }
-  button.glyph { min-width: 34px; padding: 0 4px; font: 20px/1 "Segoe UI Symbol", "Segoe UI", sans-serif; display: inline-grid; place-items: center; }
-  button.small { font-size: 13px; }
-  #tempo { width: 62px; padding: 2px 6px; text-align: right; }
-  #play { min-width: 76px; font-weight: 600; }
-  #play[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
-  #rec { min-width: 74px; font-weight: 600; color: #ff6b6b; }
-  #rec[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #bar { flex: none; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+         padding: 6px 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
   /* round icons, the app's one button (redesign T-089): soft red, bright red when on */
-  .ic { width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
-        background: rgba(229,72,77,.16); border: 1px solid rgba(229,72,77,.45); color: #ff6b70; transition: background .15s, border-color .15s; }
+  .ic { position: relative; width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+        background: rgba(229,72,77,.16); border: 1px solid rgba(229,72,77,.45); color: #ff6b70; transition: background .15s, border-color .15s, transform .15s; }
   .ic:hover { background: rgba(229,72,77,.30); border-color: rgba(229,72,77,.8); }
-  .ic[aria-pressed="true"] { background: #d7263d; border-color: #ff4f62; color: #fff; }
-  .ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .ic:active { transform: scale(.94); }
+  .ic[aria-pressed="true"], .ic.on { background: #d7263d; border-color: #ff4f62; color: #fff; }
+  .ic:disabled { opacity: .4; }
+  .ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .ic .more { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: #ff6b70; box-shadow: 0 0 0 2px var(--panel); }
+  .ic.on .more { background: #fff; }
+  #bar .sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; flex: none; }
+  .grp { position: relative; display: flex; align-items: center; flex: none; }
+  .grp .opts { display: flex; align-items: center; gap: 5px; max-width: 0; opacity: 0; overflow: hidden; padding: 4px 0; margin: -4px 0;
+               transition: max-width .28s cubic-bezier(.2,.8,.2,1), opacity .2s, padding .28s cubic-bezier(.2,.8,.2,1); }
+  .grp .opts > * { opacity: 0; transform: translateX(-10px) scale(.8); transition: transform .24s cubic-bezier(.2,.8,.2,1), opacity .18s; transition-delay: calc(var(--i, 0) * 26ms); }
+  .grp.open .opts { opacity: 1; padding-left: 5px; }
+  .grp.open .opts > * { opacity: 1; transform: none; }
+  .grp.shown .opts { overflow: visible; }
+  .grp[data-kind="pick"] .opts > .current { display: none; }
+  .grp select, .grp input { min-height: 30px; height: 30px; border-radius: 15px; padding: 0 10px; background: var(--panel2); color: var(--text); font-size: 13px; }
+  .grp option { background: var(--panel2); color: var(--text); }
+  .grp .tl { color: #ff6b70; font-size: 18px; }
+  @media (prefers-reduced-motion: reduce) { .grp .opts, .grp .opts > * { transition-duration: 0s !important; } }
   .dockend { display: flex; gap: 4px; align-items: center; flex: none; margin-left: 4px; }
   #status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; padding-left: 8px;
             flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
@@ -109,109 +94,50 @@
 </head>
 <body>
 <div id="bar" role="toolbar" aria-label="Score tools">
-  <!-- T-088: the tools in groups. Hovering a group's icon shows its tools for a moment; clicking it
-       keeps them in the bar. Only the last clicked group's tools stay out. -->
-  <div id="tabs" role="tablist" aria-label="Tool groups">
-    <button class="tab" type="button" role="tab" id="tab-file" data-grp="file" aria-controls="grp-file" aria-selected="false" title="Open, save and export the score"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="tl">File</span></button>
-    <button class="tab" type="button" role="tab" id="tab-write" data-grp="write" aria-controls="grp-write" aria-selected="false" title="Write notes: tool, note length, dots, triplets, rests"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg><span class="tl">Write</span></button>
-    <button class="tab" type="button" role="tab" id="tab-marks" data-grp="marks" aria-controls="grp-marks" aria-selected="false" title="Sharps and flats, staccato, ties and slurs"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v16M15 3v16M5 10l14-3M5 17l14-3"/></svg><span class="tl">Marks</span></button>
-    <button class="tab" type="button" role="tab" id="tab-edit" data-grp="edit" aria-controls="grp-edit" aria-selected="false" title="Select, erase, copy, paste, delete"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l13 8-6 1.5L9 19z" fill="currentColor"/></svg><span class="tl">Edit</span></button>
-    <button class="tab" type="button" role="tab" id="tab-bars" data-grp="bars" aria-controls="grp-bars" aria-selected="false" title="Staff, time signature, key, add or remove bars"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 10h18M3 14h18M3 18h18"/><path d="M8 4v16M16 4v16"/></svg><span class="tl">Bars</span></button>
-    <button class="tab" type="button" role="tab" id="tab-play" data-grp="play" aria-controls="grp-play" aria-selected="false" title="Tempo and metronome click"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg><span class="tl">Play</span></button>
-    <button class="tab" type="button" role="tab" id="tab-rec" data-grp="rec" aria-controls="grp-rec" aria-selected="false" title="Write or record from your MIDI keyboard"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/></svg><span class="tl">Record</span></button>
-  </div>
-  <div id="panels">
-    <div class="panel" id="grp-file" role="tabpanel" aria-labelledby="tab-file" data-grp="file" hidden>
-      <div class="group">
-        <button id="new" class="small" title="Start a new score (for everyone)">New</button>
-        <button id="open" class="small" title="Open a saved score (for everyone)">Open…</button>
-        <button id="save" class="small" title="Save this score to a file to open again in CanDuet (Ctrl+S)">Save…</button>
-        <button id="exportXml" class="small" title="Export as MusicXML, to open in MuseScore, Sibelius, Dorico, Finale and other notation programs">MusicXML…</button>
-      </div>
-    </div>
-    <div class="panel" id="grp-write" role="tabpanel" aria-labelledby="tab-write" data-grp="write" hidden>
-      <div class="group">
-        <button class="glyph" data-mode="write" title="Write notes: click the staff (W)" aria-label="Write" aria-pressed="true"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
-      </div>
-      <span class="sep"></span>
-      <div class="group">
-        <button class="glyph" data-dur="1920" title="Whole note (7)" aria-label="Whole note"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="12" cy="16" rx="6.5" ry="4.2" fill="none" stroke-width="2.4"/></svg></button>
-        <button class="glyph" data-dur="960" title="Half note (6)" aria-label="Half note"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="21" rx="5" ry="3.4" transform="rotate(-20 9 21)" fill="none" stroke-width="1.8"/><path d="M13.4 19.6V3" stroke-width="1.6" fill="none"/></svg></button>
-        <button class="glyph" data-dur="480" title="Quarter note (5)" aria-label="Quarter note" aria-pressed="true"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="21" rx="5" ry="3.4" transform="rotate(-20 9 21)" stroke="none"/><path d="M13.4 19.6V3" stroke-width="1.6" fill="none"/></svg></button>
-        <button class="glyph" data-dur="240" title="Eighth note (4)" aria-label="Eighth note"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="21" rx="5" ry="3.4" transform="rotate(-20 9 21)" stroke="none"/><path d="M13.4 19.6V3" stroke-width="1.6" fill="none"/><path d="M13.4 3c1 3 6 5 5 10" stroke-width="1.8" fill="none"/></svg></button>
-        <button class="glyph" data-dur="120" title="Sixteenth note (3)" aria-label="Sixteenth note"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="21" rx="5" ry="3.4" transform="rotate(-20 9 21)" stroke="none"/><path d="M13.4 19.6V3" stroke-width="1.6" fill="none"/><path d="M13.4 3c1 3 6 5 5 10" stroke-width="1.8" fill="none"/><path d="M13.4 8c1 3 6 5 5 10" stroke-width="1.8" fill="none"/></svg></button>
-        <button class="glyph" id="dot" title="Dotted (.)" aria-label="Dotted" aria-pressed="false">•</button>
-        <button class="glyph small" id="triplet" title="Triplet: three in the time of two (Ctrl+3)" aria-label="Triplet" aria-pressed="false">³</button>
-        <button class="glyph" id="rest" title="Rest: clicks and keys write silence (0 writes one rest)" aria-label="Rest" aria-pressed="false"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><path d="M9 3l5.5 6.5-4 4.5 5 6c-3-1.5-6-.5-5 3-3-3-1-6 2-5L8 12.5l4-4.5z" stroke="none"/></svg></button>
-      </div>
-    </div>
-    <div class="panel" id="grp-marks" role="tabpanel" aria-labelledby="tab-marks" data-grp="marks" hidden>
-      <div class="group">
-        <button class="glyph" data-alt="-1" title="Flat (selected note)" aria-label="Flat">♭</button>
-        <button class="glyph" data-alt="0" title="Natural (selected note)" aria-label="Natural">♮</button>
-        <button class="glyph" data-alt="1" title="Sharp (selected note)" aria-label="Sharp">♯</button>
-      </div>
-      <span class="sep"></span>
-      <div class="group">
-        <button class="glyph" id="stacc" title="Staccato on or off for the selected notes (Shift+S)" aria-label="Staccato" aria-pressed="false"><svg viewBox="0 0 24 28" width="20" height="24" aria-hidden="true" fill="currentColor" stroke="currentColor"><ellipse cx="9" cy="16" rx="5" ry="3.4" transform="rotate(-20 9 16)" stroke="none"/><path d="M13.4 14.6V2" stroke-width="1.6" fill="none"/><circle cx="9" cy="24" r="2" stroke="none"/></svg></button>
-      </div>
-      <span class="sep"></span>
-      <div class="group">
-        <button class="glyph" data-mode="tie" title="Tie: drag from a note to the next one of the same pitch (T); click a tied note to untie" aria-label="Tie tool" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="13" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="13" r="2" fill="currentColor" stroke="none"/><path d="M5 16c4 5 10 5 14 0"/></svg></button>
-        <button class="glyph" data-mode="slur" title="Slur: drag from one note to another (S); drag its ends or middle to change it" aria-label="Slur tool" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17C7 6 17 6 21 17"/></svg></button>
-      </div>
-    </div>
-    <div class="panel" id="grp-edit" role="tabpanel" aria-labelledby="tab-edit" data-grp="edit" hidden>
-      <div class="group">
-        <button class="glyph" data-mode="select" title="Select: click notes or slurs, drag a box, Shift adds (V or Esc)" aria-label="Select" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l13 8-6 1.5L9 19z" fill="currentColor"/></svg></button>
-        <button class="glyph" data-mode="erase" title="Eraser: click or drag over notes and slurs (X)" aria-label="Eraser" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l9-9 6 6-7 7H7z"/><path d="M9 11l6 6M12 20h8"/></svg></button>
-      </div>
-      <span class="sep"></span>
-      <div class="group">
-        <button id="copy" class="small" title="Copy the selected notes (Ctrl+C; Ctrl+X cuts)">Copy</button>
-        <button id="paste" class="small" title="Paste at the cursor (Ctrl+V)">Paste</button>
-        <button id="del" class="small" title="Delete the selection, or the note at the cursor (Delete). Backspace deletes going backwards">Delete</button>
-      </div>
-    </div>
-    <div class="panel" id="grp-bars" role="tabpanel" aria-labelledby="tab-bars" data-grp="bars" hidden>
-      <div class="group">
-        <label class="sr" for="clef">Clef</label>
-        <select id="clef" title="Staff: treble, bass, or piano (both)"><option value="treble">Treble</option><option value="bass">Bass</option><option value="piano">Piano (both)</option></select>
-        <label class="sr" for="time">Time signature</label>
-        <select id="time" title="Time signature from the selected bar on"></select>
-        <label class="sr" for="key">Key</label>
-        <select id="key" title="Key from the selected bar on"></select>
-        <button id="addBar" class="small" title="Add a bar after the selected one">+ Bar</button>
-        <button id="delBar" class="small" title="Remove the selected bar">− Bar</button>
-      </div>
-    </div>
-    <div class="panel" id="grp-play" role="tabpanel" aria-labelledby="tab-play" data-grp="play" hidden>
-      <div class="group">
-        <label for="tempo" title="Tempo (the metronome's; changes it for everyone)">♩ =</label>
-        <input id="tempo" type="number" min="20" max="300" step="1" value="100">
-        <button id="click" class="small" aria-pressed="true" title="Metronome click while playing, with its count-in">Click</button>
-      </div>
-    </div>
-    <div class="panel" id="grp-rec" role="tabpanel" aria-labelledby="tab-rec" data-grp="rec" hidden>
-      <div class="group">
-        <button id="midi" class="small" aria-pressed="false" title="Write notes by playing your MIDI keyboard (N)">Write from keys</button>
-      </div>
-      <span class="sep"></span>
-      <div class="group">
-        <button id="rec" aria-pressed="false" title="Record from your MIDI keyboard from the selected bar, after a count-in (R)">● Rec</button>
-        <label class="sr" for="countIn">Count-in</label>
-        <select id="countIn" title="Count-in before recording"><option value="1">1 bar in</option><option value="2">2 bars in</option></select>
-        <label class="sr" for="quant">Shortest note</label>
-        <select id="quant" title="Shortest note recorded: what's played is moved to the nearest 8th or 16th"><option value="240">8ths</option><option value="120" selected>16ths</option></select>
-      </div>
+  <!-- Redesign (T-089): round icons only, words in the tooltips. Select is always there; a circle with a
+       dot opens its group sideways (hover or click) and folds back after a pick. -->
+  <button class="ic " type="button" title="Select: click notes or slurs, drag a box, Shift adds (V or Esc)" aria-label="Select" data-mode="select" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5l13 8-6 1.5-3 6z" fill="currentColor" stroke="none"/></svg></button>
+  <span class="sep"></span>
+  <div class="grp" data-grp="tool" data-kind="pick"><button class="ic cur" type="button" title="Write or erase" aria-label="Write or erase" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic " type="button" title="Write notes: click the staff (W)" aria-label="Write notes" data-mode="write" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button><button class="ic " type="button" title="Eraser: click or drag over notes and slurs (X)" aria-label="Eraser" data-mode="erase" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l9-9 6 6-7 7H7z"/><path d="M9 11l6 6M12 20h8"/></svg></button></div></div>
+  <div class="grp" data-grp="len" data-kind="pick"><button class="ic cur" type="button" title="Note length" aria-label="Note length" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" fill="currentColor" stroke="none"/><path d="M13 15.6V3"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic " type="button" title="Whole note (7)" aria-label="Whole note" data-dur="1920"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12.5" rx="6" ry="4" stroke-width="2.2"/></svg></button><button class="ic " type="button" title="Half note (6)" aria-label="Half note" data-dur="960"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)"/><path d="M13 15.6V3"/></svg></button><button class="ic " type="button" title="Quarter note (5)" aria-label="Quarter note" data-dur="480" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" fill="currentColor" stroke="none"/><path d="M13 15.6V3"/></svg></button><button class="ic " type="button" title="Eighth note (4)" aria-label="Eighth note" data-dur="240"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" fill="currentColor" stroke="none"/><path d="M13 15.6V3c1 3 5.5 4.5 4.5 9"/></svg></button><button class="ic " type="button" title="Sixteenth note (3)" aria-label="Sixteenth note" data-dur="120"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" fill="currentColor" stroke="none"/><path d="M13 15.6V3c1 3 5.5 4.5 4.5 9M13 7c1 3 5.5 4.5 4.5 9"/></svg></button></div></div>
+  <button class="ic " type="button" title="Dotted (.)" aria-label="Dotted" id="dot" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.8" fill="currentColor" stroke="none"/></svg></button>
+  <button class="ic " type="button" title="Triplet: three in the time of two (Ctrl+3)" aria-label="Triplet" id="triplet" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 6h7l-4 5a4 4 0 1 1-3.5 6"/></svg></button>
+  <button class="ic " type="button" title="Rest: clicks and keys write silence (0 writes one rest)" aria-label="Rest" id="rest" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3l5 6-3.5 4 4.5 5.5c-2.7-1.3-5.4-.4-4.5 2.8-2.7-2.8-.9-5.6 1.8-4.6L9 12.5l3.6-4z" fill="currentColor" stroke="none"/></svg></button>
+  <div class="grp" data-grp="acc" data-kind="act"><button class="ic cur" type="button" title="Sharps and flats for the selected notes" aria-label="Sharps and flats for the selected notes" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4v17M14.5 3v17M5.5 10.2l13-3M5.5 16.2l13-3"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic " type="button" title="Flat (selected notes)" aria-label="Flat" data-alt="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3v17c3-1 7.5-3 7.5-6.5 0-3-3.5-3.2-7.5-.3"/></svg></button><button class="ic " type="button" title="Natural (selected notes)" aria-label="Natural" data-alt="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3v13l7-2.5M15.5 21V8l-7 2.5"/></svg></button><button class="ic " type="button" title="Sharp (selected notes)" aria-label="Sharp" data-alt="1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4v17M14.5 3v17M5.5 10.2l13-3M5.5 16.2l13-3"/></svg></button></div></div>
+  <div class="grp" data-grp="marks" data-kind="act"><button class="ic cur" type="button" title="Ties, slurs, staccato" aria-label="Ties, slurs, staccato" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15C7 6 17 6 21 15"/><circle cx="12" cy="19.5" r="1.6" fill="currentColor" stroke="none"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic " type="button" title="Tie: drag from a note to the next one of the same pitch (T); click a tied note to untie" aria-label="Tie" data-mode="tie" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="10" r="2" fill="currentColor" stroke="none"/><circle cx="19" cy="10" r="2" fill="currentColor" stroke="none"/><path d="M5 13.5c4 5 10 5 14 0"/></svg></button><button class="ic " type="button" title="Slur: drag from one note to another (S); drag its ends or middle to change it" aria-label="Slur" data-mode="slur" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17C7 6 17 6 21 17"/></svg></button><button class="ic " type="button" title="Staccato on or off for the selected notes (Shift+S)" aria-label="Staccato on or off for the selected notes" id="stacc" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="12.5" rx="4.4" ry="3.1" transform="rotate(-20 9 12.5)" fill="currentColor" stroke="none"/><path d="M13 11V2"/><circle cx="9" cy="20.5" r="1.8" fill="currentColor" stroke="none"/></svg></button></div></div>
+  <div class="grp" data-grp="edit" data-kind="act"><button class="ic cur" type="button" title="Copy, paste, delete" aria-label="Copy, paste, delete" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4" width="13" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic " type="button" title="Copy the selected notes (Ctrl+C; Ctrl+X cuts)" aria-label="Copy the selected notes" id="copy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button><button class="ic " type="button" title="Paste at the cursor (Ctrl+V)" aria-label="Paste at the cursor" id="paste"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4" width="13" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/></svg></button><button class="ic " type="button" title="Delete the selection, or the note at the cursor (Delete). Backspace deletes going backwards" aria-label="Delete the selection, or the note at the cursor" id="del"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button></div></div>
+  <div class="grp" data-grp="staff" data-kind="act">
+    <button class="ic cur" type="button" title="Staff, time, key, bars" aria-label="Staff, time, key, bars" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18M3 10.5h18M3 14h18M3 17.5h18"/></svg><span class="more" aria-hidden="true"></span></button>
+    <div class="opts">
+      <label class="sr" for="clef">Clef</label>
+      <select id="clef" title="Staff: treble, bass, or piano (both)"><option value="treble">&#x1D11E; Treble</option><option value="bass">&#x1D122; Bass</option><option value="piano">&#x1D11E;&#x1D122; Piano</option></select>
+      <label class="sr" for="time">Time signature</label>
+      <select id="time" title="Time signature from the selected bar on"></select>
+      <label class="sr" for="key">Key</label>
+      <select id="key" title="Key from the selected bar on"></select>
+      <button class="ic " type="button" title="Add a bar after the selected one" aria-label="Add a bar after the selected one" id="addBar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h11M3 12h11M3 16h11M14 6v12"/><path d="M19 9v6M16 12h6"/></svg></button><button class="ic " type="button" title="Remove the selected bar" aria-label="Remove the selected bar" id="delBar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h11M3 12h11M3 16h11M14 6v12"/><path d="M16 12h6"/></svg></button>
     </div>
   </div>
-  <div class="group always">
-    <button id="undo" class="glyph" title="Undo your last change (Ctrl+Z)" aria-label="Undo">↶</button>
-    <button id="redo" class="glyph" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
-    <button id="play" aria-pressed="false" title="Play from the selected bar (Space)">▶ Play</button>
+  <button class="ic " type="button" title="Write notes by playing your MIDI keyboard (N)" aria-label="Write notes by playing your MIDI keyboard" id="midi" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10.5 21v-2.5h3V21"/><circle cx="7" cy="12.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="8.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="12.5" r="1.1" fill="currentColor" stroke="none"/></svg></button>
+  <button class="ic " type="button" title="Undo your last change (Ctrl+Z)" aria-label="Undo your last change" id="undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg></button>
+  <button class="ic " type="button" title="Redo (Ctrl+Y)" aria-label="Redo" id="redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/></svg></button>
+  <span class="sep"></span>
+  <button class="ic " type="button" title="Play from the selected bar (Space)" aria-label="Play from the selected bar" id="play" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5 19.5 12 7 19.5z" fill="currentColor" stroke="none"/></svg></button>
+  <div class="grp" data-grp="play" data-kind="act">
+    <button class="ic cur" type="button" title="Tempo, click, recording" aria-label="Tempo, click, recording" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3h7l4 18h-15z"/><path d="M12 17l4.5-9.5M6.6 14h10.8"/></svg><span class="more" aria-hidden="true"></span></button>
+    <div class="opts">
+      <label for="tempo" class="tl" title="Tempo (the metronome's; changes it for everyone)">&#x2669;</label>
+      <input id="tempo" type="number" min="20" max="300" step="1" value="100" title="Tempo (the metronome's; changes it for everyone)">
+      <button class="ic " type="button" title="Metronome click while playing, with its count-in" aria-label="Metronome click while playing, with its count-in" id="click" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3h7l4 18h-15z"/><path d="M12 17l4.5-9.5M6.6 14h10.8"/></svg></button>
+      <button class="ic " type="button" title="Record from your MIDI keyboard from the selected bar, after a count-in (R)" aria-label="Record from your MIDI keyboard from the selected bar, after a count-in" id="rec" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/></svg></button>
+      <label class="sr" for="countIn">Count-in</label>
+      <select id="countIn" title="Bars counted in before recording"><option value="1">1 bar</option><option value="2">2 bars</option></select>
+      <label class="sr" for="quant">Shortest note</label>
+      <select id="quant" title="Shortest note recorded: what's played is moved to the nearest 8th or 16th"><option value="240">&#x266A; 8ths</option><option value="120" selected>&#x266C; 16ths</option></select>
+    </div>
   </div>
-  <button id="helpBtn" class="small" aria-expanded="false" title="Keys and tips">?</button>
+  <span class="sep"></span>
+  <div class="grp" data-grp="file" data-kind="act"><button class="ic cur" type="button" title="New, open, save, export, help" aria-label="New, open, save, export, help" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic " type="button" title="Start a new score (for everyone)" aria-label="Start a new score" id="new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M12 10.5v7M8.5 14h7"/></svg></button><button class="ic " type="button" title="Open a saved score (for everyone)" aria-label="Open a saved score" id="open"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button><button class="ic " type="button" title="Save this score to a file to open again in CanDuet (Ctrl+S)" aria-label="Save this score to a file to open again in CanDuet" id="save"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7.5 3v5h8V3M7 21v-7h10v7"/></svg></button><button class="ic " type="button" title="Export as MusicXML, to open in MuseScore, Sibelius, Dorico, Finale and other notation programs" aria-label="Export as MusicXML, to open in MuseScore, Sibelius, Dorico, Finale and other notation programs" id="exportXml"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M12 10v7M9 14l3 3 3-3"/></svg></button><button class="ic " type="button" title="Keys and tips" aria-label="Keys and tips" id="helpBtn" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.8-1.1 1.5v.6"/><circle cx="12" cy="16.9" r=".9" fill="currentColor" stroke="none"/></svg></button></div></div>
   <span id="status" role="status" aria-live="polite"></span>
   <!-- the app's icons for this tool (T-089): the sound it plays with, pop out or dock, close -->
   <span class="dockend">
@@ -266,68 +192,61 @@
 <script src="score-model.js"></script>
 <script src="score-ui.js"></script>
 <script>
-  // T-088: tool groups. Click a group's icon to keep its tools in the bar (remembered); hover one to see
-  // its tools for a moment without changing the bar.
+  // Redesign (T-089): icon groups. Hover or click a circle with a dot: its icons slide out beside it.
+  // A pick group shows its current choice (the option the page marks pressed) and folds after a pick.
   (function () {
-    const tabs = [...document.querySelectorAll("#tabs .tab")];
-    const panel = (g) => document.getElementById("grp-" + g);
-    let active = "write", peeking = null, hideTimer = 0;
-    try { const saved = localStorage.getItem("canduet.scoreGroup"); if (saved && panel(saved)) active = saved; } catch (e) {}
-    function unpeek() {
-      clearTimeout(hideTimer);
-      if (!peeking) return;
-      const p = panel(peeking);
-      p.classList.remove("peek"); p.style.left = p.style.top = "";
-      p.hidden = peeking !== active;
-      peeking = null;
+    const groups = [...document.querySelectorAll("#bar .grp")];
+    function open(g, on) {
+      if (on === g.classList.contains("open")) return;
+      const o = g.querySelector(".opts");
+      if (on) {
+        groups.forEach((x) => x !== g && open(x, false));
+        g.classList.add("open"); g._at = performance.now();
+        o.style.maxWidth = o.scrollWidth + 12 + "px";
+      } else {
+        g.classList.remove("open", "shown");
+        o.style.maxWidth = "";
+      }
     }
-    function show(g) {
-      unpeek();
-      active = g;
-      tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.grp === g)));
-      document.querySelectorAll("#panels .panel").forEach((p) => { p.hidden = p.dataset.grp !== g; });
-      try { localStorage.setItem("canduet.scoreGroup", g); } catch (e) {}
+    function showChoice(g) {
+      if (g.dataset.kind !== "pick") return;
+      const cur = g.querySelector(".cur"), opts = [...g.querySelectorAll(".opts > button")];
+      const on = opts.find((x) => x.getAttribute("aria-pressed") === "true");
+      const pick = on || opts[0];
+      cur.innerHTML = pick.innerHTML + '<span class="more" aria-hidden="true"></span>';
+      cur.title = pick.title; cur.setAttribute("aria-label", pick.getAttribute("aria-label"));
+      cur.classList.toggle("on", !!on);
+      opts.forEach((x) => x.classList.toggle("current", x === pick));
     }
-    function peek(tab) {
-      const g = tab.dataset.grp;
-      if (g === active) { unpeek(); return; }
-      if (peeking !== g) unpeek();
-      clearTimeout(hideTimer);
-      peeking = g;
-      const p = panel(g), r = tab.getBoundingClientRect(), bar = document.getElementById("bar").getBoundingClientRect();
-      p.hidden = false; p.classList.add("peek");
-      p.style.top = Math.round(bar.bottom - 2) + "px";
-      p.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - p.offsetWidth - 8))) + "px";
-    }
-    const hideSoon = () => { clearTimeout(hideTimer); hideTimer = setTimeout(unpeek, 250); };
-    tabs.forEach((t) => {
-      t.addEventListener("click", () => show(t.dataset.grp));
-      t.addEventListener("mouseenter", () => peek(t));
-      t.addEventListener("mouseleave", hideSoon);
-      t.addEventListener("keydown", (e) => {
-        // arrows move between the groups
-        const k = tabs.indexOf(t), n = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-        if (!n) return;
-        e.preventDefault(); e.stopPropagation();
-        const next = tabs[(k + n + tabs.length) % tabs.length];
-        next.focus(); show(next.dataset.grp);
+    groups.forEach((g) => {
+      const o = g.querySelector(".opts"), cur = g.querySelector(".cur");
+      [...o.children].forEach((c, i) => c.style.setProperty("--i", i));
+      let t = 0;
+      g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(t); t = setTimeout(() => open(g, true), 90); });
+      g.addEventListener("pointerleave", (e) => {
+        if (e.pointerType === "touch") return;
+        clearTimeout(t);
+        // a list open inside it (time, key) keeps it out
+        t = setTimeout(() => { if (!g.contains(document.activeElement) || document.activeElement.tagName !== "SELECT") open(g, false); }, 420);
       });
+      g.addEventListener("focusout", (e) => { if (!g.contains(e.relatedTarget)) open(g, false); });
+      cur.addEventListener("click", () => open(g, !g.classList.contains("open") || performance.now() - g._at < 500));
+      o.addEventListener("transitionend", (e) => { if (e.target === o && e.propertyName === "max-width" && g.classList.contains("open")) g.classList.add("shown"); });
+      if (g.dataset.kind === "pick") {
+        o.addEventListener("click", (e) => { if (e.target.closest("button")) setTimeout(() => open(g, false), 120); });
+        const mo = new MutationObserver(() => showChoice(g));
+        o.querySelectorAll("button").forEach((x) => mo.observe(x, { attributes: true, attributeFilter: ["aria-pressed"] }));
+        showChoice(g);
+      }
     });
-    document.querySelectorAll("#panels .panel").forEach((p) => {
-      p.addEventListener("mouseenter", () => { if (p.dataset.grp === peeking) clearTimeout(hideTimer); });
-      p.addEventListener("mouseleave", () => { if (p.dataset.grp === peeking) hideSoon(); });
-    });
-    addEventListener("keydown", (e) => { if (e.key === "Escape") unpeek(); }, true);
-    addEventListener("resize", unpeek);
-    // a red dot on Record while recording or writing from the keyboard, when its tools are put away
+    addEventListener("keydown", (e) => { if (e.key === "Escape") groups.forEach((g) => open(g, false)); }, true);
+    // the play group's icon shows red while recording or writing from the keyboard
     const live = () => {
-      const on = ["rec", "midi"].some((id) => document.getElementById(id).getAttribute("aria-pressed") === "true");
-      document.getElementById("tab-rec").classList.toggle("live", on);
+      const recOn = document.getElementById("rec").getAttribute("aria-pressed") === "true";
+      document.querySelector('.grp[data-grp="play"] .cur').classList.toggle("on", recOn);
     };
-    const mo = new MutationObserver(live);
-    ["rec", "midi"].forEach((id) => mo.observe(document.getElementById(id), { attributes: true, attributeFilter: ["aria-pressed"] }));
+    new MutationObserver(live).observe(document.getElementById("rec"), { attributes: true, attributeFilter: ["aria-pressed"] });
     live();
-    show(active);
   })();
 </script>
 </body>

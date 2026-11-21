@@ -1233,12 +1233,21 @@
   }
   function syncPlayButton() {
     const b = $("#play");
-    b.setAttribute("aria-pressed", String(playing && !rec));
-    b.textContent = playing && !rec ? "■ Stop" : "▶ Play";
+    // round icons (T-089): play becomes stop while it plays; record becomes stop while it records
+    const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5 19.5 12 7 19.5z" fill="currentColor" stroke="none"/></svg>';
+    const STOP = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" stroke="none"/></svg>';
+    const REC = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/></svg>';
+    const on = playing && !rec;
+    b.setAttribute("aria-pressed", String(on));
+    b.innerHTML = on ? STOP : PLAY;
+    b.title = on ? "Stop (Space)" : "Play from the selected bar (Space)";
+    b.setAttribute("aria-label", on ? "Stop" : "Play");
     b.disabled = !!rec;
     const r = $("#rec");
     r.setAttribute("aria-pressed", String(!!rec));
-    r.textContent = rec ? "■ Stop" : "● Rec";
+    r.innerHTML = rec ? STOP : REC;
+    r.title = rec ? "Stop recording (R)" : "Record from your MIDI keyboard from the selected bar, after a count-in (R)";
+    r.setAttribute("aria-label", rec ? "Stop recording" : "Record");
   }
 
   // ---------------------------------------------------------------------------
