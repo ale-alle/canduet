@@ -210,6 +210,7 @@ details.adv summary { cursor: pointer; color: var(--muted); font-weight: 600; fo
 body[data-right=chat] .dock-r.chat { display: flex; }
 .dhead { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line); }
 .dhead h3 { font: 700 16px var(--font-display); flex: 1; }
+.dhead h3.hic { flex: none; margin-right: auto; }
 .xbtn { width: 30px; height: 30px; border-radius: 9px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; }
 .xbtn:hover { background: var(--raised); color: var(--text); }
 .xbtn svg.ic { width: 17px; height: 17px; }
@@ -360,9 +361,10 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 .strip .vu { flex: none; display: block; position: relative; width: 7px; border-radius: 2px; background: var(--night); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
 .strip .vu i { position: absolute; inset: 0; background: linear-gradient(0deg, var(--ok) 0 70%, var(--warn) 88%, var(--string) 100%);
   clip-path: inset(100% 0 0 0); transition: clip-path .09s linear; }
-.strip .mb { width: 28px; height: 22px; border-radius: 5px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted);
-  font: 700 11px/1 var(--font-sans); padding: 0; }
-.strip .mb[aria-pressed=true] { background: var(--warn); border-color: var(--warn); color: #1a1205; }
+.strip .mb { width: 28px; height: 28px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--string) 42%, transparent);
+  background: color-mix(in srgb, var(--string) 14%, transparent); color: var(--string-light); padding: 0; display: grid; place-items: center; }
+.strip .mb .ic { width: 15px; height: 15px; }
+.strip .mb[aria-pressed=true] { background: var(--string-strong); border-color: #ff4f62; color: #fff; }
 .strip .mb.none { visibility: hidden; }
 .strip.off .fz, .strip.off .pn { opacity: .45; }
 .strip .nm { width: 100%; padding: 4px 4px; border-radius: 5px; background: var(--raised); text-align: center; min-width: 0; }
@@ -382,10 +384,21 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 .knw.on::after { background: var(--text); }
 .kn:focus-visible { outline: none; }
 .knw:has(.kn:focus-visible) { outline: 2px solid var(--string); outline-offset: 1px; border-radius: 50%; }
-.fxb { flex: 1; min-width: 0; height: 20px; padding: 0 4px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
-  font: 600 10.5px/1 var(--font-sans); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fxb:hover, .fxb[aria-expanded=true] { color: var(--text); border-color: var(--string); }
-.fxr.on .fxb { color: var(--text); }
+/* redesign (T-089): each dial's effect is a small round icon that opens its settings */
+.fxb { flex: none; width: 22px; height: 22px; padding: 0; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid color-mix(in srgb, var(--string) 42%, transparent); background: color-mix(in srgb, var(--string) 14%, transparent); color: var(--string-light); }
+.fxb .ic { width: 13px; height: 13px; }
+.fxb:hover, .fxb[aria-expanded=true] { background: color-mix(in srgb, var(--string) 30%, transparent); border-color: var(--string-light); }
+.fxr.on .fxb { background: var(--string-strong); border-color: #ff4f62; color: #fff; }
+.strip .fx { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px 4px; }
+.fxr { flex-direction: column; height: auto; gap: 3px; }
+.hic { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--string-strong); color: #fff; flex: none; }
+.hic .ic { width: 18px; height: 18px; }
+.iconrow { display: flex; gap: 8px; justify-content: flex-start; }
+.iconrow .ib[data-tip]:hover::before, .iconrow .ib[data-tip]:focus-visible::before { bottom: auto; top: calc(100% + 8px); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.slb .ic, .instb .ic { width: 15px; height: 15px; vertical-align: -3px; }
+.slb:not(.on), .instb:not(.on) { text-align: center; }
 /* VST3 effect slots (T-086): the plugin's name, or + Effect; the choice opens as the app's own menu */
 .strip .slots { width: 100%; display: flex; flex-direction: column; gap: 3px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .strip .slots.none { visibility: hidden; }
@@ -499,9 +512,9 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
   <div id="sideHole" aria-hidden="true"></div>
 
   <aside class="dock-r chat" aria-label="Chat">
-    <div class="dhead"><h3>Chat</h3><button class="xbtn" type="button" data-act="chat" aria-label="Close chat"><i data-i="x"></i></button></div>
+    <div class="dhead"><h3 class="hic" title="Chat"><i data-i="chat"></i><span class="sr">Chat</span></h3><button class="xbtn" type="button" data-act="chat" aria-label="Close chat"><i data-i="x"></i></button></div>
     <div class="dbody" id="chatList" aria-live="polite"><p class="empty" id="chatEmpty">Messages you send here go to everyone in the lesson.</p></div>
-    <form class="chatin" id="chatForm"><input id="chatIn" type="text" maxlength="2000" placeholder="Write a message" aria-label="Message" autocomplete="off"><button class="btn sm" type="submit">Send</button></form>
+    <form class="chatin" id="chatForm"><input id="chatIn" type="text" maxlength="2000" placeholder="Write a message" aria-label="Message" autocomplete="off"><button class="ib sm on" type="submit" data-tip="Send" aria-label="Send"><span class="disc"><i data-i="send"></i></span></button></form>
   </aside>
 </div>
 
@@ -548,8 +561,8 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 
   <!-- popovers -->
   <div class="pop mixer" id="pop-mixer" role="dialog" aria-label="Mixer">
-    <div class="mhead"><h3>Mixer</h3>
-      <span class="dev"><span id="inDev"></span> <button class="link" type="button" data-act="setup">Change…</button></span>
+    <div class="mhead"><h3 class="hic" title="Mixer"><i data-i="mixer"></i><span class="sr">Mixer</span></h3>
+      <span class="dev"><span id="inDev"></span> <button class="ib sm" type="button" data-act="setup" data-tip="Change the audio device" aria-label="Change the audio device"><span class="disc"><i data-i="settings"></i></span></button></span>
       <span class="cpu" id="cpuMeter" title="How busy this computer's audio is, and sound dropouts since the device started"></span>
       <button class="xbtn" type="button" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
     <div class="console" id="inList"></div>
@@ -561,7 +574,7 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     <p class="hint" id="fxHint"></p>
   </div>
   <div class="pop" id="pop-cam" role="dialog" aria-label="Your camera">
-    <h3>Your camera</h3>
+    <h3 class="hic" title="Your camera"><i data-i="video"></i><span class="sr">Your camera</span></h3>
     <div class="opt"><label for="camSel">Camera</label><select class="nsel" id="camSel"></select></div>
     <div class="line"><span>Mirror my own picture<small>Others always see you the right way round</small></span><input type="checkbox" class="sw" id="mirror" checked aria-label="Mirror my own picture"></div>
     <p class="hint">A second camera for your hands or pedals is under Share.</p>
@@ -576,19 +589,19 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     <div class="acts"><button class="pill" type="button" data-act="closepop">Not now</button><button class="btn sm" type="button" data-act="recask">Ask to record</button></div>
   </div>
   <form class="pop" id="pop-mark" role="dialog" aria-label="Mark a highlight">
-    <h3>Mark this moment</h3>
+    <h3 class="hic" title="Mark this moment"><i data-i="flag"></i><span class="sr">Mark this moment</span></h3>
     <div class="opt"><label for="markIn">What happened? (optional)</label><input type="text" id="markIn" maxlength="80" autocomplete="off" placeholder="Good run-through"></div>
     <div class="acts"><button class="btn sm" type="submit">Save highlight</button></div>
   </form>
   <div class="pop" id="pop-set" role="dialog" aria-label="Quick settings">
-    <h3>Quick settings</h3>
-    <div class="dev"><span id="outDev"></span><button class="link" type="button" data-act="setup">Change…</button></div>
+    <h3 class="hic" title="Quick settings"><i data-i="settings"></i><span class="sr">Quick settings</span></h3>
+    <div class="dev"><span id="outDev"></span><button class="ib sm" type="button" data-act="setup" data-tip="Change the audio device" aria-label="Change the audio device"><span class="disc"><i data-i="settings"></i></span></button></div>
     <div class="line"><span>Mute everything I hear</span><input type="checkbox" class="sw" id="recvMute" aria-label="Mute everything I hear"></div>
     <hr>
-    <div class="menu">
-      <button type="button" data-act="settings"><i data-i="settings"></i><span>All settings<small>Sound card, recording<span class="t-only">, advanced</span></small></span></button>
-      <button type="button" data-act="setup"><i data-i="headphones"></i><span>Set up your sound again</span></button>
-      <button type="button" data-act="help"><i data-i="help"></i><span>Help<small>Opens tincanstudios.ca/help</small></span></button>
+    <div class="iconrow">
+      <button class="ib sm" type="button" data-act="settings" data-tip="All settings: sound card, recording" aria-label="All settings"><span class="disc"><i data-i="sliders"></i></span></button>
+      <button class="ib sm" type="button" data-act="setup" data-tip="Set up your sound again" aria-label="Set up your sound again"><span class="disc"><i data-i="headphones"></i></span></button>
+      <button class="ib sm" type="button" data-act="help" data-tip="Help: opens tincanstudios.ca/help" aria-label="Help"><span class="disc"><i data-i="help"></i></span></button>
     </div>
   </div>
 </div>
@@ -645,8 +658,16 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>', check: '<path d="m5 12 5 5 9-10"/>', dot: '<circle cx="12" cy="12" r="3"/>',
     flag: '<path d="M4 22V4s1-1 4-1 5 2 8 2 4-1 4-1v11s-1 1-4 1-5-2-8-2-4 1-4 1"/>',
-    stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>'
+    stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+    gate: '<path d="M3 17h4V7h10v10h4"/>', comp: '<path d="M4 7.5l8 4.5-8 4.5M20 7.5 12 12l8 4.5"/>',
+    eq: '<path d="M3 15c3 0 3-6 6-6s3 8 6 8 3-5 6-5"/>', rev: '<path d="M5 11v2M9 8v8M13 5v14M17 8v8M21 11v2"/>',
+    dly: '<circle cx="6" cy="12" r="2.6"/><circle cx="13" cy="12" r="2" opacity=".7"/><circle cx="19" cy="12" r="1.5" opacity=".45"/>',
+    mute: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m16 9 6 6M22 9l-6 6"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+    plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',
+    send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="M12 14 20 4"/>',
+    sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'
   };
+  const svgIcon = (n) => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[n] || "") + "</svg>";
   function icons(root) {
     $$("i[data-i]", root).forEach((el) => { if (!el.firstChild) el.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[el.dataset.i] || "") + "</svg>"; });
   }
@@ -1347,13 +1368,13 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     const bars = r.stereo ? 2 : 1;
     const scale = bus ? scaleHtml(bus.ticks, bus.toPos) : scaleHtml([12, 6, 0, -6, -12, -24, -40], inGainToPos);
     el.innerHTML = `<div class="lk"></div>
-      <div class="fx${bus ? " none" : ""}">${bus && typeof bus.n === "number" ? '<div class="instw"><button class="instb" type="button" aria-haspopup="menu">+ Instrument</button><button class="devb" type="button" aria-haspopup="menu">All keyboards</button><p>Everyone hears it.</p></div>' : ""}${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${f.name}</button></div>`).join("")}</div>
-      <div class="slots${bus ? " none" : ""}">${[0, 1].map((s) => `<button class="slb" type="button" data-s="${s}" aria-haspopup="menu">+ Effect</button>`).join("")}</div>
+      <div class="fx${bus ? " none" : ""}">${bus && typeof bus.n === "number" ? '<div class="instw"><button class="instb" type="button" aria-haspopup="menu"></button><button class="devb" type="button" aria-haspopup="menu">All keyboards</button></div>' : ""}${FX.map((f) => `<div class="fxr" data-e="${f.id}"><span class="knw"><span class="kn" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span></span><button class="fxb" type="button" aria-haspopup="dialog" aria-expanded="false">${svgIcon(f.id)}</button></div>`).join("")}</div>
+      <div class="slots${bus ? " none" : ""}">${[0, 1].map((s) => `<button class="slb" type="button" data-s="${s}" aria-haspopup="menu">${svgIcon("plug")}</button>`).join("")}</div>
       <div class="pn${bus ? " none" : ""}"><input type="range" class="p" min="-1" max="1" step="0.01"><output></output></div>
       <div class="fz"><div class="scale">${scale}</div><div class="fader"><input type="range" class="g" min="0" max="1" step="0.001"></div>
         <div class="mt">${'<span class="vu"><i></i></span>'.repeat(bars)}</div></div>
       <output class="gO"></output>
-      <button class="mb" type="button" aria-pressed="false">M</button>
+      <button class="mb" type="button" aria-pressed="false">${svgIcon("mute")}</button>
       <div class="nm"><b></b><small></small></div>`;
     const label = bus ? bus.label : (r.label || "Input");
     el.querySelector(".nm b").textContent = label;
@@ -1367,7 +1388,9 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     el.querySelectorAll(".fxr").forEach((row) => {
       const f = fxById(row.dataset.e);
       row.querySelector(".kn").setAttribute("aria-label", label + " " + f.knob);
-      row.querySelector(".fxb").title = f.name + " settings for " + label;
+      row.querySelector(".fxb").title = f.title + " settings for " + label;
+      row.querySelector(".fxb").setAttribute("aria-label", row.querySelector(".fxb").title);
+      row.querySelector(".kn").title = f.title + ": drag up or down";
     });
     return el;
   }
@@ -1433,9 +1456,10 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
       el.querySelectorAll(".slb").forEach((b) => {
         const sl = slots[+b.dataset.s];
         const name = sl && typeof sl.name === "string" ? sl.name : "";
-        b.textContent = name || "+ Effect";
+        if (name) b.textContent = name; else if (!b.querySelector("svg")) b.innerHTML = svgIcon("plug");
         b.classList.toggle("on", !!name); b.classList.toggle("byp", !!(sl && sl.bypass));
         b.title = name ? name + (sl.bypass ? " (bypassed)" : "") + ": its window, bypass or another effect" : "Add a VST3 effect to " + (r.label || "this input");
+        b.setAttribute("aria-label", b.title);
       });
     }
     if (fxOpen) fillFxWin(false);
@@ -1448,8 +1472,10 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
       if (typeof b.n === "number") {
         const it = insts[b.n] || {};
         const ib = el.querySelector(".instb");
-        ib.textContent = it.name || "+ Instrument"; ib.classList.toggle("on", !!it.name);
-        ib.title = it.name ? it.name + ": its window, another instrument" + (b.n ? " or remove the strip" : "") : "Choose a VST3 instrument to play with your MIDI keyboard";
+        if (it.name) ib.textContent = it.name; else if (!ib.querySelector("svg")) ib.innerHTML = svgIcon("plus") + svgIcon("music");
+        ib.classList.toggle("on", !!it.name);
+        ib.title = it.name ? it.name + ": its window, another instrument" + (b.n ? " or remove the strip" : "") + ". Everyone hears it" : "Choose a VST3 instrument to play with your MIDI keyboard. Everyone hears it";
+        ib.setAttribute("aria-label", ib.title);
         const db = el.querySelector(".devb");
         const devName = it.device ? it.device + (it.connected ? "" : " (not connected)") : "All keyboards";
         db.textContent = devName; db.classList.toggle("miss", !!it.device && !it.connected);

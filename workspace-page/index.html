@@ -22,8 +22,8 @@
                font: 14px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
   body { display: flex; flex-direction: column; }
   /* the toolbar wraps onto a second row in narrow windows */
-  #bar { flex: none; min-height: 48px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-         padding: 7px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  #bar { flex: none; min-height: 46px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+         padding: 6px 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
   #middle { position: relative; flex: 1; min-height: 0; }
   #bar .sep { width: 1px; height: 28px; background: var(--line); margin: 0 4px; flex: none; }
   button, select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
@@ -32,15 +32,30 @@
   button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   button[aria-pressed="true"] { background: #233052; border-color: var(--accent); }
   button:disabled { opacity: 0.45; cursor: default; }
-  .swatch { width: 26px; min-height: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
   .swatch[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
   #colours { display: flex; gap: 4px; flex: none; }
   #hint[hidden], .card[hidden] { display: none; }
   /* round icons, the app's one button (redesign T-089): soft red, bright red when on */
-  .ic { width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
-        background: rgba(229,72,77,.16); border: 1px solid rgba(229,72,77,.45); color: #ff6b70; transition: background .15s, border-color .15s; }
+  .ic { position: relative; width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+        background: rgba(229,72,77,.16); border: 1px solid rgba(229,72,77,.45); color: #ff6b70; transition: background .15s, border-color .15s, transform .15s; }
   .ic:hover { background: rgba(229,72,77,.30); border-color: rgba(229,72,77,.8); }
-  .ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .ic:active { transform: scale(.94); }
+  .ic[aria-pressed="true"], .ic.on { background: #d7263d; border-color: #ff4f62; color: #fff; }
+  .ic:disabled { opacity: .4; }
+  .ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .ic .more { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: #ff6b70; box-shadow: 0 0 0 2px var(--panel); }
+  .ic.on .more { background: #fff; }
+  .ic .sw { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.8); }
+  .grp { position: relative; display: flex; align-items: center; flex: none; }
+  .grp .opts { display: flex; align-items: center; gap: 5px; max-width: 0; opacity: 0; overflow: hidden; padding: 4px 0; margin: -4px 0;
+               transition: max-width .28s cubic-bezier(.2,.8,.2,1), opacity .2s, padding .28s cubic-bezier(.2,.8,.2,1); }
+  .grp .opts > * { opacity: 0; transform: translateX(-10px) scale(.8); transition: transform .24s cubic-bezier(.2,.8,.2,1), opacity .18s; transition-delay: calc(var(--i, 0) * 26ms); }
+  .grp.open .opts { opacity: 1; padding-left: 5px; }
+  .grp.open .opts > * { opacity: 1; transform: none; }
+  .grp.shown .opts { overflow: visible; }
+  .grp[data-kind="pick"] .opts > .current { display: none; }
+  .swatch { width: 28px; min-height: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
+  @media (prefers-reduced-motion: reduce) { .grp .opts, .grp .opts > * { transition-duration: 0s !important; } }
   .dockend { display: flex; gap: 4px; align-items: center; flex: none; margin-left: 4px; }
   .ic[hidden] { display: none; }
   #status { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; padding-left: 8px;
@@ -79,24 +94,17 @@
 </style>
 </head>
 <body>
-<div id="bar" role="toolbar" aria-label="Workspace tools">
-  <button id="open" title="Open an image (or drop files on the board)">Open file…</button>
-  <button id="addBoard" title="Add a blank whiteboard">+ Whiteboard</button>
-  <button id="toggleSide" aria-pressed="true" title="Show or hide the list of materials">List</button>
+<div id="bar" role="toolbar" aria-label="Board tools">
+  <!-- Redesign (T-089): round icons only, words in the tooltips; a circle with a dot opens its group -->
+  <button class="ic" type="button" title="Move and resize cards (M)" aria-label="Move and resize cards" data-tool="move" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5l13 8-6 1.5-3 6z" fill="currentColor" stroke="none"/></svg></button>
   <span class="sep"></span>
-  <button data-tool="move" aria-pressed="true" title="Move and resize cards (M)">Move</button>
-  <button data-tool="pen" aria-pressed="false" title="Draw (P)">Pen</button>
-  <button data-tool="highlight" aria-pressed="false" title="Highlight (H)">Highlight</button>
-  <button data-tool="arrow" aria-pressed="false" title="Arrow (A)">Arrow</button>
-  <button data-tool="text" aria-pressed="false" title="Text (T)">Text</button>
-  <button data-tool="erase" aria-pressed="false" title="Remove a mark: click it (E)">Eraser</button>
+  <div class="grp" data-kind="pick"><button class="ic cur" type="button" title="Draw" aria-label="Draw" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic" type="button" title="Pen (P)" aria-label="Pen" data-tool="pen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button><button class="ic" type="button" title="Highlighter (H)" aria-label="Highlighter" data-tool="highlight" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l-5 5v4h4l5-5M9 11l6-6 4 4-6 6z"/></svg></button><button class="ic" type="button" title="Arrow (A)" aria-label="Arrow" data-tool="arrow" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M10 5h9v9"/></svg></button><button class="ic" type="button" title="Text (T)" aria-label="Text" data-tool="text" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg></button><button class="ic" type="button" title="Eraser: click a mark to remove it (E)" aria-label="Eraser" data-tool="erase" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l9-9 6 6-7 7H7z"/><path d="M9 11l6 6M12 20h8"/></svg></button></div></div>
+  <div class="grp" data-kind="pick" id="colourGrp"><button class="ic cur" type="button" title="Colour" aria-label="Colour" aria-haspopup="true"><span class="sw"></span><span class="more" aria-hidden="true"></span></button><div class="opts" id="colours" role="group" aria-label="Colour"></div></div>
   <span class="sep"></span>
-  <span id="colours" role="group" aria-label="Colour"></span>
+  <button class="ic" type="button" title="Undo your last mark (Ctrl+Z)" aria-label="Undo your last mark" id="undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg></button>
+  <div class="grp" data-kind="act"><button class="ic cur" type="button" title="Clear marks, reset" aria-label="Clear marks, reset" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic" type="button" title="Remove all marks on the selected card" aria-label="Remove all marks on the selected card" id="clearCard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 9l8 8M16 9l-8 8"/></svg></button><button class="ic" type="button" title="Remove all marks on every card" aria-label="Remove all marks on every card" id="clearAll"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="14" height="13" rx="2"/><path d="M6 3h14a2 2 0 0 1 2 2v11M6 10l6 6M12 10l-6 6"/></svg></button><button class="ic" type="button" title="Remove every card and mark" aria-label="Remove every card and mark" id="reset"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button></div></div>
   <span class="sep"></span>
-  <button id="undo" title="Undo your last mark (Ctrl+Z)">Undo</button>
-  <button id="clearCard" title="Remove all marks on the selected card">Clear card</button>
-  <button id="clearAll" title="Remove all marks on every card">Clear all</button>
-  <button id="reset" title="Remove every card and mark">Reset</button>
+  <div class="grp" data-kind="act"><button class="ic cur" type="button" title="Open a picture, add a whiteboard, the list" aria-label="Open a picture, add a whiteboard, the list" aria-haspopup="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/></svg><span class="more" aria-hidden="true"></span></button><div class="opts"><button class="ic" type="button" title="Open an image (or drop files on the board)" aria-label="Open an image" id="open"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button><button class="ic" type="button" title="Add a blank whiteboard" aria-label="Add a blank whiteboard" id="addBoard"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M12 8v6M9 11h6"/></svg></button><button class="ic" type="button" title="Show or hide the list of materials" aria-label="Show or hide the list of materials" id="toggleSide" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.5M3.5 12h.5M3.5 18h.5"/></svg></button></div></div>
   <span id="status" role="status"></span>
   <!-- the app's icons for this tool (T-089): pop out or dock, close -->
   <span class="dockend">
@@ -119,5 +127,48 @@
 <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
 <script src="workspace-model.js"></script>
 <script src="workspace-ui.js"></script>
+<script>
+  // Redesign (T-089): icon groups. Hover or click a circle with a dot: its icons slide out beside it.
+  // A pick group shows its current choice (the option marked pressed) and folds after a pick.
+  (function () {
+    const groups = [...document.querySelectorAll("#bar .grp")];
+    function open(g, on) {
+      if (on === g.classList.contains("open")) return;
+      const o = g.querySelector(".opts");
+      if (on) {
+        groups.forEach((x) => x !== g && open(x, false));
+        g.classList.add("open"); g._at = performance.now();
+        o.style.maxWidth = o.scrollWidth + 12 + "px";
+      } else { g.classList.remove("open", "shown"); o.style.maxWidth = ""; }
+    }
+    function showChoice(g) {
+      const cur = g.querySelector(".cur"), opts = [...g.querySelectorAll(".opts > button")];
+      const on = opts.find((x) => x.getAttribute("aria-pressed") === "true");
+      const pick = on || opts[0];
+      if (!pick) return;
+      if (pick.classList.contains("swatch")) cur.querySelector(".sw").style.background = pick.style.background;
+      else cur.innerHTML = pick.innerHTML + '<span class="more" aria-hidden="true"></span>';
+      cur.title = pick.title; cur.setAttribute("aria-label", pick.getAttribute("aria-label"));
+      cur.classList.toggle("on", !!on && !pick.classList.contains("swatch"));
+      opts.forEach((x) => x.classList.toggle("current", x === pick));
+    }
+    groups.forEach((g) => {
+      const o = g.querySelector(".opts"), cur = g.querySelector(".cur");
+      [...o.children].forEach((c, i) => c.style.setProperty("--i", i));
+      let t = 0;
+      g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(t); t = setTimeout(() => open(g, true), 90); });
+      g.addEventListener("pointerleave", (e) => { if (e.pointerType === "touch") return; clearTimeout(t); t = setTimeout(() => open(g, false), 420); });
+      g.addEventListener("focusout", (e) => { if (!g.contains(e.relatedTarget)) open(g, false); });
+      cur.addEventListener("click", () => open(g, !g.classList.contains("open") || performance.now() - g._at < 500));
+      o.addEventListener("transitionend", (e) => { if (e.target === o && e.propertyName === "max-width" && g.classList.contains("open")) g.classList.add("shown"); });
+      if (g.dataset.kind === "pick") {
+        o.addEventListener("click", (e) => { if (e.target.closest("button")) setTimeout(() => open(g, false), 120); });
+        new MutationObserver(() => showChoice(g)).observe(o, { attributes: true, subtree: true, attributeFilter: ["aria-pressed"] });
+        showChoice(g);
+      }
+    });
+    addEventListener("keydown", (e) => { if (e.key === "Escape") groups.forEach((g) => open(g, false)); }, true);
+  })();
+</script>
 </body>
 </html>
