@@ -1,0 +1,838 @@
+<title>CanDuet Redesign</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@500;700&family=Noto+Music&display=swap">
+<style>
+/* Layout: the page frames one 1280x720 CanDuet lesson window, scaled to fit; everything inside is the proposed app.
+   One look, the app's own night palette and red string (deliberately dark only, like the app). */
+:root {
+  color-scheme: dark;
+  --night: #0a0f1e; --surface: #121a2e; --raised: #1a2440; --line: #233052; --line-strong: #3a4a75;
+  --text: #e8ecf6; --muted: #b4bed6; --subtle: #8792b3;
+  --string: #e5484d; --string-light: #ff6b70; --string-strong: #d7263d;
+  --soft: rgba(229,72,77,.14); --soft-hi: rgba(229,72,77,.28); --ring: rgba(229,72,77,.42); --ring-hi: rgba(255,107,112,.8);
+  --blue: #47b0f8; --ok: #5fd3c4; --paper: #fbfaf6; --ink: #15171c;
+  --font: "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --display: "Bricolage Grotesque", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --music: "Noto Music", "Segoe UI Symbol", serif;
+  --ease: cubic-bezier(.2,.8,.2,1);
+}
+* { box-sizing: border-box; }
+html, body { background: var(--night); color: var(--text); }
+body { font: 14px/1.5 var(--font); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--string-light); outline-offset: 2px; }
+
+.intro { max-width: 1280px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 6px 24px; align-items: baseline; }
+.intro h1 { font: 700 22px/1.2 var(--display); margin: 0; letter-spacing: -.01em; }
+.intro p { margin: 0; color: var(--muted); max-width: 68ch; min-width: 0; }
+#fit { max-width: 1280px; margin: 0 auto; position: relative; }
+#app { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; background: var(--night);
+       border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; user-select: none; }
+.rules { max-width: 1280px; margin: 18px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; }
+.rules div { min-width: 0; color: var(--muted); }
+.rules b { display: block; color: var(--text); font-weight: 600; }
+
+/* ---- icon discs: the one button of the whole app ---- */
+.ic { position: relative; flex: none; width: 34px; height: 34px; padding: 0; border-radius: 50%; display: grid; place-items: center;
+      background: var(--soft); border: 1px solid var(--ring); color: var(--string-light);
+      transition: background .15s, border-color .15s, color .15s, transform .15s; }
+.ic:hover { background: var(--soft-hi); border-color: var(--ring-hi); }
+.ic:active { transform: scale(.94); }
+.ic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ic.on, .ic[aria-pressed="true"] { background: var(--string-strong); border-color: #ff4f62; color: #fff; }
+.ic.off { background: var(--string-strong); border-color: #ff4f62; color: #fff; }
+.ic.off::after { content: ""; position: absolute; width: 58%; height: 2px; border-radius: 2px; background: currentColor; transform: rotate(-45deg); box-shadow: 0 0 0 1.5px var(--string-strong); }
+.ic.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.ic.quiet:hover { background: var(--raised); border-color: var(--line-strong); color: var(--text); }
+.ic.num { font: 600 12px/1 var(--font); font-variant-numeric: tabular-nums; }
+.ic .more { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: var(--string-light); box-shadow: 0 0 0 2px var(--surface); }
+.ic.on .more { background: #fff; }
+.ic .glyph { font: 19px/1 var(--music); margin-top: -2px; }
+
+/* ---- groups that reveal sideways (tool bars) or upward (main bar) ---- */
+.grp { position: relative; display: flex; align-items: center; flex: none; }
+.opts { display: flex; align-items: center; gap: 4px; max-width: 0; opacity: 0; overflow: hidden; padding: 3px 0; margin: -3px 0;
+        transition: max-width .28s var(--ease), opacity .2s, padding .28s var(--ease); }
+.opts > * { opacity: 0; transform: translateX(-10px) scale(.8); transition: transform .24s var(--ease), opacity .18s; transition-delay: calc(var(--i, 0) * 26ms); }
+.grp.open > .opts { opacity: 1; padding-left: 4px; }
+.grp.open > .opts > * { opacity: 1; transform: none; }
+.opts > [data-current] { display: none; }
+.grp.up > .opts { position: absolute; z-index: 30; left: 50%; bottom: calc(100% + 10px); flex-direction: column; max-width: none; max-height: 0; margin: 0;
+                  padding: 0 5px; transform: translateX(-50%); background: var(--surface); border: 1px solid transparent; border-radius: 26px;
+                  transition: max-height .3s var(--ease), opacity .2s, padding .3s var(--ease), border-color .2s; }
+.grp.up.open > .opts { padding: 6px 5px; border-color: var(--line-strong); box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.grp.up > .opts > * { transform: translateY(10px) scale(.8); }
+.grp.up.open > .opts > * { transform: none; }
+.sep { flex: none; width: 1px; height: 22px; background: var(--line-strong); margin: 0 4px; }
+.spacer { flex: 1; min-width: 8px; }
+.chip { flex: none; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--raised); border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 6px;
+        font: 600 12px/1 var(--font); font-variant-numeric: tabular-nums; color: var(--text); }
+.chip .k { color: var(--string-light); }
+
+/* ---- top strip ---- */
+.top { flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.top .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--string); box-shadow: 0 0 0 3px var(--soft); }
+.top .who { font: 700 14px var(--display); }
+.top .sig { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+.top .sig i { width: 3px; border-radius: 1px; background: var(--ok); }
+
+/* ---- stage: videos plus the one docked tool ---- */
+.stage { flex: 1; min-height: 0; position: relative; display: grid; gap: 8px; padding: 8px 8px 0;
+         grid-template-columns: 1fr 0fr; grid-template-rows: 1fr auto; transition: grid-template-columns .35s var(--ease); }
+#videos { grid-column: 1; grid-row: 1; min-height: 0; display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+#app[data-dock="score"] .stage, #app[data-dock="board"] .stage { grid-template-columns: 1fr 2fr; }
+#app[data-dock="chat"] .stage { grid-template-columns: 1fr 330px; }
+#app[data-dock="score"] #videos, #app[data-dock="board"] #videos { grid-template-columns: 1fr; }
+#dockR { grid-column: 2; grid-row: 1 / span 2; min-width: 0; min-height: 0; display: flex; }
+#dockB { grid-column: 1 / span 2; grid-row: 2; min-width: 0; display: flex; margin-left: 0; transition: margin-left .35s var(--ease); }
+#app[data-dock="score"] #dockB, #app[data-dock="board"] #dockB, #app[data-dock="chat"] #dockB { grid-column: 1; }
+/* the mixer owns the bottom-left corner: a docked tool moves aside, the mixer never moves up */
+#app.mix-docked #dockB { margin-left: calc(var(--mixw) + 8px); }
+#dockB:empty, #dockR:empty { display: none; }
+.tile { position: relative; min-height: 0; border-radius: 16px; overflow: hidden; background:
+        radial-gradient(60% 70% at 30% 35%, rgba(71,176,248,.16), transparent 70%), radial-gradient(50% 60% at 75% 70%, rgba(229,72,77,.12), transparent 70%), linear-gradient(160deg, #18223d, #0d1428); border: 1px solid var(--line); }
+.tile .face { position: absolute; left: 50%; top: 46%; transform: translate(-50%,-50%); width: 34%; max-width: 150px; aspect-ratio: 1; border-radius: 50%;
+              background: linear-gradient(180deg, #2a3a63, #1a2440); display: grid; place-items: center; font: 700 clamp(22px, 4vw, 44px) var(--display); color: var(--muted); }
+.tile .name { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; align-items: center; }
+.tile .name .ic { width: 26px; height: 26px; }
+.tile .name .ic svg { width: 14px; height: 14px; }
+
+/* ---- tool panels: an icon bar on top, the tool below ---- */
+.panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.rail { flex: none; height: 46px; display: flex; align-items: center; gap: 5px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--line);
+        overflow-x: auto; overflow-y: hidden; scrollbar-width: none; cursor: default; }
+.rail::-webkit-scrollbar { display: none; }
+.body { flex: 1; min-height: 0; position: relative; }
+.panel[data-tool="tools"] .body { height: 178px; flex: none; }
+.win { position: absolute; z-index: 20; display: flex; border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+.win .panel { border-color: var(--line-strong); }
+.win .rail { cursor: grab; }
+.win.dragging .rail { cursor: grabbing; }
+#mixDock { position: absolute; z-index: 18; left: 8px; bottom: 74px; display: flex; }
+#mixDock:empty { display: none; }
+.panel[data-tool="mixer"] { flex: none; width: var(--mixw); }
+#store { display: none; }
+
+/* ---- main bar ---- */
+.bar { flex: none; height: 66px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 0 12px; }
+.cluster { display: flex; align-items: center; gap: 8px; }
+.cluster.r { justify-self: end; }
+.bar .ic { width: 44px; height: 44px; }
+.bar .ic svg { width: 21px; height: 21px; }
+.bar .opts .ic { width: 40px; height: 40px; }
+.bar .cluster.c { padding: 4px; gap: 6px; border-radius: 28px; background: var(--surface); border: 1px solid var(--line); }
+.ic.leave { background: var(--string-strong); color: #fff; border-color: #ff4f62; }
+.recchip { display: none; }
+#app.recording .recchip { display: inline-flex; }
+.recchip .rd { width: 8px; height: 8px; border-radius: 50%; background: var(--string); animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+
+/* tooltip: the words live here, not on the buttons */
+#tip { position: absolute; z-index: 60; pointer-events: none; padding: 5px 9px; border-radius: 8px; background: #050913; border: 1px solid var(--line-strong);
+       color: var(--text); font: 500 12px/1.3 var(--font); white-space: nowrap; opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
+#tip.show { opacity: 1; transform: none; }
+#tip kbd { font: 600 11px var(--font); color: var(--string-light); margin-left: 6px; }
+#toast { position: absolute; z-index: 61; left: 50%; top: 46px; transform: translateX(-50%); padding: 8px 14px; border-radius: 10px; background: var(--raised);
+         border: 1px solid var(--line-strong); font-weight: 500; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#toast.show { opacity: 1; }
+
+/* ---- Tools: keyboard, fretboards, tuner, metronome ---- */
+.body svg.kb, .body svg.fb { position: absolute; inset: 6px 8px 8px; width: calc(100% - 16px); height: calc(100% - 14px); }
+.kb .w { fill: #f4f2ec; stroke: #1a2440; stroke-width: 1; cursor: pointer; }
+.kb .b { fill: #10131b; stroke: #000; stroke-width: 1; cursor: pointer; }
+.kb .w.down { fill: #ffc3c5; } .kb .b.down { fill: var(--string-strong); }
+.kb text { font: 600 10px var(--font); fill: #7a8095; pointer-events: none; }
+.fb .wood { fill: #2a1f1a; } .fb .fret { stroke: #b9b2a6; stroke-width: 2; } .fb .str { stroke: #d8d2c6; } .fb .inlay { fill: #e8e2d6; opacity: .5; }
+.fb .spot { fill: transparent; cursor: pointer; } .fb .spot.down { fill: var(--string-strong); stroke: #fff; stroke-width: 1.5; }
+.tuner, .metro { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 36px; }
+.tuner svg { width: 300px; height: 150px; overflow: visible; }
+.tuner .big { font: 700 64px/1 var(--display); } .tuner .big sub { font-size: 22px; color: var(--muted); }
+.tuner .cents { font: 600 14px var(--font); color: var(--ok); font-variant-numeric: tabular-nums; }
+.metro .bpm { font: 700 72px/1 var(--display); font-variant-numeric: tabular-nums; }
+.metro .beats { display: flex; gap: 12px; }
+.metro .beats i { width: 22px; height: 22px; border-radius: 50%; background: var(--raised); border: 1px solid var(--line-strong); transition: background .08s; }
+.metro .beats i.hit { background: var(--string-light); } .metro .beats i.hit:first-child { background: #fff; }
+
+/* ---- Score ---- */
+.panel[data-tool="score"] .body { background: var(--night); padding: 10px; overflow: auto; }
+.paper { background: var(--paper); border-radius: 8px; padding: 10px 14px 18px; min-height: 100%; }
+.paper h3 { margin: 0 0 4px; text-align: center; color: var(--ink); font: 600 18px var(--font); }
+.paper svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.paper svg text { font-family: var(--music); fill: var(--ink); }
+.paper .note { fill: var(--ink); } .paper .note.hollow { fill: none; stroke: var(--ink); stroke-width: 1.8; }
+.paper .stem { stroke: var(--ink); stroke-width: 1.5; } .paper .sel .note:not(.hollow), .paper .sel .stem { fill: var(--string-strong); stroke: var(--string-strong); }
+.paper .sel .note.hollow { stroke: var(--string-strong); }
+#app[data-smode="select"] .paper svg { cursor: default; } #app[data-smode="erase"] .paper svg { cursor: cell; }
+
+/* ---- Board ---- */
+.panel[data-tool="board"] .body { background: #f7f6f1; }
+.panel[data-tool="board"] canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.sw { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); }
+
+/* ---- Chat ---- */
+.msgs { position: absolute; inset: 0 0 52px; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: 85%; padding: 7px 10px; border-radius: 12px; background: var(--raised); }
+.msg.me { align-self: flex-end; background: #3a1d27; }
+.msg small { display: block; color: var(--subtle); font-size: 11px; }
+.chatin { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.chatin input { flex: 1; min-width: 0; height: 36px; border-radius: 18px; border: 1px solid var(--line-strong); background: var(--night); color: var(--text); padding: 0 14px; font: inherit; }
+
+/* ---- Mixer ---- */
+.strips { display: flex; gap: 4px; padding: 8px 6px 10px; }
+.strip { width: 54px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fader { position: relative; width: 30px; height: 132px; border-radius: 8px; background: var(--night); border: 1px solid var(--line); cursor: ns-resize; touch-action: none; }
+.fader .meter { position: absolute; left: 4px; bottom: 3px; width: 6px; border-radius: 3px; background: linear-gradient(0deg, var(--ok), #c7e26b 70%, var(--string-light)); height: 0; }
+.fader .meter + .meter { left: auto; right: 4px; }
+.fader .knob { position: absolute; left: -3px; right: -3px; height: 12px; margin-bottom: -6px; border-radius: 4px; background: #e8ecf6; box-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.db { font: 600 11px var(--font); color: var(--muted); font-variant-numeric: tabular-nums; }
+.strip .ic { width: 30px; height: 30px; } .strip .ic svg { width: 16px; height: 16px; }
+.strip .grp.up > .opts .ic { width: 32px; height: 32px; }
+.addstrip { align-self: center; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; animation: none !important; } }
+</style>
+
+<div class="intro">
+  <h1>CanDuet redesign</h1>
+  <p>A clickable mock-up. Hover a circle with a dot to open its group. Use the arrow icon at the right of a tool to pop it out, and the same spot to dock it back. Words appear only in tooltips.</p>
+</div>
+<div id="fit">
+<div id="app" data-dock="tools" data-smode="write">
+  <div class="top">
+    <span class="dot"></span><span class="who">Mia</span>
+    <span class="chip" data-tip="Time left in this lesson"><span class="k">●</span>38:12</span>
+    <span class="spacer"></span>
+    <span class="chip recchip" data-tip="Recording"><span class="rd"></span><span id="recT">00:00</span></span>
+    <span class="sig" data-tip="Connection: good"><i style="height:5px"></i><i style="height:8px"></i><i style="height:11px"></i><i style="height:14px"></i></span>
+  </div>
+
+  <div class="stage">
+    <div id="videos">
+      <div class="tile"><div class="face">M</div><div class="name"><span class="chip">Mia</span></div></div>
+      <div class="tile"><div class="face">A</div><div class="name"><span class="chip">You</span></div></div>
+    </div>
+    <div id="dockR"></div>
+    <div id="dockB"></div>
+  </div>
+  <div id="mixDock"></div>
+
+  <div class="bar">
+    <div class="cluster l">
+      <button class="ic" id="micBtn" data-tip="Mute my microphone" data-key="M"><i data-i="mic"></i></button>
+      <button class="ic" id="outBtn" data-tip="Mute what I hear" data-key="O"><i data-i="volume"></i></button>
+      <div class="grp up" data-grp="camera">
+        <button class="ic cur" id="camBtn" data-tip="Camera (hover for more)" data-key="V"><i data-i="video"></i></button>
+        <div class="opts">
+          <button class="ic" data-act="camoff" data-tip="Turn my camera off"><i data-i="video"></i></button>
+          <button class="ic" data-act="toast" data-msg="Switched camera" data-tip="Switch camera"><i data-i="switchcam"></i></button>
+          <button class="ic" data-act="toast" data-msg="Sharing your screen" data-tip="Share a screen"><i data-i="share"></i></button>
+          <button class="ic" data-act="toast" data-msg="Second camera on" data-tip="Add a second camera"><i data-i="cam2"></i></button>
+        </div>
+      </div>
+      <button class="ic" data-open="mixer" data-tip="Mixer" data-key="X"><i data-i="mixer"></i></button>
+    </div>
+    <div class="cluster c">
+      <button class="ic" data-open="tools" data-tip="Tools: instrument, tuner, metronome" data-key="T"><i data-i="fork"></i></button>
+      <button class="ic" data-open="score" data-tip="Score" data-key="S"><i data-i="score"></i></button>
+      <button class="ic" data-open="board" data-tip="Board" data-key="B"><i data-i="board"></i></button>
+      <button class="ic" data-open="chat" data-tip="Chat" data-key="C"><i data-i="chat"></i></button>
+    </div>
+    <div class="cluster r">
+      <div class="grp up" data-grp="rec">
+        <button class="ic cur" id="recBtn" data-tip="Record this lesson"><i data-i="record"></i></button>
+        <div class="opts">
+          <button class="ic" data-act="mark" data-tip="Mark this moment" data-key="H"><i data-i="flag"></i></button>
+          <button class="ic" data-act="recstop" data-tip="Stop recording"><i data-i="stop"></i></button>
+        </div>
+      </div>
+      <div class="grp up" data-grp="settings">
+        <button class="ic cur" data-tip="Settings (hover for more)"><i data-i="gear"></i></button>
+        <div class="opts">
+          <button class="ic" data-act="toast" data-msg="Opens all settings" data-tip="All settings"><i data-i="sliders"></i></button>
+          <button class="ic" data-act="toast" data-msg="Opens sound setup" data-tip="Set up your sound again"><i data-i="headphones"></i></button>
+          <button class="ic" data-act="toast" data-msg="Opens tincanstudios.ca/help" data-tip="Help"><i data-i="help"></i></button>
+        </div>
+      </div>
+      <div class="grp up" data-grp="leave">
+        <button class="ic cur leave" data-tip="Leave the lesson"><i data-i="leave"></i></button>
+        <div class="opts">
+          <button class="ic on" data-act="leave" data-tip="Yes, leave"><i data-i="check"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="tip"></div>
+  <div id="toast"></div>
+  <div id="store"></div>
+</div>
+</div>
+
+<div class="rules">
+  <div><b>One button for everything</b>A round icon: soft red when it's available, bright red when it's on. Names and shortcuts are in the tooltip.</div>
+  <div><b>Groups open in place</b>A dot means more inside. Hover or click to slide the group open; picking one folds it back and shows your choice.</div>
+  <div><b>Every tool docks or pops out</b>The same two icons sit at the right of every tool bar. One tool is docked at a time. Popped-out tools stay where you left them.</div>
+  <div><b>Mixer stays bottom-left</b>It opens in the same corner every time. A docked tool slides right to make room instead of pushing it up.</div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const app = $("#app");
+
+  // ---------- icons (24x24 line icons) ----------
+  const F = 'fill="currentColor" stroke="none"';
+  const I = {
+    mic: '<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 10.5a7 7 0 0 0 14 0M12 17.5V21M8.5 21h7"/>',
+    volume: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+    video: '<rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10.5 21.5 7v10l-6-3.5"/>',
+    switchcam: '<rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10.5 21.5 7v10l-6-3.5"/><path d="M6 12a3 3 0 0 1 5-2.2M12 12a3 3 0 0 1-5 2.2"/>',
+    share: '<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 14V8M9 10.5l3-3 3 3"/>',
+    cam2: '<rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="M15.5 10.5 21.5 7v10l-6-3.5M9 9v6M6 12h6"/>',
+    mixer: '<path d="M6 3v18M12 3v18M18 3v18"/><rect x="3.5" y="13" width="5" height="3" rx="1" ' + F + '/><rect x="9.5" y="6" width="5" height="3" rx="1" ' + F + '/><rect x="15.5" y="10" width="5" height="3" rx="1" ' + F + '/>',
+    fork: '<path d="M8.5 3v7a3.5 3.5 0 0 0 7 0V3M12 13.5V21"/>',
+    score: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><circle cx="10.3" cy="16.6" r="1.9" ' + F + '/><path d="M12.2 16.6V10l3 1"/>',
+    board: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4M7 13l3-3 2 2 4-4"/>',
+    chat: '<path d="M4 5h16v11H9.5L4 20z"/>',
+    record: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.8" ' + F + '/>',
+    stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.5" ' + F + '/>',
+    flag: '<path d="M5 21V4M5 4h12l-2.5 4 2.5 4H5"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+    sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    headphones: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="5" height="7" rx="1.5"/><rect x="16" y="14" width="5" height="7" rx="1.5"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.8-1.1 1.5v.6"/><circle cx="12" cy="16.9" r=".9" ' + F + '/>',
+    leave: '<path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+    popout: '<path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    dock: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18M12 6.5v5.5M9 9.5l3 3 3-3"/>',
+    close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    piano: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 12v7M15 12v7"/><rect x="7.2" y="5" width="3.6" height="7.5" rx=".6" ' + F + '/><rect x="13.2" y="5" width="3.6" height="7.5" rx=".6" ' + F + '/>',
+    guitar: '<path d="m11.9 12.1 4.5-4.5"/><path d="M20.1 2.3a1 1 0 0 0-1.4 0l-1.1 1.1A2 2 0 0 0 17 4.8v1.4a2 2 0 0 1-.6 1.4A2 2 0 0 1 17.8 7h1.4a2 2 0 0 0 1.4-.6l1.1-1.1a1 1 0 0 0 0-1.4z"/><path d="m6 16 2 2"/><path d="M8.2 9.9C8.7 8.8 9.8 8 11 8c2.8 0 5 2.2 5 5 0 1.2-.8 2.3-1.9 2.8l-.9.4A2 2 0 0 0 12 18a4 4 0 0 1-4 4c-3.3 0-6-2.7-6-6a4 4 0 0 1 4-4 2 2 0 0 0 1.8-1.2z"/>',
+    bass: '<rect x="2.5" y="6.5" width="19" height="11" rx="1.5"/><path d="M2.5 9.3h19M2.5 12h19M2.5 14.7h19M9 6.5v11M15.5 6.5v11"/>',
+    uke: '<g transform="translate(3.5 3.5) scale(.72)"><path d="m11.9 12.1 4.5-4.5"/><path d="M20.1 2.3a1 1 0 0 0-1.4 0l-1.1 1.1A2 2 0 0 0 17 4.8v1.4a2 2 0 0 1-.6 1.4A2 2 0 0 1 17.8 7h1.4a2 2 0 0 0 1.4-.6l1.1-1.1a1 1 0 0 0 0-1.4z"/><path d="M8.2 9.9C8.7 8.8 9.8 8 11 8c2.8 0 5 2.2 5 5 0 1.2-.8 2.3-1.9 2.8l-.9.4A2 2 0 0 0 12 18a4 4 0 0 1-4 4c-3.3 0-6-2.7-6-6a4 4 0 0 1 4-4 2 2 0 0 0 1.8-1.2z"/></g>',
+    tuner: '<path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l3.5-5.5"/><circle cx="12" cy="16" r="1.4" ' + F + '/>',
+    metronome: '<path d="M8.5 3h7l4 18h-15z"/><path d="M12 17l4.5-9.5M6.6 14h10.8"/>',
+    labels: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 8.5h8M12 8.5v8"/>',
+    pedal: '<path d="M5 20h14M9 20l2.5-14h3L13 20"/>',
+    midi: '<circle cx="12" cy="12" r="9"/><path d="M10.5 21v-2.5h3V21"/><circle cx="7" cy="12.5" r="1.1" ' + F + '/><circle cx="8.5" cy="8.5" r="1.1" ' + F + '/><circle cx="12" cy="7" r="1.1" ' + F + '/><circle cx="15.5" cy="8.5" r="1.1" ' + F + '/><circle cx="17" cy="12.5" r="1.1" ' + F + '/>',
+    select: '<path d="M5.5 3.5l13 8-6 1.5-3 6z" ' + F + '/>',
+    pencil: '<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/>',
+    eraser: '<path d="M4 16l9-9 6 6-7 7H7z"/><path d="M9 11l6 6M12 20h8"/>',
+    whole: '<ellipse cx="12" cy="12.5" rx="6" ry="4" stroke-width="2.2"/>',
+    half: '<ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)"/><path d="M13 15.6V3"/>',
+    quarter: '<ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" ' + F + '/><path d="M13 15.6V3"/>',
+    eighth: '<ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" ' + F + '/><path d="M13 15.6V3c1 3 5.5 4.5 4.5 9"/>',
+    sixteenth: '<ellipse cx="9" cy="17" rx="4.4" ry="3.1" transform="rotate(-20 9 17)" ' + F + '/><path d="M13 15.6V3c1 3 5.5 4.5 4.5 9M13 7c1 3 5.5 4.5 4.5 9"/>',
+    dot: '<circle cx="12" cy="12" r="2.8" ' + F + '/>',
+    triplet: '<path d="M8.5 6h7l-4 5a4 4 0 1 1-3.5 6"/>',
+    rest: '<path d="M9.5 3l5 6-3.5 4 4.5 5.5c-2.7-1.3-5.4-.4-4.5 2.8-2.7-2.8-.9-5.6 1.8-4.6L9 12.5l3.6-4z" ' + F + '/>',
+    flat: '<path d="M8.5 3v17c3-1 7.5-3 7.5-6.5 0-3-3.5-3.2-7.5-.3"/>',
+    natural: '<path d="M8.5 3v13l7-2.5M15.5 21V8l-7 2.5"/>',
+    sharp: '<path d="M9.5 4v17M14.5 3v17M5.5 10.2l13-3M5.5 16.2l13-3"/>',
+    tie: '<circle cx="5" cy="10" r="2" ' + F + '/><circle cx="19" cy="10" r="2" ' + F + '/><path d="M5 13.5c4 5 10 5 14 0"/>',
+    slur: '<path d="M3 17C7 6 17 6 21 17"/>',
+    staccato: '<ellipse cx="9" cy="12.5" rx="4.4" ry="3.1" transform="rotate(-20 9 12.5)" ' + F + '/><path d="M13 11V2"/><circle cx="9" cy="20.5" r="1.8" ' + F + '/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+    paste: '<rect x="5.5" y="4" width="13" height="17" rx="2"/><rect x="9" y="2.5" width="6" height="3.5" rx="1"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
+    redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/>',
+    staff: '<path d="M3 7h18M3 10.5h18M3 14h18M3 17.5h18"/>',
+    addbar: '<path d="M3 8h11M3 12h11M3 16h11M14 6v12"/><path d="M19 9v6M16 12h6"/>',
+    delbar: '<path d="M3 8h11M3 12h11M3 16h11M14 6v12"/><path d="M16 12h6"/>',
+    play: '<path d="M7 4.5 19.5 12 7 19.5z" ' + F + '/>',
+    file: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/>',
+    newf: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M12 10.5v7M8.5 14h7"/>',
+    open: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    save: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7.5 3v5h8V3M7 21v-7h10v7"/>',
+    export: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M12 10v7M9 14l3 3 3-3"/>',
+    highlighter: '<path d="M9 11l-5 5v4h4l5-5M9 11l6-6 4 4-6 6z"/>',
+    shapes: '<rect x="3" y="12" width="9" height="9" rx="1"/><circle cx="16.5" cy="7.5" r="4.5"/>',
+    line: '<path d="M4 20 20 4"/>',
+    width: '<path d="M4 6h16" stroke-width="1"/><path d="M4 12h16" stroke-width="2.4"/><path d="M4 18.5h16" stroke-width="4"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+    send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="M12 14 20 4"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    fx: '<path d="M2 12h3l2-6 3 12 3-9 2 6 2-3h5"/>',
+    gate: '<path d="M3 17h4V7h10v10h4"/>',
+    comp: '<path d="M4 7.5l8 4.5-8 4.5M20 7.5 12 12l8 4.5"/>',
+    eq: '<path d="M3 15c3 0 3-6 6-6s3 8 6 8 3-5 6-5"/>',
+    reverb: '<path d="M5 11v2M9 8v8M13 5v14M17 8v8M21 11v2"/>',
+    delay: '<circle cx="6" cy="12" r="2.6"/><circle cx="13" cy="12" r="2" opacity=".7"/><circle cx="19" cy="12" r="1.5" opacity=".45"/>',
+    sound: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/>',
+  };
+  const svg = (n) => '<svg viewBox="0 0 24 24" aria-hidden="true">' + (I[n] || "") + "</svg>";
+  const paintIcons = (root = document) => $$("i[data-i]", root).forEach((el) => { el.outerHTML = svg(el.dataset.i); });
+  const ic = (name, tip, attrs = "", cls = "") => `<button class="ic ${cls}" data-tip="${tip}" aria-label="${tip}" ${attrs}>${svg(name)}</button>`;
+  const num = (n, tip, attrs = "", cls = "") => `<button class="ic num ${cls}" data-tip="${tip}" aria-label="${tip}" ${attrs}>${n}</button>`;
+  const glyph = (g, tip, attrs = "", cls = "") => `<button class="ic ${cls}" data-tip="${tip}" aria-label="${tip}" ${attrs}><span class="glyph">${g}</span></button>`;
+  // a group: the current choice, then the options that slide out
+  const grp = (name, kind, cur, opts, cls = "") => `<div class="grp ${cls}" data-grp="${name}" data-kind="${kind}">${cur}<div class="opts">${opts}</div></div>`;
+  const dockEnd = (tool) => `<span class="spacer"></span>` + ic("popout", "Pop out", `data-dockbtn="${tool}"`, "quiet") + ic("close", "Close", `data-closebtn="${tool}"`, "quiet");
+
+  // ---------- fit the 1280x720 window to the page ----------
+  const fit = $("#fit");
+  let scale = 1;
+  function fitApp() {
+    scale = Math.min(1, fit.clientWidth / 1280);
+    app.style.transform = `scale(${scale})`;
+    fit.style.height = 720 * scale + "px";
+  }
+  new ResizeObserver(fitApp).observe(fit);
+  fitApp();
+
+  // ---------- tooltips and toasts ----------
+  const tip = $("#tip");
+  let tipFor = null;
+  function showTip(el) {
+    const t = el.dataset.tip; if (!t) return;
+    tipFor = el;
+    tip.innerHTML = t + (el.dataset.key ? `<kbd>${el.dataset.key}</kbd>` : "");
+    const a = app.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const x = (r.left + r.width / 2 - a.left) / scale, top = (r.top - a.top) / scale, bot = (r.bottom - a.top) / scale;
+    tip.classList.add("show");
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.max(6, Math.min(1280 - w - 6, x - w / 2)) + "px";
+    tip.style.top = (top - h - 8 < 4 ? bot + 8 : top - h - 8) + "px";
+  }
+  app.addEventListener("pointerover", (e) => { const el = e.target.closest("[data-tip]"); if (el && el !== tipFor) showTip(el); if (!el) { tip.classList.remove("show"); tipFor = null; } });
+  app.addEventListener("pointerleave", () => { tip.classList.remove("show"); tipFor = null; });
+  app.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); if (el) showTip(el); });
+  let toastT;
+  function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1600); }
+
+  // ---------- groups: hover or click to open, pick to fold ----------
+  const timers = new WeakMap();
+  function openGrp(g, open) {
+    if (open === g.classList.contains("open")) return;
+    const o = $(":scope > .opts", g);
+    $$(":scope > *", o).forEach((c, i) => c.style.setProperty("--i", i));
+    if (open) {
+      const scope = g.closest(".rail, .bar, .strips") || app;
+      $$(".grp.open", scope).forEach((x) => x !== g && openGrp(x, false));
+      g.classList.add("open"); g._at = performance.now();
+      if (g.classList.contains("up")) o.style.maxHeight = o.scrollHeight + 14 + "px"; else o.style.maxWidth = o.scrollWidth + 8 + "px";
+    } else {
+      g.classList.remove("open");
+      o.style.maxWidth = ""; o.style.maxHeight = "";
+    }
+  }
+  function setupGroups(root) {
+    $$(".grp", root).forEach((g) => {
+      if (g.dataset.ready) return; g.dataset.ready = 1;
+      const cur = $(":scope > .cur", g);
+      if (cur && !$(".more", cur)) cur.insertAdjacentHTML("beforeend", '<span class="more"></span>');
+      const o = $(":scope > .opts", g);
+      $$(":scope > *", o).forEach((c, i) => c.style.setProperty("--i", i));
+      g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(timers.get(g)); timers.set(g, setTimeout(() => openGrp(g, true), 90)); });
+      g.addEventListener("pointerleave", (e) => { if (e.pointerType === "touch") return; clearTimeout(timers.get(g)); timers.set(g, setTimeout(() => openGrp(g, false), 380)); });
+      if (g.dataset.kind === "pick") {
+        const cv = cur.dataset.v;
+        $$("[data-v]", o).forEach((b) => b.toggleAttribute("data-current", b.dataset.v === cv));
+      }
+    });
+  }
+  function pick(g, b) {
+    const cur = $(":scope > .cur", g);
+    cur.innerHTML = b.innerHTML + '<span class="more"></span>';
+    cur.dataset.v = b.dataset.v; cur.dataset.tip = b.dataset.tip; delete cur.dataset.key; if (b.dataset.key) cur.dataset.key = b.dataset.key;
+    $$(":scope > .opts > [data-v]", g).forEach((x) => x.toggleAttribute("data-current", x === b));
+    openGrp(g, false);
+    onPick(g.dataset.grp, b.dataset.v, g);
+  }
+
+  // ---------- panels ----------
+  const P = {};
+  function panel(tool, railHTML, bodyHTML) {
+    const p = document.createElement("section");
+    p.className = "panel"; p.dataset.tool = tool;
+    p.innerHTML = `<div class="rail">${railHTML}${dockEnd(tool)}</div><div class="body">${bodyHTML}</div>`;
+    $("#store").appendChild(p);
+    P[tool] = p;
+    return p;
+  }
+
+  // Tools: one picker for what's in it, then that tool's own settings
+  const toolPick = grp("toolkind", "pick",
+    ic("piano", "Piano", 'data-v="piano"', "cur on"),
+    ic("piano", "Piano", 'data-v="piano"') + ic("guitar", "Guitar", 'data-v="guitar"') + ic("bass", "Bass", 'data-v="bass"') +
+    ic("uke", "Ukulele", 'data-v="uke"') + ic("tuner", "Tuner", 'data-v="tuner"') + ic("metronome", "Metronome", 'data-v="metro"'));
+  panel("tools",
+    toolPick + '<span class="sep"></span><span id="toolCtx" style="display:contents"></span><span class="spacer"></span>' +
+    '<span class="chip" id="lastNote" data-tip="Last note"><span class="k">♪</span>B4</span><span class="chip" id="chord" data-tip="Chord">Cmaj7</span>',
+    "");
+  const ctx = {
+    piano: grp("range", "pick", num(61, "61 keys", 'data-v="61"', "cur"), [25, 49, 61, 88].map((n) => num(n, n + " keys", `data-v="${n}"`)).join("")) +
+      ic("labels", "Note names on the keys", 'data-toggle="labels"') + ic("pedal", "Sustain", 'data-toggle', "") + ic("midi", "Play it from my MIDI keyboard", 'data-toggle aria-pressed="true"'),
+    guitar: grp("tuning", "pick", glyph("E", "Standard tuning", 'data-v="std"', "cur"), glyph("E", "Standard tuning", 'data-v="std"') + glyph("D", "Drop D", 'data-v="dropd"') + glyph("D", "Open D", 'data-v="opend"')) +
+      ic("labels", "Note names on the frets", 'data-toggle="labels"') + ic("midi", "Play it from my MIDI keyboard", 'data-toggle'),
+    tuner: grp("ref", "pick", num(440, "A = 440 Hz", 'data-v="440"', "cur"), [432, 440, 442].map((n) => num(n, `A = ${n} Hz`, `data-v="${n}"`)).join("")) + ic("sound", "Play the reference note", 'data-toggle'),
+    metro: ic("minus", "Slower", 'data-act="slower"') + `<span class="chip" data-tip="Tempo (for everyone)" id="bpmChip">♩ 96</span>` + ic("plus", "Faster", 'data-act="faster"') +
+      grp("beats", "pick", num(4, "4 beats in a bar", 'data-v="4"', "cur"), [2, 3, 4, 6].map((n) => num(n, `${n} beats in a bar`, `data-v="${n}"`)).join("")) +
+      ic("play", "Start", 'data-act="metro"', ""),
+  };
+  ctx.bass = ctx.guitar; ctx.uke = ctx.guitar;
+
+  // Score: Select always first; the notation tools; then playback; then file
+  panel("score",
+    ic("select", "Select", 'data-smode="select" data-key="V"') +
+    '<span class="sep"></span>' +
+    grp("write", "pick", ic("pencil", "Write", 'data-v="write" data-key="W"', "cur on"),
+      ic("pencil", "Write", 'data-v="write" data-key="W"') + ic("eraser", "Eraser", 'data-v="erase" data-key="X"')) +
+    grp("len", "pick", ic("quarter", "Quarter note", 'data-v="480" data-key="5"', "cur on"),
+      ic("whole", "Whole note", 'data-v="1920" data-key="7"') + ic("half", "Half note", 'data-v="960" data-key="6"') + ic("quarter", "Quarter note", 'data-v="480" data-key="5"') +
+      ic("eighth", "Eighth note", 'data-v="240" data-key="4"') + ic("sixteenth", "Sixteenth note", 'data-v="120" data-key="3"')) +
+    ic("dot", "Dotted", 'data-toggle data-key="."') + ic("triplet", "Triplet", 'data-toggle data-key="Ctrl+3"') + ic("rest", "Rest", 'data-toggle data-key="0"') +
+    grp("acc", "act", ic("sharp", "Accidentals", "", "cur"), ic("flat", "Flat", 'data-act="note"') + ic("natural", "Natural", 'data-act="note"') + ic("sharp", "Sharp", 'data-act="note"')) +
+    grp("marks", "act", ic("slur", "Ties, slurs, staccato", "", "cur"), ic("tie", "Tie", 'data-act="note" data-key="T"') + ic("slur", "Slur", 'data-act="note" data-key="S"') + ic("staccato", "Staccato", 'data-act="note" data-key="Shift+S"')) +
+    grp("edit", "act", ic("paste", "Copy, paste, delete", "", "cur"), ic("copy", "Copy", 'data-act="note" data-key="Ctrl+C"') + ic("paste", "Paste", 'data-act="note" data-key="Ctrl+V"') + ic("trash", "Delete", 'data-act="note" data-key="Del"')) +
+    grp("staff", "act", ic("staff", "Clef, time, key, bars", "", "cur"),
+      glyph("𝄞", "Treble clef", 'data-act="note"') + glyph("𝄢", "Bass clef", 'data-act="note"') + glyph("𝄚", "Piano: both staves", 'data-act="note"') +
+      num("4/4", "Time signature", 'data-act="note"') + ic("sharp", "Key", 'data-act="note"') + ic("addbar", "Add a bar", 'data-act="note"') + ic("delbar", "Remove the bar", 'data-act="note"')) +
+    ic("midi", "Write from my MIDI keyboard", 'data-toggle data-key="N"') +
+    ic("undo", "Undo", 'data-act="note" data-key="Ctrl+Z"') + ic("redo", "Redo", 'data-act="note" data-key="Ctrl+Y"') +
+    '<span class="sep"></span>' +
+    ic("play", "Play from the selected bar", 'data-act="splay" data-key="Space"') +
+    grp("splay", "act", ic("metronome", "Tempo, click, recording", "", "cur"),
+      ic("minus", "Slower", 'data-act="slower"') + `<span class="chip" data-tip="Tempo (the metronome's)">♩ 96</span>` + ic("plus", "Faster", 'data-act="faster"') +
+      ic("metronome", "Click while playing", 'data-toggle aria-pressed="true"') + ic("record", "Record from my MIDI keyboard", 'data-toggle data-key="R"') +
+      num("1", "One bar to count in", 'data-toggle aria-pressed="true"') + num("16", "Shortest note recorded: 16ths", 'data-toggle')) +
+    '<span class="sep"></span>' +
+    grp("sfile", "act", ic("file", "New, open, save, export", "", "cur"),
+      ic("newf", "New score", 'data-act="note"') + ic("open", "Open", 'data-act="note"') + ic("save", "Save", 'data-act="note" data-key="Ctrl+S"') +
+      ic("export", "Export MusicXML for MuseScore, Sibelius, Dorico", 'data-act="note"') + ic("help", "Keys and tips", 'data-act="note"')),
+    '<div class="paper"><h3>Minuet in G</h3><svg id="staff" viewBox="0 0 900 150"></svg></div>');
+
+  // Board
+  const colours = ["#15171c", "#d7263d", "#1d7fd0", "#1f9e6a"];
+  panel("board",
+    ic("select", "Select", 'data-toggle data-key="V"') + '<span class="sep"></span>' +
+    grp("pen", "pick", ic("pencil", "Pen", 'data-v="pen" data-key="P"', "cur on"),
+      ic("pencil", "Pen", 'data-v="pen" data-key="P"') + ic("highlighter", "Highlighter", 'data-v="hi" data-key="H"') + ic("eraser", "Eraser", 'data-v="erase" data-key="E"') + ic("line", "Line", 'data-v="line" data-key="L"')) +
+    grp("colour", "pick", `<button class="ic cur" data-v="0" data-tip="Black"><span class="sw" style="background:${colours[0]}"></span></button>`,
+      colours.map((c, i) => `<button class="ic" data-v="${i}" data-tip="${["Black", "Red", "Blue", "Green"][i]}"><span class="sw" style="background:${c}"></span></button>`).join("")) +
+    grp("bw", "pick", ic("width", "Medium line", 'data-v="4"', "cur"), num("·", "Thin line", 'data-v="2"') + ic("width", "Medium line", 'data-v="4"') + num("●", "Thick line", 'data-v="9"')) +
+    ic("staff", "Add a blank staff", 'data-act="bstaff"') +
+    '<span class="sep"></span>' + ic("undo", "Undo", 'data-act="bundo" data-key="Ctrl+Z"') + ic("trash", "Clear the board", 'data-act="bclear"') +
+    '<span class="sep"></span>' + grp("bfile", "act", ic("file", "Save, open a PDF or picture", "", "cur"), ic("image", "Save as a picture", 'data-act="note"') + ic("open", "Open a PDF or picture", 'data-act="note"')),
+    '<canvas id="boardCv"></canvas>');
+
+  // Chat
+  panel("chat", ic("chat", "Chat", "", "on"),
+    '<div class="msgs"><div class="msg"><small>Mia</small>Can we go over bar 12 again?</div><div class="msg me"><small>You</small>Sure. I put it in the score.</div><div class="msg"><small>Mia</small>👍</div></div>' +
+    `<form class="chatin" id="chatForm"><input id="chatIn" type="text" placeholder="Message" aria-label="Message" autocomplete="off">${ic("send", "Send", 'type="submit"', "on")}</form>`);
+
+  // Mixer
+  const strips = [["mic", "My microphone", -6, true], ["piano", "Instrument: Keyscape", -6, true], ["score", "Score playback", -10, false], ["volume", "What I hear", 0, false]];
+  panel("mixer", ic("mixer", "Mixer", "", "on") + `<span class="chip" data-tip="Processor load">CPU 6%</span>`,
+    '<div class="strips">' + strips.map(([icn, name, db, fx], i) => `<div class="strip" data-s="${i}">
+        ${ic(icn, name, "", "")}
+        <div class="fader" data-db="${db}" data-tip="${name}: drag to set the level"><div class="meter"></div><div class="meter"></div><div class="knob"></div></div>
+        <span class="db">${db} dB</span>
+        <button class="ic" data-tip="Mute: ${name}" aria-label="Mute: ${name}" data-mute>${svg("volume")}</button>
+        ${fx ? grp("fx" + i, "act", ic("fx", "Effects", "", "cur"), ["gate:Noise gate", "comp:Compressor", "eq:EQ", "reverb:Reverb", "delay:Delay"].map((s) => { const [n, t] = s.split(":"); return ic(n, t, "data-toggle"); }).join(""), "up") : `<span style="height:30px"></span>`}
+      </div>`).join("") + `<div class="addstrip">${ic("plus", "Add an instrument strip")}</div></div>`);
+  app.style.setProperty("--mixw", "296px");
+
+  paintIcons(); setupGroups(app);
+
+  // ---------- open, dock, pop out, close ----------
+  const S = { open: { tools: true, score: false, board: false, chat: false, mixer: true }, place: { tools: "dock", score: "dock", board: "dock", chat: "dock", mixer: "dock" } };
+  const wins = {};
+  const winSize = { tools: [960, 230, 160, 150], score: [880, 420, 200, 70], board: [720, 440, 260, 80], chat: [330, 430, 860, 120], mixer: [296, 0, 380, 150] };
+  function layout() {
+    let docked = "none";
+    for (const t of ["tools", "score", "board", "chat"]) if (S.open[t] && S.place[t] === "dock") docked = t;
+    app.dataset.dock = docked;
+    for (const [t, p] of Object.entries(P)) {
+      let host = $("#store");
+      if (S.open[t]) {
+        if (S.place[t] === "dock") host = t === "tools" ? $("#dockB") : t === "mixer" ? $("#mixDock") : $("#dockR");
+        else host = winFor(t);
+      }
+      if (p.parentElement !== host) host.appendChild(p);
+      const b = $(`[data-dockbtn="${t}"]`, p);
+      const docked = S.place[t] === "dock";
+      b.innerHTML = svg(docked ? "popout" : "dock");
+      b.dataset.tip = docked ? "Pop out into its own window" : t === "mixer" ? "Back to the bottom-left corner" : "Dock in the lesson window";
+      $(`[data-open="${t}"]`)?.setAttribute("aria-pressed", String(S.open[t]));
+    }
+    for (const [t, w] of Object.entries(wins)) w.hidden = !(S.open[t] && S.place[t] === "float");
+    app.classList.toggle("mix-docked", S.open.mixer && S.place.mixer === "dock");
+    requestAnimationFrame(() => { sizeBoard(); });
+  }
+  function winFor(t) {
+    if (wins[t]) return wins[t];
+    const w = document.createElement("div");
+    const [W, H, x, y] = winSize[t];
+    w.className = "win"; w.style.cssText = `left:${x}px;top:${y}px;width:${W}px;` + (H ? `height:${H}px;` : "");
+    app.appendChild(w); wins[t] = w;
+    // drag by the icon bar
+    w.addEventListener("pointerdown", (e) => {
+      if (!e.target.closest(".rail") || e.target.closest("button, .grp, .chip, input")) return;
+      const sx = e.clientX, sy = e.clientY, ox = w.offsetLeft, oy = w.offsetTop;
+      w.classList.add("dragging"); w.setPointerCapture(e.pointerId);
+      const mv = (ev) => { w.style.left = Math.max(-W + 80, Math.min(1200, ox + (ev.clientX - sx) / scale)) + "px"; w.style.top = Math.max(0, Math.min(660, oy + (ev.clientY - sy) / scale)) + "px"; };
+      const up = () => { w.classList.remove("dragging"); w.removeEventListener("pointermove", mv); w.removeEventListener("pointerup", up); };
+      w.addEventListener("pointermove", mv); w.addEventListener("pointerup", up);
+    });
+    w.addEventListener("pointerdown", () => { $$(".win").forEach((x) => (x.style.zIndex = 20)); w.style.zIndex = 21; });
+    return w;
+  }
+  function openTool(t, on = !S.open[t]) {
+    S.open[t] = on;
+    if (on && t !== "mixer" && S.place[t] === "dock") for (const o of ["tools", "score", "board", "chat"]) if (o !== t && S.place[o] === "dock") S.open[o] = false;
+    layout();
+  }
+
+  // ---------- clicks ----------
+  let recOn = false, recSecs = 0, recTimer = null;
+  app.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const g = b.closest(".grp");
+    if (b.classList.contains("cur") && g) {
+      if (g.dataset.grp === "camera") { b.classList.toggle("off"); return; }
+      if (g.dataset.grp === "rec" && !recOn) { startRec(); return; }
+      const isOpen = g.classList.contains("open");
+      openGrp(g, !isOpen || performance.now() - (g._at || 0) < 500); return;
+    }
+    if (g && g.dataset.kind === "pick" && b.dataset.v !== undefined && b.parentElement.classList.contains("opts")) { pick(g, b); return; }
+    if (b.dataset.open) return openTool(b.dataset.open);
+    if (b.dataset.dockbtn) { const t = b.dataset.dockbtn; S.place[t] = S.place[t] === "dock" ? "float" : "dock"; openTool(t, true); return; }
+    if (b.dataset.closebtn) return openTool(b.dataset.closebtn, false);
+    if (b.hasAttribute("data-toggle")) { b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); if (b.dataset.toggle === "labels") drawTools(); return; }
+    if (b.hasAttribute("data-mute")) { b.classList.toggle("off"); return; }
+    if (b.id === "micBtn" || b.id === "outBtn") { b.classList.toggle("off"); return; }
+    if (b.dataset.smode) { setSMode(b.dataset.smode); return; }
+    const act = b.dataset.act;
+    if (act === "toast") return toast(b.dataset.msg);
+    if (act === "note") return toast(b.dataset.tip);
+    if (act === "camoff") { $("#camBtn").classList.toggle("off"); return; }
+    if (act === "mark") return toast("Marked at " + $("#recT").textContent);
+    if (act === "recstop") return stopRec();
+    if (act === "leave") { toast("You left the lesson (mock-up)"); openGrp(g, false); return; }
+    if (act === "slower" || act === "faster") { bpm = Math.max(30, Math.min(240, bpm + (act === "faster" ? 2 : -2))); $$(".chip").forEach((c) => { if (c.textContent.startsWith("♩")) c.textContent = "♩ " + bpm; }); const big = $(".metro .bpm"); if (big) big.textContent = bpm; if (metroTimer) { const pb = $('#toolCtx [data-act="metro"]'); toggleMetro(pb); toggleMetro(pb); } drawScore(); return; }
+    if (act === "metro") { toggleMetro(b); return; }
+    if (act === "splay") { b.classList.toggle("on"); toast(b.classList.contains("on") ? "Playing from bar 1" : "Stopped"); return; }
+    if (act === "bundo") { strokes.pop(); redrawBoard(); return; }
+    if (act === "bclear") { strokes.length = 0; redrawBoard(); return; }
+    if (act === "bstaff") { addStaff(); return; }
+  });
+  function startRec() {
+    recOn = true; recSecs = 0; app.classList.add("recording"); $("#recBtn").classList.add("on");
+    recTimer = setInterval(() => { recSecs++; $("#recT").textContent = String(Math.floor(recSecs / 60)).padStart(2, "0") + ":" + String(recSecs % 60).padStart(2, "0"); }, 1000);
+    openGrp($('[data-grp="rec"]'), true); toast("Recording");
+  }
+  function stopRec() { recOn = false; clearInterval(recTimer); $("#recT").textContent = "00:00"; app.classList.remove("recording"); $("#recBtn").classList.remove("on"); openGrp($('[data-grp="rec"]'), false); toast("Saved the recording"); }
+  $("#chatForm").addEventListener("submit", (e) => {
+    e.preventDefault(); const v = $("#chatIn").value.trim(); if (!v) return;
+    const m = document.createElement("div"); m.className = "msg me"; m.innerHTML = "<small>You</small>"; m.append(v);
+    $(".msgs").appendChild(m); $("#chatIn").value = ""; $(".msgs").scrollTop = 1e6;
+  });
+
+  // ---------- picks ----------
+  let mode = "piano", range = 61, bpm = 96, beats = 4;
+  function onPick(name, v) {
+    if (name === "toolkind") { mode = v; drawTools(); }
+    if (name === "range") { range = +v; drawTools(); }
+    if (name === "beats") { beats = +v; drawTools(); }
+    if (name === "write") setSMode(v);
+    if (name === "colour") pen.colour = colours[+v];
+    if (name === "bw") pen.width = +v;
+    if (name === "pen") pen.kind = v;
+  }
+
+  // ---------- Tools body ----------
+  const down = new Set([60, 64, 67, 71]);
+  const NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+  const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
+  const RANGES = { 25: [48, 72], 49: [36, 84], 61: [36, 96], 88: [21, 108] };
+  let metroTimer = null, beatN = 0;
+  function drawTools() {
+    $("#toolCtx").innerHTML = ctx[mode] || "";
+    setupGroups($("#toolCtx"));
+    // keep the range shown in its picker
+    const rg = $('#toolCtx [data-grp="range"]');
+    if (rg) { const cur = $(".cur", rg); cur.firstChild.textContent = range; cur.dataset.v = range; cur.dataset.tip = range + " keys"; $$(".opts [data-v]", rg).forEach((x) => x.toggleAttribute("data-current", +x.dataset.v === range)); }
+    const bg = $('#toolCtx [data-grp="beats"]');
+    if (bg) { const cur = $(".cur", bg); cur.firstChild.textContent = beats; $$(".opts [data-v]", bg).forEach((x) => x.toggleAttribute("data-current", +x.dataset.v === beats)); }
+    const body = $(".body", P.tools);
+    const labels = $('#toolCtx [data-toggle="labels"]')?.getAttribute("aria-pressed") === "true";
+    if (metroTimer && mode !== "metro") { clearInterval(metroTimer); metroTimer = null; }
+    if (mode === "piano") body.innerHTML = keyboard(labels);
+    else if (["guitar", "bass", "uke"].includes(mode)) body.innerHTML = fretboard(mode, labels);
+    else if (mode === "tuner") body.innerHTML = tunerView();
+    else body.innerHTML = `<div class="metro"><div class="bpm">${bpm}</div><div class="beats">${"<i></i>".repeat(beats)}</div></div>`;
+    $("#lastNote").hidden = $("#chord").hidden = !(mode === "piano" || ["guitar", "bass", "uke"].includes(mode));
+  }
+  function keyboard(labels) {
+    const [lo, hi] = RANGES[range];
+    const WW = 24, WH = 150, BW = 14, BH = 94;
+    let whites = "", blacks = "", x = 0;
+    const wx = {};
+    for (let m = lo; m <= hi; m++) if (!isBlack(m)) { wx[m] = x; x += WW; }
+    for (let m = lo; m <= hi; m++) {
+      if (isBlack(m)) { const bx = wx[m - 1] + WW - BW / 2; blacks += `<rect class="b${down.has(m) ? " down" : ""}" data-m="${m}" x="${bx}" y="0" width="${BW}" height="${BH}" rx="2"/>`; }
+      else {
+        whites += `<rect class="w${down.has(m) ? " down" : ""}" data-m="${m}" x="${wx[m]}" y="0" width="${WW}" height="${WH}" rx="3"/>`;
+        if (labels || m % 12 === 0) if (labels || m === 60) whites += `<text x="${wx[m] + WW / 2}" y="${WH - 10}" text-anchor="middle">${NAMES[m % 12]}${labels ? "" : Math.floor(m / 12) - 1}</text>`;
+      }
+    }
+    return `<svg class="kb" viewBox="0 0 ${x} ${WH}" preserveAspectRatio="xMidYMid meet">${whites}${blacks}</svg>`;
+  }
+  function fretboard(kind, labels) {
+    const n = kind === "guitar" ? 6 : 4, frets = kind === "uke" ? 12 : 15, W = 1100, H = kind === "guitar" ? 150 : 120;
+    const open = { guitar: [64, 59, 55, 50, 45, 40], bass: [43, 38, 33, 28], uke: [69, 64, 60, 67] }[kind];
+    const fx = (f) => 30 + (W - 40) * (1 - Math.pow(2, -f / 17)) / (1 - Math.pow(2, -frets / 17));
+    let s = `<rect class="wood" x="30" y="6" width="${W - 40}" height="${H - 12}" rx="3"/>`;
+    [3, 5, 7, 9, 15].forEach((f) => { if (f <= frets) s += `<circle class="inlay" cx="${(fx(f - 1) + fx(f)) / 2}" cy="${H / 2}" r="6"/>`; });
+    if (frets >= 12) [H / 2 - 22, H / 2 + 22].forEach((y) => (s += `<circle class="inlay" cx="${(fx(11) + fx(12)) / 2}" cy="${y}" r="6"/>`));
+    for (let f = 0; f <= frets; f++) s += `<line class="fret" x1="${fx(f)}" y1="6" x2="${fx(f)}" y2="${H - 6}" ${f === 0 ? 'style="stroke-width:6"' : ""}/>`;
+    const sy = (i) => 6 + (H - 12) * (i + .5) / n;
+    for (let i = 0; i < n; i++) {
+      s += `<line class="str" x1="30" y1="${sy(i)}" x2="${W - 10}" y2="${sy(i)}" style="stroke-width:${1 + i * (kind === "bass" ? .7 : .35)}"/>`;
+      if (labels) s += `<text x="14" y="${sy(i) + 4}" text-anchor="middle" style="font:600 11px Inter;fill:#b4bed6">${NAMES[open[i] % 12]}</text>`;
+      for (let f = 1; f <= frets; f++) { const m = open[i] + f; s += `<circle class="spot${(kind === "guitar" && ((i === 1 && f === 1) || (i === 3 && f === 2) || (i === 4 && f === 3))) ? " down" : ""}" data-m="${m}" cx="${(fx(f - 1) + fx(f)) / 2}" cy="${sy(i)}" r="8"/>`; }
+    }
+    return `<svg class="fb" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${s}</svg>`;
+  }
+  function tunerView() {
+    let ticks = "";
+    for (let c = -50; c <= 50; c += 10) { const a = (c / 50) * 70 * Math.PI / 180; ticks += `<line x1="${150 + Math.sin(a) * 118}" y1="${140 - Math.cos(a) * 118}" x2="${150 + Math.sin(a) * (c === 0 ? 96 : 106)}" y2="${140 - Math.cos(a) * (c === 0 ? 96 : 106)}" stroke="${c === 0 ? "#5fd3c4" : "#3a4a75"}" stroke-width="${c === 0 ? 3 : 2}"/>`; }
+    return `<div class="tuner"><svg viewBox="0 0 300 150">${ticks}<line id="needle" x1="150" y1="140" x2="150" y2="34" stroke="#ff6b70" stroke-width="3" stroke-linecap="round" style="transform-origin:150px 140px;transition:transform .25s"/><circle cx="150" cy="140" r="6" fill="#ff6b70"/></svg><div><div class="big">A<sub>4</sub></div><div class="cents" id="cents">+3 cents</div></div></div>`;
+  }
+  $(".body", P.tools).addEventListener("pointerdown", (e) => {
+    const k = e.target.closest("[data-m]"); if (!k) return;
+    const m = +k.dataset.m;
+    down.has(m) ? down.delete(m) : down.add(m);
+    k.classList.toggle("down");
+    $("#lastNote").innerHTML = `<span class="k">♪</span>${NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
+    $("#chord").textContent = chordName();
+  });
+  function chordName() {
+    const pcs = [...new Set([...down].map((m) => m % 12))].sort((a, b) => a - b);
+    if (pcs.length < 3) return pcs.map((p) => NAMES[p]).join(" ") || "–";
+    const shapes = { "0,4,7": "", "0,3,7": "m", "0,4,7,11": "maj7", "0,4,7,10": "7", "0,3,7,10": "m7", "0,3,6": "dim", "0,4,8": "aug" };
+    for (const r of pcs) { const k = pcs.map((p) => (p - r + 12) % 12).sort((a, b) => a - b).join(","); if (k in shapes) return NAMES[r] + shapes[k]; }
+    return pcs.map((p) => NAMES[p]).join(" ");
+  }
+  function toggleMetro(b) {
+    if (metroTimer) { clearInterval(metroTimer); metroTimer = null; b.classList.remove("on"); b.innerHTML = svg("play"); return; }
+    b.classList.add("on"); b.innerHTML = svg("stop"); beatN = 0;
+    let ac; try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; }
+    const tick = () => {
+      const dots = $$(".metro .beats i"); dots.forEach((d) => d.classList.remove("hit"));
+      if (dots[beatN % beats]) dots[beatN % beats].classList.add("hit");
+      if (ac) { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = beatN % beats ? 1000 : 1500; g.gain.setValueAtTime(.2, ac.currentTime); g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .05); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + .06); }
+      beatN++;
+    };
+    tick(); metroTimer = setInterval(tick, 60000 / bpm);
+  }
+
+  // ---------- Score body ----------
+  let smode = "write";
+  const notes = [[150, 4, 480], [205, 0, 480], [260, 1, 480], [315, 2, 480], [370, 3, 480], [440, 4, 960], [530, 0, 960], [610, 5, 480], [665, 3, 480], [720, 4, 480], [775, 5, 480], [830, 6, 480]];
+  let sel = new Set([5]);
+  function setSMode(m) {
+    smode = m; app.dataset.smode = m;
+    $('[data-smode="select"]', P.score).classList.toggle("on", m === "select");
+    const wg = $('[data-grp="write"] .cur', P.score); wg.classList.toggle("on", m !== "select");
+  }
+  function drawScore() {
+    const top = 50, gap = 10;
+    let s = "";
+    for (let i = 0; i < 5; i++) s += `<line x1="20" y1="${top + i * gap}" x2="890" y2="${top + i * gap}" stroke="#15171c" stroke-width="1"/>`;
+    [20, 420, 590, 890].forEach((x, i) => (s += `<line x1="${x}" y1="${top}" x2="${x}" y2="${top + 40}" stroke="#15171c" stroke-width="${i === 3 ? 3 : 1.2}"/>`));
+    s += `<text x="24" y="${top + 33}" font-size="46">𝄞</text><text x="70" y="${top + 19}" font-size="22">♯</text><text x="96" y="${top + 18}" font-size="22" font-family="Inter" font-weight="700">3</text><text x="96" y="${top + 38}" font-size="22" font-family="Inter" font-weight="700">4</text>`;
+    notes.forEach(([x, step, d], i) => {
+      const y = top + 40 - step * 5;
+      const hollow = d >= 960;
+      s += `<g data-n="${i}" class="${sel.has(i) ? "sel" : ""}"><ellipse class="note${hollow ? " hollow" : ""}" cx="${x}" cy="${y}" rx="6.5" ry="4.6" transform="rotate(-20 ${x} ${y})"/>${d < 1920 ? `<line class="stem" x1="${x + 6}" y1="${y - 1}" x2="${x + 6}" y2="${y - 34}"/>` : ""}</g>`;
+    });
+    s += `<text x="560" y="${top - 8}" font-size="14" font-family="Inter" fill="#6b7280">♩ = ${bpm}</text>`;
+    $("#staff").innerHTML = s;
+  }
+  $("#staff").addEventListener("click", (e) => {
+    const g = e.target.closest("[data-n]");
+    const n = g ? +g.dataset.n : -1;
+    if (smode === "select") { if (n >= 0) { if (!e.shiftKey) sel.clear(); sel.has(n) ? sel.delete(n) : sel.add(n); } else sel.clear(); }
+    else if (smode === "erase") { if (n >= 0) { notes.splice(n, 1); sel.clear(); } }
+    else {
+      const pt = $("#staff").createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+      const p = pt.matrixTransform($("#staff").getScreenCTM().inverse());
+      const step = Math.round((90 - p.y) / 5);
+      const len = +($('[data-grp="len"] .cur', P.score).dataset.v);
+      notes.push([Math.max(140, Math.min(880, p.x)), Math.max(-2, Math.min(10, step)), len]);
+      sel = new Set([notes.length - 1]);
+    }
+    drawScore();
+  });
+
+  // ---------- Board body ----------
+  const strokes = [], pen = { kind: "pen", colour: colours[0], width: 4 };
+  const cv = $("#boardCv"), cx2 = cv.getContext("2d");
+  function sizeBoard() {
+    const r = cv.parentElement.getBoundingClientRect(); if (!r.width) return;
+    const w = Math.round(r.width / scale), h = Math.round(r.height / scale);
+    if (cv.width !== w * 2 || cv.height !== h * 2) { cv.width = w * 2; cv.height = h * 2; redrawBoard(); }
+  }
+  function redrawBoard() {
+    cx2.setTransform(2, 0, 0, 2, 0, 0); cx2.clearRect(0, 0, cv.width, cv.height);
+    for (const s of strokes) {
+      cx2.globalAlpha = s.kind === "hi" ? .35 : 1; cx2.strokeStyle = s.kind === "erase" ? "#f7f6f1" : s.colour; cx2.lineWidth = s.kind === "hi" ? 16 : s.kind === "erase" ? 22 : s.width;
+      cx2.lineCap = cx2.lineJoin = "round"; cx2.beginPath();
+      const pts = s.kind === "line" ? [s.pts[0], s.pts[s.pts.length - 1]] : s.pts;
+      pts.forEach(([x, y], i) => (i ? cx2.lineTo(x, y) : cx2.moveTo(x, y))); cx2.stroke();
+    }
+    cx2.globalAlpha = 1;
+  }
+  function addStaff() {
+    const y0 = 40 + (strokes.filter((s) => s.staff).length % 4) * 70;
+    for (let i = 0; i < 5; i++) strokes.push({ kind: "pen", colour: "#15171c", width: 1, staff: true, pts: [[30, y0 + i * 9], [cv.width / 2 - 30, y0 + i * 9]] });
+    redrawBoard();
+  }
+  cv.addEventListener("pointerdown", (e) => {
+    const r = cv.getBoundingClientRect(), at = (ev) => [(ev.clientX - r.left) / scale, (ev.clientY - r.top) / scale];
+    const s = { ...pen, pts: [at(e)] }; strokes.push(s); cv.setPointerCapture(e.pointerId);
+    const mv = (ev) => { s.pts.push(at(ev)); redrawBoard(); };
+    const up = () => { cv.removeEventListener("pointermove", mv); cv.removeEventListener("pointerup", up); };
+    cv.addEventListener("pointermove", mv); cv.addEventListener("pointerup", up);
+  });
+  new ResizeObserver(() => sizeBoard()).observe(cv.parentElement);
+  // a few marks so the board isn't empty
+  strokes.push({ kind: "pen", colour: "#d7263d", width: 4, pts: Array.from({ length: 40 }, (_, i) => [80 + i * 8, 120 + Math.sin(i / 4) * 30]) });
+  strokes.push({ kind: "hi", colour: "#1d7fd0", width: 4, pts: [[60, 220], [420, 220]] });
+
+  // ---------- Mixer faders and meters ----------
+  const dbToY = (db) => Math.max(0, Math.min(1, (db + 60) / 66));
+  $$(".fader", P.mixer).forEach((f) => {
+    const set = (db) => { f.dataset.db = db; $(".knob", f).style.bottom = 3 + dbToY(db) * 122 + "px"; f.parentElement.querySelector(".db").textContent = (db > 0 ? "+" : "") + db + " dB"; };
+    set(+f.dataset.db);
+    f.addEventListener("pointerdown", (e) => {
+      f.setPointerCapture(e.pointerId);
+      const mv = (ev) => { const r = f.getBoundingClientRect(); const t = 1 - (ev.clientY - r.top) / r.height; set(Math.round(t * 66 - 60)); };
+      mv(e); f.addEventListener("pointermove", mv); f.addEventListener("pointerup", () => f.removeEventListener("pointermove", mv), { once: true });
+    });
+  });
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const lv = new Map();
+  function meters(t) {
+    $$(".fader", P.mixer).forEach((f, i) => {
+      const off = f.parentElement.querySelector("[data-mute]").classList.contains("off");
+      const base = dbToY(+f.dataset.db) * (i === 2 ? .5 : .85);
+      $$(".meter", f).forEach((m, j) => {
+        const k = i * 2 + j; const target = off ? 0 : base * (.55 + .45 * Math.abs(Math.sin(t / (300 + k * 37) + k)));
+        const v = Math.max(target, (lv.get(k) || 0) * .9); lv.set(k, v); m.style.height = v * 124 + "px";
+      });
+    });
+    if (!reduce) requestAnimationFrame(meters);
+  }
+  requestAnimationFrame(meters);
+  setInterval(() => { const n = $("#needle"); if (n) { const c = Math.round((Math.random() - .4) * 8); n.style.transform = `rotate(${c / 50 * 70}deg)`; $("#cents").textContent = (c > 0 ? "+" : "") + c + " cents"; } }, 700);
+
+  drawTools(); drawScore(); setSMode("write"); layout();
+})();
+</script>
