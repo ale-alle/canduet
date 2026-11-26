@@ -99,6 +99,8 @@ Icon notes()
     return i;
 }
 Icon summaries() { return lineIcon("M8 6h13M8 12h13M8 18h13M3.5 6h.5M3.5 12h.5M3.5 18h.5"); }
+Icon homework() { return lineIcon("M9 4h6v3H9zM9 5.5H6a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6.5a1 1 0 0 0-1-1h-3M8 12l1.5 1.5L12 11M8 17l1.5 1.5L12 16M14 12.5h3M14 17.5h3"); }
+Icon recording() { Icon i; i.line.addEllipse(3.0f, 3.0f, 18.0f, 18.0f); i.solid.addEllipse(8.5f, 8.5f, 7.0f, 7.0f); return i; }
 Icon board() { return lineIcon("M3 4h18v13H3zM8 21l4-4 4 4M7 13l3-3 2 2 4-4"); }
 Icon play() { Icon i; i.solid = svg("M7 4.5 19.5 12 7 19.5z"); return i; }
 Icon stop() { Icon i; i.solid.addRoundedRectangle(6.5f, 6.5f, 11.0f, 11.0f, 1.5f); return i; }

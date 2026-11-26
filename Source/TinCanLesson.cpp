@@ -145,6 +145,12 @@ void LessonView::resized()
     placeFrame();
 }
 
+HomeworkPanel * LessonView::getHomework() const
+{
+    auto it = ownWindows.find("homework");
+    return it != ownWindows.end() && it->second ? dynamic_cast<HomeworkPanel *>(it->second->getBody()) : nullptr;
+}
+
 ToolsPanel * LessonView::getTools() const
 {
     auto it = ownWindows.find("tools");
@@ -293,7 +299,7 @@ void LessonView::loadLayout()
         const auto state = m.getProperty("window", var()).toString();
         if (state.length() < 200) mixerWindowState = state;
     }
-    for (auto id : { "tools", "metro", "tuner", "board", "score" }) {
+    for (auto id : { "tools", "metro", "tuner", "homework", "board", "score" }) {
         const var t = v.getProperty(id, var());
         if (!t.isObject()) continue;
         const var d = t.getProperty("docked", var());
@@ -312,7 +318,7 @@ void LessonView::saveLayout()
         if (mixerWindowState.isNotEmpty()) m->setProperty("window", mixerWindowState);
         all->setProperty("mixer", var(m.get()));
     }
-    for (auto id : { "tools", "metro", "tuner", "board", "score" }) {
+    for (auto id : { "tools", "metro", "tuner", "homework", "board", "score" }) {
         DynamicObject::Ptr t = new DynamicObject();
         t->setProperty("docked", wantDocked.count(id) ? wantDocked[id] : true);
         if (windowStates.count(id)) t->setProperty("window", windowStates[id]);
@@ -332,7 +338,15 @@ DockableWindow * LessonView::windowFor(const String & id, bool create)
     if (isOwnTool(id)) {
         auto it = ownWindows.find(id);
         DockableWindow * w = it != ownWindows.end() ? it->second.get() : nullptr;
-        if (w == nullptr && create && hooks.makeTools) {
+        if (w == nullptr && create && id == "homework" && hooks.makeHomework) {
+            if (auto panel = hooks.makeHomework(info.practice ? 0 : info.startsAtMs)) {
+                auto made = std::make_unique<DockableWindow>(TRANS("Homework & Recordings"), 720, 760);
+                made->setBody(std::move(panel));
+                w = made.get();
+                ownWindows[id] = std::move(made);
+            }
+        }
+        if (w == nullptr && create && id != "homework" && hooks.makeTools) {
             const auto set = id == "metro" ? ToolsPanel::Set::metronome : id == "tuner" ? ToolsPanel::Set::tuner : ToolsPanel::Set::instruments;
             if (auto panel = hooks.makeTools(set)) {
                 const bool small = id != "tools";
@@ -477,7 +491,7 @@ void LessonView::placeFrame()
     if (!frame) return;
     auto * top = getTopLevelComponent();
     auto * peer = top ? top->getPeer() : nullptr;
-    const auto rect = isOwnTool(docked) ? toolsRect : sideRect;
+    const auto rect = docksAtBottom(docked) ? toolsRect : sideRect;
     if (docked.isEmpty() || peer == nullptr || rect.isEmpty()) {
         frame->setVisible(false);
         return;
@@ -796,6 +810,7 @@ void LessonView::sendState()
     docks->setProperty("tools", isToolOpen("tools"));
     docks->setProperty("metro", isToolOpen("metro"));
     docks->setProperty("tuner", isToolOpen("tuner"));
+    docks->setProperty("homework", isToolOpen("homework"));
     docks->setProperty("metroOn", getParam(SonobusAudioProcessor::paramMetEnabled) > 0.5f);
     docks->setProperty("mixerOut", mixerOut);
     docks->setProperty("mixerShown", mixerWindow != nullptr && mixerWindow->isVisible());
@@ -1121,7 +1136,7 @@ void LessonView::handleMessage(const var & message)
         // the Mixer button while the mixer has its own window: show or hide that window
         showMixerWindow(!(mixerWindow && mixerWindow->isVisible()));
     }
-    else if (type == "tools" || type == "metro" || type == "tuner" || type == "board" || type == "score") {
+    else if (type == "tools" || type == "metro" || type == "tuner" || type == "homework" || type == "board" || type == "score") {
         // the lesson bar's buttons: open (docked or in its own window, as last left) or close
         if (isToolOpen(type)) closeTool(type); else openTool(type);
     }
@@ -1224,6 +1239,7 @@ void LessonView::openTool(const String &) {}
 void LessonView::closeTool(const String &) {}
 bool LessonView::isToolOpen(const String &) { return false; }
 ToolsPanel * LessonView::getTools() const { return nullptr; }
+HomeworkPanel * LessonView::getHomework() const { return nullptr; }
 void LessonView::timerCallback() {}
 void LessonView::notesArrived(const std::vector<NoteEvent> &) {}
 

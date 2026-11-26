@@ -920,16 +920,17 @@ ToolsPanel::ToolsPanel(SonobusAudioProcessor & processor, std::function<AudioDev
         panels.add(panel);
         addChildComponent(panel);
     };
-    single = set == Set::metronome || set == Set::tuner;
     if (set == Set::all || set == Set::tuner) add(new TunerPanel(processor), Icons::tuner(), TRANS("Tuner"));
     if (set == Set::all || set == Set::metronome) add(new MetronomePanel(processor), Icons::metronome(), TRANS("Metronome"));
-    if (set == Set::all || set == Set::instruments) {
+    if (set == Set::all || set == Set::instruments)
         add(new InstrumentPanel(processor, getDeviceManager, noteShare), Icons::notes(), TRANS("Instrument: piano, guitar, bass"));
+    if (set == Set::all) {
         if (openWorkspace) add(new WorkspacePanel(std::move(openWorkspace)), Icons::board(), TRANS("Workspace"));
         summaries = new SummariesPanel(std::move(summaryHooks));
         summariesIndex = panels.size();
         add(summaries, Icons::summaries(), TRANS("Summaries: your recordings and highlights"));
     }
+    single = panels.size() == 1;
 
     // the panels lay their own icons between the picker and the dock icons
     for (auto * p : panels) {

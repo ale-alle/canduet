@@ -588,6 +588,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   </div>
 
   <div class="rside" aria-label="The lesson">
+    <button class="ib" type="button" id="hwBtn" data-act="homework" data-tip="Homework and recordings" aria-pressed="false"><span class="disc"><i data-i="folder"></i></span><span class="lbl">Homework</span></button>
     <button class="ib" type="button" id="recBtn" data-pop="rec" data-tip="Record this lesson (asks first)" aria-expanded="false"><span class="disc"><i data-i="record"></i></span><span class="lbl">Record</span></button>
     <span class="recpill" role="status"><span id="recT"></span>
       <button class="ib sm rec-only" type="button" id="markBtn" data-pop="mark" data-anchor="recT" data-tip="Mark this moment (H)"><span class="disc"><i data-i="flag"></i></span><span class="lbl">Mark</span></button>
@@ -710,6 +711,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',
     send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="M12 14 20 4"/>',
     sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     metronome: '<path d="M9.5 3h5l4.5 18H5L9.5 3Z"/><path d="M7 15h10M12 15l5-9"/>',
     tuner: '<path d="M9 2v8a3 3 0 0 0 6 0V2M12 13v9"/><path d="M5 7.5a7 7 0 0 0 0 5M19 7.5a7 7 0 0 1 0 5" opacity=".6"/>',
     popOut: '<path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -774,7 +776,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   // ---- what the app tells us ----
   let me = { name: myName, role: "learner", micOff: false, inGain: 1, monitor: false, monitorLevel: 0, recvMute: false, volume: 1, outMute: false, outLevel: 0, level: 0, inDevice: "", outDevice: "" };
   let conn = "connecting", lessonInfo = { title: "", startsAt: 0, endsAt: 0, joinedAt: Date.now() };
-  let audioPeers = [], rec = { phase: "idle", secs: 0 }, docks = { tools: false, board: false, metro: false, tuner: false, metroOn: false, mixerOut: false, mixerShown: false };
+  let audioPeers = [], rec = { phase: "idle", secs: 0 }, docks = { tools: false, board: false, homework: false, metro: false, tuner: false, metroOn: false, mixerOut: false, mixerShown: false };
 
   // ---- people ----
   const tiles = new Map();   // key -> tile
@@ -1175,13 +1177,14 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     $("#scoreBtn").setAttribute("aria-pressed", String(!!docks.score));
     $("#metroSet").setAttribute("aria-pressed", String(!!docks.metro));
     $("#tunerBtn").setAttribute("aria-pressed", String(!!docks.tuner));
+    $("#hwBtn").setAttribute("aria-pressed", String(!!docks.homework));
     $("#metroBtn").setAttribute("aria-pressed", String(!!docks.metroOn));
     $("#metroBtn").dataset.tip = docks.metroOn ? "Stop the metronome" : "Start the metronome";
     nameFromTip($("#metroBtn"));
     $("#mixBtn").classList.toggle("on", !!docks.mixerShown);
     // which tool is docked (T-085); an app from before docking only docks Tools
     const dk = typeof docks.docked === "string" ? docks.docked : (docks.tools ? "tools" : "");
-    const miniOn = dk === "metro" || dk === "tuner", toolsOn = dk === "tools" || miniOn, sideOn = dk === "board" || dk === "score";
+    const miniOn = dk === "metro" || dk === "tuner", toolsOn = dk === "tools" || miniOn, sideOn = dk === "board" || dk === "score" || dk === "homework";
     if (body.classList.contains("tools-on") !== toolsOn || body.classList.contains("side-on") !== sideOn || body.classList.contains("mini-on") !== miniOn) {
       body.classList.toggle("tools-on", toolsOn); body.classList.toggle("side-on", sideOn); body.classList.toggle("mini-on", miniOn);
       sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); sendDock(); });
@@ -1367,6 +1370,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
       case "tools": closePops(); send({ t: "tools" }); if (demo) { docks.tools = !docks.tools; renderLesson(); } break;
       case "metro": closePops(); send({ t: "metro" }); break;
       case "tuner": closePops(); send({ t: "tuner" }); break;
+      case "homework": closePops(); send({ t: "homework" }); break;
       case "board": closePops(); send({ t: "board" }); break;
       case "score": closePops(); send({ t: "score" }); break;
       case "chat": toggleChat(body.dataset.right !== "chat"); break;

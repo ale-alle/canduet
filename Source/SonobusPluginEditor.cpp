@@ -3370,8 +3370,9 @@ void SonobusAudioProcessorEditor::saveLessonSummary(double durationSeconds, bool
     // after a lesson recording; solo practice recordings just appear in the tab
     if (showIt && summary.people.size() > 1) {
         if (mLessonView) {
-            mLessonView->setToolsOpen(true);
-            if (auto * tools = mLessonView->getTools()) tools->showSummary(file);
+            // T-090: recordings live in Homework & Recordings now
+            mLessonView->openTool("homework");
+            if (auto * hw = mLessonView->getHomework()) hw->showRecordings(file);
             return;
         }
         showToolsWindow(true);
@@ -3779,6 +3780,10 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
         // no Workspace tab: the lesson bar has its own Board button
         return std::make_unique<TinCan::ToolsPanel>(safeThis->processor, safeThis->getAudioDeviceManager, safeThis->getNoteShare(),
                                                     nullptr, safeThis->makeSummaryHooks(), set);
+    };
+    h.makeHomework = [safeThis](int64 lessonStartMs) -> std::unique_ptr<TinCan::HomeworkPanel> {
+        if (!safeThis) return nullptr;
+        return std::make_unique<TinCan::HomeworkPanel>(safeThis->makeSummaryHooks(), lessonStartMs);
     };
     return h;
 }

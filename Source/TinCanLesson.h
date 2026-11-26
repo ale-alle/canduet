@@ -8,6 +8,7 @@
 #include "TinCanVideoTiles.h"
 #include "TinCanTools.h"
 #include "TinCanDock.h"
+#include "TinCanHomework.h"
 
 #include <functional>
 #include <map>
@@ -79,6 +80,8 @@ public:
         // the audio interface's inputs that are on, in order: device channel numbers (0-based) and names
         std::function<void(Array<int> & numbers, StringArray & names)> inputChannels;
         std::function<std::unique_ptr<ToolsPanel>(ToolsPanel::Set)> makeTools;
+        // Homework & Recordings (T-090), for the lesson starting then (0: Practice mode)
+        std::function<std::unique_ptr<HomeworkPanel>(int64 lessonStartMs)> makeHomework;
         NoteShare * noteShare = nullptr;   // MIDI notes go to the page too, for lesson modules (T-075)
     };
 
@@ -103,12 +106,15 @@ public:
     bool isToolsOpen() { return isToolOpen("tools"); }
     void setToolsOpen(bool open) { if (open) openTool("tools"); else closeTool("tools"); }
     ToolsPanel * getTools() const;
+    HomeworkPanel * getHomework() const;
 
 private:
     class DockFrame;
     class MixerWindow;
     // the tools the lesson window makes itself (the rest are the editor's Board and Score windows)
-    static bool isOwnTool(const String & id) { return id == "tools" || id == "metro" || id == "tuner"; }
+    static bool isOwnTool(const String & id) { return id == "tools" || id == "metro" || id == "tuner" || id == "homework"; }
+    // where a docked tool goes: along the bottom (Tools, Metronome, Tuner) or at the right (the rest)
+    static bool docksAtBottom(const String & id) { return id == "tools" || id == "metro" || id == "tuner"; }
     // owner 2026-11-25: the mixer in a window of its own (a second copy of the page, mixer only), or back in the page
     void setMixerOut(bool out);
     void showMixerWindow(bool show);

@@ -448,6 +448,8 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanLiveInstrument.h
         Source/TinCanSummaries.cpp
         Source/TinCanSummaries.h
+        Source/TinCanHomework.cpp
+        Source/TinCanHomework.h
         Source/VDONinjaView.h
         Source/VersionInfo.cpp
         Source/VersionInfo.h

@@ -36,6 +36,8 @@ namespace Icons {
     Icon metronome();
     Icon notes();     // two beamed notes: the instrument
     Icon summaries(); // a list
+    Icon homework();  // a clipboard with ticks (T-090)
+    Icon recording(); // a ring with a dot (T-090)
     Icon board();
     Icon play();
     Icon stop();
