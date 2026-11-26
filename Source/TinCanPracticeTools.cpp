@@ -127,8 +127,17 @@ MetronomePanel::MetronomePanel(SonobusAudioProcessor & proc) : processor(proc)
                                { 3, Icons::metronome(), {}, "2", TRANS("Count in two bars when it starts") } }, 1);
     countInPicker.onChange = [this](int id) { setIntParam(SonobusAudioProcessor::paramMetCountIn, id - 1); };
 
-    for (auto * p : { &beatsPicker, &subdivisionPicker, &countInPicker })
-        p->onOpenChanged = [p](bool open) { if (open) p->toFront(false); };
+    // every choice shown (owner 2026-11-26)
+    subdivisionPicker.setAlwaysOpen(true);
+    countInPicker.setAlwaysOpen(true);
+    setUpCircle(beatsDown, Icons::minus(), TRANS("Fewer beats in a bar"));
+    setUpCircle(beatsUp, Icons::plus(), TRANS("More beats in a bar"));
+    beatsDown.onClick = [this]() { setIntParam(SonobusAudioProcessor::paramMetBeatsPerBar, jmax(1, getIntParam(SonobusAudioProcessor::paramMetBeatsPerBar) - 1)); timerCallback(); };
+    beatsUp.onClick = [this]() { setIntParam(SonobusAudioProcessor::paramMetBeatsPerBar, jmin(12, getIntParam(SonobusAudioProcessor::paramMetBeatsPerBar) + 1)); timerCallback(); };
+    beatsLabel.setJustificationType(Justification::centred);
+    beatsLabel.setFont(Font(15.0f, Font::bold));
+    beatsLabel.setColour(Label::textColourId, TinCanTheme::text);
+    beatsLabel.setTooltip(TRANS("Beats in a bar"));
 
     // click volume, and whether the lesson hears it
     setUpCircle(volumeIcon, Icons::volume(), TRANS("Click volume"));
@@ -141,8 +150,8 @@ MetronomePanel::MetronomePanel(SonobusAudioProcessor & proc) : processor(proc)
     sendCircle.setClickingTogglesState(true);
     sendAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(state, SonobusAudioProcessor::paramSendMetAudio, sendCircle);
 
-    for (Component * c : std::initializer_list<Component *> { &playCircle, &slowerCircle, &tempoSlider, &fasterCircle, &tapCircle, &beatsPicker,
-                                                              &subdivisionPicker, &countInPicker, &volumeIcon, &volumeSlider, &sendCircle, &indicator })
+    for (Component * c : std::initializer_list<Component *> { &playCircle, &slowerCircle, &tempoSlider, &fasterCircle, &tapCircle,
+                                                              &beatsDown, &beatsLabel, &beatsUp, &subdivisionPicker, &countInPicker, &volumeIcon, &volumeSlider, &sendCircle, &indicator })
         addAndMakeVisible(c);
     playCircle.onStateChange();
     timerCallback();
@@ -198,6 +207,8 @@ void MetronomePanel::timerCallback()
     int sub = getIntParam(SonobusAudioProcessor::paramMetSubdivision);
     int countIn = getIntParam(SonobusAudioProcessor::paramMetCountIn);
     if (beatsPicker.getSelected() != bpb) beatsPicker.setSelected(bpb);
+    const auto bpbText = String(bpb) + "/" + TRANS("bar");
+    if (beatsLabel.getText() != bpbText) beatsLabel.setText(bpbText, dontSendNotification);
     if (subdivisionPicker.getSelected() != sub) subdivisionPicker.setSelected(sub);
     if (countInPicker.getSelected() != countIn + 1) countInPicker.setSelected(countIn + 1);
 
@@ -228,7 +239,10 @@ void MetronomePanel::resized()
     place(fasterCircle, d);
     place(tapCircle, d);
     row.removeFromLeft(10);
-    placePicker(beatsPicker);
+    place(beatsDown, d);
+    place(beatsLabel, 50);
+    place(beatsUp, d);
+    row.removeFromLeft(10);
     placePicker(subdivisionPicker);
     placePicker(countInPicker);
     row.removeFromLeft(10);
@@ -375,6 +389,7 @@ void TunerPanel::updateInputs()
     for (int i = 1; i <= jmax(1, n); ++i)
         inputs.push_back({ i, Icons::mic(), {}, String(i), TRANS("Listen to input") + " " + String(i) });
     inputPicker.setOptions(std::move(inputs), sel);
+    inputPicker.setAlwaysOpen(true);   // owner 2026-11-26: every input shown
     resized();
     if (isThreadRunning() && n > 0) processor.setTunerChannel(getInput() - 1);
 }

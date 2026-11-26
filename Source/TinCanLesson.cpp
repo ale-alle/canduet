@@ -351,7 +351,7 @@ DockableWindow * LessonView::windowFor(const String & id, bool create)
             if (auto panel = hooks.makeTools(set)) {
                 const bool small = id != "tools";
                 auto made = std::make_unique<DockableWindow>(id == "metro" ? TRANS("Metronome") : id == "tuner" ? TRANS("Tuner") : TRANS("Tools"),
-                                                             small ? 640 : 1100, small ? 260 : 400);
+                                                             small ? 1000 : 1100, small ? 260 : 400);
                 made->setBody(std::move(panel));
                 w = made.get();
                 ownWindows[id] = std::move(made);
@@ -492,7 +492,7 @@ void LessonView::placeFrame()
     auto * top = getTopLevelComponent();
     auto * peer = top ? top->getPeer() : nullptr;
     const auto rect = docksAtBottom(docked) ? toolsRect : sideRect;
-    if (docked.isEmpty() || peer == nullptr || rect.isEmpty()) {
+    if (docked.isEmpty() || peer == nullptr || rect.isEmpty() || asking) {
         frame->setVisible(false);
         return;
     }
@@ -1123,6 +1123,11 @@ void LessonView::handleMessage(const var & message)
     }
     else if (type == "recvMute") {
         setParam(SonobusAudioProcessor::paramMainRecvMute, (bool) value ? 1.0f : 0.0f);
+    }
+    else if (type == "askOpen") {
+        // the page's question sits in the bottom-right corner, where a docked panel would cover it
+        asking = (bool) value;
+        placeFrame();
     }
     else if (type == "metroOn") {
         setParam(SonobusAudioProcessor::paramMetEnabled, (bool) value ? 1.0f : 0.0f);

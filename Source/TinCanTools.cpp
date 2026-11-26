@@ -327,6 +327,7 @@ InstrumentPanel::InstrumentPanel(SonobusAudioProcessor & proc, std::function<Aud
             opts.push_back(o);
         }
         rangePicker.setOptions(opts, rangeIndex);
+        rangePicker.setAlwaysOpen(true);   // owner 2026-11-26: every size shown
         rangePicker.onChange = [this](int id) { selectRange(id); saveSettings(); };
         addAndMakeVisible(rangePicker);
     }

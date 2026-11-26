@@ -155,6 +155,7 @@ private:
     std::map<String, std::unique_ptr<DockableWindow>> ownWindows;  // Tools, Metronome, Tuner (closing one stops what it runs)
     std::unique_ptr<MixerWindow> mixerWindow;     // the mixer popped out (made when first shown)
     bool mixerOut = false;                        // the mixer opens in its own window
+    bool asking = false;                          // the page shows "are you sure": the dock steps aside
     String mixerWindowState;
     String docked;                                // the tool in the dock, or empty
     juce::Rectangle<float> toolsRect, sideRect;   // the page's gaps, as fractions; empty: not laid out yet

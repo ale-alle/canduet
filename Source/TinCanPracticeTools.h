@@ -53,7 +53,10 @@ private:
     // one bar of round icons (T-089): start, tempo, tap, beats, clicks per beat, count-in, volume, send
     IconCircle playCircle, slowerCircle, fasterCircle, tapCircle, volumeIcon, sendCircle;
     Slider tempoSlider { Slider::LinearBar, Slider::TextBoxLeft };   // a bar with the number on it
-    IconPicker beatsPicker, subdivisionPicker, countInPicker;
+    IconPicker beatsPicker, subdivisionPicker, countInPicker;   // beatsPicker: kept as the value only (not shown)
+    // owner 2026-11-26: nothing hidden. Beats in a bar: - 4 + (twelve choices are too many for a row)
+    IconCircle beatsDown, beatsUp;
+    Label beatsLabel;
     Slider volumeSlider { Slider::LinearHorizontal, Slider::NoTextBox };
     BeatIndicator indicator;
 
