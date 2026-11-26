@@ -53,6 +53,12 @@
   .grp.open .opts { opacity: 1; padding-left: 5px; }
   .grp.open .opts > * { opacity: 1; transform: none; }
   .grp.shown .opts { overflow: visible; }
+  /* owner 2026-11-25: an open group covers the icons next to it instead of pushing them aside */
+  .grp.open { z-index: 30; }
+  .grp .opts { position: absolute; top: 50%; left: 100%; transform: translateY(-50%); margin: 0; border-radius: 999px; }
+  .grp.rev .opts { left: auto; right: 100%; }
+  .grp.open .opts { background: var(--raised, var(--panel2, #1b2238)); box-shadow: 0 0 0 1px var(--line-strong, rgba(255,255,255,.14)), 0 8px 22px rgba(0, 0, 0, .45); padding-right: 6px; }
+  .grp.rev.open .opts { padding-left: 6px; }
   .grp[data-kind="pick"] .opts > .current { display: none; }
   .swatch { width: 28px; min-height: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
   @media (prefers-reduced-motion: reduce) { .grp .opts, .grp .opts > * { transition-duration: 0s !important; } }

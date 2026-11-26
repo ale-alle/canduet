@@ -116,7 +116,10 @@ public:
     std::function<void(bool open)> onOpenChanged;
 
     // the room it takes when closed (it draws over its neighbours when open)
-    int getClosedWidth() const { return IconCircle::size + 2 * pad; }
+    int getClosedWidth() const { return alwaysOpen ? getOpenWidth() : IconCircle::size + 2 * pad; }
+
+    // owner 2026-11-25: every choice shown side by side, the current one bright red; nothing slides
+    void setAlwaysOpen(bool shouldBe);
     int getOpenWidth() const;
 
     bool hitTest(int x, int y) override;
@@ -139,6 +142,7 @@ private:
     OwnedArray<IconCircle> circles;   // same order as options
     int selected = 0;
     bool pendingOpen = false;   // hovering: opens when the second is up
+    bool alwaysOpen = false;
     bool open = false;
 };
 

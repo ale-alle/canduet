@@ -221,7 +221,14 @@ void IconPicker::setOptions(std::vector<Option> newOptions, int selectedId)
         addChildComponent(c);
     }
     selected = selectedId;
-    open = false;
+    open = alwaysOpen;
+    layout(false);
+}
+
+void IconPicker::setAlwaysOpen(bool shouldBe)
+{
+    alwaysOpen = shouldBe;
+    open = shouldBe;
     layout(false);
 }
 
@@ -251,7 +258,7 @@ bool IconPicker::hitTest(int x, int y)
 
 void IconPicker::paint(Graphics & g)
 {
-    if (!open) return;
+    if (!open || alwaysOpen) return;
     // a pill behind the open choices, so they read over whatever is under them
     auto r = juce::Rectangle<int>(0, slot(0).getY() - pad, getOpenWidth(), IconCircle::size + 2 * pad).toFloat();
     g.setColour(TinCanTheme::raised.withAlpha(0.96f));
@@ -270,7 +277,7 @@ void IconPicker::layout(bool animate)
         auto * c = circles[(int) i];
         const bool isChoice = options[i].id == selected;
         c->setOn(isChoice);
-        auto target = isChoice ? slot(0) : slot(k++);
+        auto target = alwaysOpen ? slot((int) i) : isChoice ? slot(0) : slot(k++);
         if (isChoice || open) {
             if (!c->isVisible()) { c->setBounds(slot(0)); c->setAlpha(isChoice ? 1.0f : 0.0f); c->setVisible(true); }
             if (animate) animator.animateComponent(c, target, 1.0f, ms, false, 0.4, 0.6);
@@ -293,7 +300,7 @@ void IconPicker::layout(bool animate)
 void IconPicker::setOpen(bool shouldBeOpen)
 {
     pendingOpen = false;
-    if (open == shouldBeOpen) return;
+    if (alwaysOpen || open == shouldBeOpen) return;
     open = shouldBeOpen;
     if (open) toFront(false);
     layout(true);
@@ -305,6 +312,11 @@ void IconPicker::pick(int id)
     if (!open) { setOpen(true); return; }   // a click on the closed circle opens it (touch, keyboard)
     const bool changed = id != selected;
     selected = id;
+    if (alwaysOpen) {
+        layout(true);
+        if (changed && onChange) onChange(id);
+        return;
+    }
     open = false;
     layout(true);
     if (onOpenChanged) onOpenChanged(false);
@@ -313,6 +325,7 @@ void IconPicker::pick(int id)
 
 void IconPicker::mouseEnter(const MouseEvent &)
 {
+    if (alwaysOpen) return;
     stopTimer();
     // owner 2026-11-25: wait a second on hover before the other choices open (a click opens at once)
     if (!open) { pendingOpen = true; startTimer(1000); }
@@ -320,6 +333,7 @@ void IconPicker::mouseEnter(const MouseEvent &)
 
 void IconPicker::mouseExit(const MouseEvent &)
 {
+    if (alwaysOpen) return;
     if (!open) { pendingOpen = false; stopTimer(); return; }
     // close a moment after the pointer leaves (moving between circles crosses small gaps)
     startTimer(280);

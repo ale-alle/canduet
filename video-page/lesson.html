@@ -290,6 +290,12 @@ body.side-on .tile .tbtns { display: none; }
 .grp.rev.open .opts { padding-left: 0; padding-right: 6px; }
 .grp.open .opts > * { opacity: 1; transform: none; }
 .grp.shown .opts { overflow: visible; }   /* once open, so the tooltips aren't cut off */
+/* owner 2026-11-25: an open group covers the icons next to it instead of pushing them aside */
+.grp.open { z-index: 30; }
+.grp .opts { position: absolute; top: 50%; left: 100%; transform: translateY(-50%); margin: 0; border-radius: 999px; }
+.grp.rev .opts { left: auto; right: 100%; }
+.grp.open .opts { background: var(--raised, var(--panel2, #1b2238)); box-shadow: 0 0 0 1px var(--line-strong, rgba(255,255,255,.14)), 0 8px 22px rgba(0, 0, 0, .45); padding-right: 6px; }
+.grp.rev.open .opts { padding-left: 6px; }
 .ib[data-tip]:hover::before, .ib[data-tip]:focus-visible::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--night); padding: 4px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; z-index: 20; pointer-events: none; }
 /* with Tools docked, tips rise above the native Tools panel (it covers anything drawn in its gap) */

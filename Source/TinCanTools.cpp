@@ -311,6 +311,7 @@ InstrumentPanel::InstrumentPanel(SonobusAudioProcessor & proc, std::function<Aud
             opts.push_back(o);
         }
         instrumentPicker.setOptions(opts, 0);
+        instrumentPicker.setAlwaysOpen(true);   // piano, guitar, basses side by side (owner 2026-11-25)
         instrumentPicker.onChange = [this](int id) { selectInstrument(id); saveSettings(); };
         addAndMakeVisible(instrumentPicker);
     }

@@ -62,9 +62,10 @@ public:
     {
         setUsingNativeTitleBar(true);
         setResizable(true, false);
-        setResizeLimits(480, 360, 4000, 2000);
+        // tall enough for a whole strip, from its effects down to its name (owner 2026-11-25)
+        setResizeLimits(600, 680, 4000, 2000);
         setContentNonOwned(page.get(), false);
-        centreWithSize(1100, 600);
+        centreWithSize(1100, 700);
     }
     ~MixerWindow() override { clearContentComponent(); }
     void closeButtonPressed() override { if (onClose) onClose(); }
