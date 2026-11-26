@@ -229,8 +229,8 @@ body.tools-on #dockHole { height: var(--dockh, 260px); margin-top: 12px; border-
 body.tools-on { --dockb: calc(var(--dockh, 260px) + 12px); }
 /* Metronome or Tuner docked (owner 2026-11-25): a smaller panel in the bottom-left corner, where the
    mixer opens; with the mixer open it moves right of it, as Tools does */
-body.mini-on #dockHole { height: 200px; width: min(700px, calc(100vw - 48px)); }
-body.mini-on.mix-on #dockHole { width: min(700px, calc(100vw - 48px - var(--mixw, 0px))); }
+body.mini-on #dockHole { height: 200px; width: min(1000px, calc(100vw - 48px)); }
+body.mini-on.mix-on #dockHole { width: min(1000px, calc(100vw - 48px - var(--mixw, 0px))); }
 body.mini-on { --dockb: 212px; }
 /* With Tools open the people get less room: each video shrinks to its camera's own shape and fits
    above, the whole picture, never cropped (--ar is the camera's width/height, set when it starts) */
@@ -290,12 +290,7 @@ body.side-on .tile .tbtns { display: none; }
 .grp.rev.open .opts { padding-left: 0; padding-right: 6px; }
 .grp.open .opts > * { opacity: 1; transform: none; }
 .grp.shown .opts { overflow: visible; }   /* once open, so the tooltips aren't cut off */
-/* owner 2026-11-25: an open group covers the icons next to it instead of pushing them aside */
-.grp.open { z-index: 30; }
-.grp .opts { position: absolute; top: 50%; left: 100%; transform: translateY(-50%); margin: 0; border-radius: 999px; }
-.grp.rev .opts { left: auto; right: 100%; }
-.grp.open .opts { background: var(--raised, var(--panel2, #1b2238)); box-shadow: 0 0 0 1px var(--line-strong, rgba(255,255,255,.14)), 0 8px 22px rgba(0, 0, 0, .45); padding-right: 6px; }
-.grp.rev.open .opts { padding-left: 6px; }
+/* owner 2026-11-26: the bar's few slide-outs push the icons next to them aside, so they're noticed */
 .ib[data-tip]:hover::before, .ib[data-tip]:focus-visible::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--night); padding: 4px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; z-index: 20; pointer-events: none; }
 /* with Tools docked, tips rise above the native Tools panel (it covers anything drawn in its gap) */
@@ -482,11 +477,11 @@ body.mixer-only #pop-mixer .mhead { width: auto; }
 body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-width: calc(33vw - 24px); }
 #ltime.over { color: var(--warn, #c77700); }
 /* "are you sure" (owner 2026-11-25): the app's own pop-up look, over a dimmed page */
-#ask { position: fixed; inset: 0; z-index: 45; background: rgba(0, 0, 0, .45); display: flex; justify-content: center; align-items: flex-start; padding-top: 16vh; }
+/* owner 2026-11-26: docked in the bottom-right corner, just above Leave; nothing dims. A click anywhere
+   else answers "no". (The app hides a docked panel while it shows, as nothing can draw over one.) */
+#ask { position: fixed; inset: 0; z-index: 45; background: transparent; }
 #ask[hidden] { display: none; }
-#ask .pop { position: static; display: flex; width: min(380px, calc(100vw - 32px)); max-height: none; }
-body.side-on #ask { justify-content: flex-start; padding-left: 12px; }
-body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
+#ask .pop { position: fixed; display: flex; left: auto; top: auto; right: 12px; bottom: var(--askb, 80px); width: min(380px, calc(100vw - 32px)); max-height: none; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
@@ -593,7 +588,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     <span class="recpill" role="status"><span id="recT"></span>
       <button class="ib sm rec-only" type="button" id="markBtn" data-pop="mark" data-anchor="recT" data-tip="Mark this moment (H)"><span class="disc"><i data-i="flag"></i></span><span class="lbl">Mark</span></button>
       <button class="ib sm on" type="button" data-act="recstop" id="recStop" data-tip="Stop recording"><span class="disc"><i data-i="stop"></i></span><span class="lbl">Stop</span></button></span>
-    <button class="ib" type="button" id="setBtn" data-pop="set" data-tip="Settings" aria-expanded="false"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Settings</span></button>
+    <button class="ib" type="button" id="setBtn" data-act="settings" data-tip="All settings: audio, general, recording"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Settings</span></button>
     <button class="ib leave" type="button" id="leaveBtn" data-act="leave" data-tip="Leave the lesson"><span class="disc"><i data-i="leave"></i></span><span class="lbl">Leave</span></button>
   </div>
 
@@ -1199,11 +1194,15 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     $("#askH").textContent = o.title; $("#askP").textContent = o.text;
     $("#askYes").textContent = o.yes; $("#askNo").textContent = o.no;
     askYes = o.onYes; askBack = document.activeElement;
+    const bar = $("#bar");
+    body.style.setProperty("--askb", (mixerOnly ? 12 : Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 10) + "px");
     $("#ask").hidden = false; $("#askNo").focus({ preventScroll: true });
+    send({ t: "askOpen", v: true });
   }
   function closeAsk(yes) {
     if ($("#ask").hidden) return;
     $("#ask").hidden = true;
+    send({ t: "askOpen", v: false });
     const f = askYes; askYes = null;
     if (askBack && askBack.focus) askBack.focus({ preventScroll: true });
     if (yes && f) f();

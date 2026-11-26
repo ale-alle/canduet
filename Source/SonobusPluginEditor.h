@@ -553,7 +553,9 @@ private:
     bool isNarrow = false;
     bool isReallyNarrow = false;
     bool settingsWasShownOnDown = false;
-    WeakReference<Component> settingsCalloutBox;
+    WeakReference<Component> settingsCalloutBox;   // the Settings window while it shows (T-090)
+    class SettingsWindow;
+    std::unique_ptr<DocumentWindow> mSettingsWindow;
 
     int inChannels = 0;
     int outChannels = 0;

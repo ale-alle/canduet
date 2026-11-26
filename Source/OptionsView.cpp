@@ -96,7 +96,7 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
     mOptionsComponent = std::make_unique<Component>();
 
     mSettingsTab = std::make_unique<TabbedComponent>(TabbedButtonBar::Orientation::TabsAtTop);
-    mSettingsTab->setTabBarDepth(36);
+    mSettingsTab->setTabBarDepth(44);
     mSettingsTab->setOutline(0);
     mSettingsTab->getTabbedButtonBar().setMinimumTabScaleFactor(0.1f);
     //mSettingsTab->addComponentListener(this);
@@ -359,15 +359,38 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
 
     mVersionLabel = std::make_unique<Label>("", TRANS("Version: ") + ProjectInfo::versionString);
     configLabel(mVersionLabel.get(), true);
-    mVersionLabel->setJustificationType(Justification::centredRight);
+    mVersionLabel->setJustificationType(Justification::centredLeft);
 
     // Tin Can: CanDuet is GPLv3 software based on SonoBus; keep this credit and source link visible
     mCreditsLink = std::make_unique<HyperlinkButton>(TRANS("CanDuet by Tin Can Studios, based on SonoBus by Jesse Chappell (GPLv3) - source code"),
                                                      URL("https://github.com/ale-alle/canduet"));
-    mCreditsLink->setFont(Font(12), false, Justification::centredRight);
+    mCreditsLink->setFont(Font(12), false, Justification::centredLeft);
     mCreditsLink->setTooltip(TRANS("Open the CanDuet source code"));
 
     addAndMakeVisible(mSettingsTab.get());
+
+    // General (owner 2026-11-26): headings, and what the lesson's small settings box held
+    auto heading = [](const String & text) {
+        auto l = std::make_unique<Label>("", text.toUpperCase());
+        l->setFont(Font(12.0f, Font::bold));
+        l->setColour(Label::textColourId, TinCanTheme::muted);
+        l->setJustificationType(Justification::bottomLeft);
+        return l;
+    };
+    mHeadLesson = heading(TRANS("Sound in the lesson"));
+    mHeadDisplay = heading(TRANS("Language and controls"));
+    mHeadConnection = heading(TRANS("Connection"));
+    mHeadAbout = heading(TRANS("About"));
+    mRecvMuteButton = std::make_unique<ToggleButton>(TRANS("Mute everything I hear"));
+    mRecvMuteAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.getValueTreeState(), SonobusAudioProcessor::paramMainRecvMute, *mRecvMuteButton);
+    mSoundSetupButton = std::make_unique<TextButton>(TRANS("Set up your sound again"));
+    mSoundSetupButton->onClick = [this]() { if (openSoundSetup) openSoundSetup(); };
+    mHelpButton = std::make_unique<TextButton>(TRANS("Help"));
+    mHelpButton->setTooltip(TRANS("Opens tincanstudios.ca/help"));
+    mHelpButton->onClick = [this]() { if (openHelp) openHelp(); };
+    for (Component * c : std::initializer_list<Component *> { mHeadLesson.get(), mHeadDisplay.get(), mHeadConnection.get(), mHeadAbout.get(),
+                                                              mRecvMuteButton.get(), mSoundSetupButton.get(), mHelpButton.get() })
+        mOptionsComponent->addAndMakeVisible(c);
 
     mOptionsComponent->addAndMakeVisible(mOptionsAutosizeStaticLabel.get());
     mOptionsComponent->addAndMakeVisible(mBufferTimeSlider.get());
@@ -497,7 +520,7 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
         }
 
         if (firsttime) {
-            mSettingsTab->addTab(TRANS("AUDIO"), TinCanTheme::surface, mAudioOptionsViewport.get(), false);
+            mSettingsTab->addTab(TRANS("Audio"), TinCanTheme::surface, mAudioOptionsViewport.get(), false);
         }
 
     }
@@ -505,13 +528,13 @@ OptionsView::OptionsView(SonobusAudioProcessor& proc, std::function<AudioDeviceM
     mOtherOptionsViewport = std::make_unique<Viewport>();
     mOtherOptionsViewport->setViewedComponent(mOptionsComponent.get(), false);
 
-    mSettingsTab->addTab(TRANS("OPTIONS"),TinCanTheme::surface, mOtherOptionsViewport.get(), false);
+    mSettingsTab->addTab(TRANS("General"),TinCanTheme::surface, mOtherOptionsViewport.get(), false);
    // mSettingsTab->addTab(TRANS("HELP"), TinCanTheme::surface, mHelpComponent.get(), false);
 
     mRecordOptionsViewport = std::make_unique<Viewport>();
     mRecordOptionsViewport->setViewedComponent(mRecOptionsComponent.get(), false);
 
-    mSettingsTab->addTab(TRANS("RECORDING"),TinCanTheme::surface, mRecordOptionsViewport.get(), false);
+    mSettingsTab->addTab(TRANS("Recording"),TinCanTheme::surface, mRecordOptionsViewport.get(), false);
 
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
 
@@ -823,14 +846,24 @@ void OptionsView::updateLayout()
     optionsPluginDefaultBox.items.add(FlexItem(80, minpassheight, *mOptionsResetPluginDefaultButton).withMargin(0).withFlex(1));
 
     
+    optionsLessonButtonsBox.items.clear();
+    optionsLessonButtonsBox.flexDirection = FlexBox::Direction::row;
+    optionsLessonButtonsBox.items.add(FlexItem(10, 12).withFlex(0));
+    optionsLessonButtonsBox.items.add(FlexItem(200, minpassheight, *mSoundSetupButton).withMargin(0).withFlex(0));
+    optionsLessonButtonsBox.items.add(FlexItem(8, 12).withFlex(0));
+    optionsLessonButtonsBox.items.add(FlexItem(90, minpassheight, *mHelpButton).withMargin(0).withFlex(0));
+
+    const int headh = 30;
     optionsBox.items.clear();
     optionsBox.flexDirection = FlexBox::Direction::column;
-    optionsBox.items.add(FlexItem(4, 6));
-    optionsBox.items.add(FlexItem(100, 15, *mVersionLabel).withMargin(2).withFlex(0));
-    optionsBox.items.add(FlexItem(100, 16, *mCreditsLink).withMargin(2).withFlex(0));
-    optionsBox.items.add(FlexItem(4, 4));
+    optionsBox.items.add(FlexItem(100, headh, *mHeadLesson).withMargin(2).withFlex(0));
+    optionsBox.items.add(FlexItem(100, minpassheight, *mRecvMuteButton).withMargin(FlexItem::Margin(2, 2, 2, 12)).withFlex(0));
+    optionsBox.items.add(FlexItem(100, minpassheight, optionsLessonButtonsBox).withMargin(2).withFlex(0));
+    optionsBox.items.add(FlexItem(100, headh, *mHeadDisplay).withMargin(2).withFlex(0));
     optionsBox.items.add(FlexItem(100, minitemheight, optionsLanguageBox).withMargin(2).withFlex(0));
-    optionsBox.items.add(FlexItem(4, 4));
+    optionsBox.items.add(FlexItem(100, minpassheight, optionsSnapToMouseBox).withMargin(2).withFlex(0));
+    optionsBox.items.add(FlexItem(100, minpassheight, optionsDisableShortcutsBox).withMargin(2).withFlex(0));
+    optionsBox.items.add(FlexItem(100, headh, *mHeadConnection).withMargin(2).withFlex(0));
     optionsBox.items.add(FlexItem(100, minitemheight, optionsSendQualBox).withMargin(2).withFlex(0));
     optionsBox.items.add(FlexItem(100, minitemheight - 10, optionsChangeAllQualBox).withMargin(1).withFlex(0));
     optionsBox.items.add(FlexItem(4, 4));
@@ -842,10 +875,12 @@ void OptionsView::updateLayout()
     optionsBox.items.add(FlexItem(4, 6));
     optionsBox.items.add(FlexItem(100, minpassheight, optionsInputLimitBox).withMargin(2).withFlex(0));
     //optionsBox.items.add(FlexItem(100, minpassheight, optionsHearlatBox).withMargin(2).withFlex(0));
-    optionsBox.items.add(FlexItem(100, minpassheight, optionsSnapToMouseBox).withMargin(2).withFlex(0));
     if (!TinCan::isLessonOnly()) optionsBox.items.add(FlexItem(100, minpassheight, optionsAutoReconnectBox).withMargin(2).withFlex(0));
     mOptionsAutoReconnectButton->setVisible(!TinCan::isLessonOnly());
-    optionsBox.items.add(FlexItem(100, minitemheight, optionsUdpBox).withMargin(2).withFlex(0));
+    // a fixed network port only matters outside lessons (lessons go through the relay)
+    if (!TinCan::isLessonOnly()) optionsBox.items.add(FlexItem(100, minitemheight, optionsUdpBox).withMargin(2).withFlex(0));
+    mOptionsUseSpecificUdpPortButton->setVisible(!TinCan::isLessonOnly());
+    mOptionsUdpPortEditor->setVisible(!TinCan::isLessonOnly());
     if (JUCEApplicationBase::isStandaloneApp()) {
         optionsBox.items.add(FlexItem(100, minpassheight, optionsOverrideSamplerateBox).withMargin(2).withFlex(0));
         if (mOptionsAllowBluetoothInput) {
@@ -855,13 +890,17 @@ void OptionsView::updateLayout()
         optionsBox.items.add(FlexItem(100, minpassheight, optionsCheckForUpdateBox).withMargin(2).withFlex(0));
 #endif
     }
-    optionsBox.items.add(FlexItem(100, minpassheight, optionsDisableShortcutsBox).withMargin(2).withFlex(0));
     optionsBox.items.add(FlexItem(100, minpassheight, optionsDynResampleBox).withMargin(2).withFlex(0));
 
     if ( ! JUCEApplicationBase::isStandaloneApp()) {
         optionsBox.items.add(FlexItem(100, minitemheight, optionsPluginDefaultBox).withMargin(2).withFlex(0));
     }
     
+    optionsBox.items.add(FlexItem(100, headh, *mHeadAbout).withMargin(2).withFlex(0));
+    optionsBox.items.add(FlexItem(100, 18, *mVersionLabel).withMargin(FlexItem::Margin(2, 2, 2, 12)).withFlex(0));
+    optionsBox.items.add(FlexItem(100, 18, *mCreditsLink).withMargin(FlexItem::Margin(2, 2, 2, 12)).withFlex(0));
+    optionsBox.items.add(FlexItem(4, 10));
+
     minOptionsHeight = 0;
     for (auto & item : optionsBox.items) {
         minOptionsHeight += item.minHeight + item.margin.top + item.margin.bottom;

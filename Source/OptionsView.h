@@ -77,6 +77,8 @@ public:
     std::function<void()> updateKeybindings; // = []() { return 0; };
     std::function<bool(const String &)> setupLocalisation; // = []() { return 0; };
     std::function<void()> saveSettingsIfNeeded; // = []() { return 0; };
+    // T-090: General also holds what the lesson's small settings box had
+    std::function<void()> openSoundSetup, openHelp;
 
 
 protected:
@@ -202,6 +204,13 @@ protected:
 
 
     std::unique_ptr<TabbedComponent> mSettingsTab;
+
+    // General (owner 2026-11-26): headings, and the lesson's quick settings
+    std::unique_ptr<Label> mHeadLesson, mHeadDisplay, mHeadConnection, mHeadAbout;
+    std::unique_ptr<ToggleButton> mRecvMuteButton;
+    std::unique_ptr<TextButton> mSoundSetupButton, mHelpButton;
+    std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> mRecvMuteAttachment;
+    FlexBox optionsLessonButtonsBox;
 
     int minHeight = 0;
     int prefHeight = 0;

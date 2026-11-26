@@ -4423,6 +4423,20 @@ bool SonobusAudioProcessorEditor::keyStateChanged (bool isKeyDown)
 }
 
 
+// Settings (owner 2026-11-26): Audio, General and Recording in a window of their own, in the app's colours
+class SonobusAudioProcessorEditor::SettingsWindow : public DocumentWindow
+{
+public:
+    SettingsWindow() : DocumentWindow(TRANS("CanDuet settings"), TinCanTheme::surface, DocumentWindow::closeButton)
+    {
+        setUsingNativeTitleBar(true);
+        setResizable(true, false);
+        setResizeLimits(560, 480, 3000, 2400);
+    }
+    void closeButtonPressed() override { if (onClose) onClose(); }
+    std::function<void()> onClose;
+};
+
 void SonobusAudioProcessorEditor::showSettings(bool flag)
 {
     DBG("Got settings click");
@@ -4452,50 +4466,28 @@ void SonobusAudioProcessorEditor::showSettings(bool flag)
             mOptionsView->setupLocalisation = [this](const String & lang) {  return setupLocalisation(lang);  };
             mOptionsView->saveSettingsIfNeeded = [this]() {  if (saveSettingsIfNeeded) saveSettingsIfNeeded();  };
             mOptionsView->updateKeybindings = [this]() {  updateUseKeybindings();  };
+            // T-090: what the lesson's small settings box used to hold
+            mOptionsView->openSoundSetup = [this]() { showSettings(false); showAudioSetup(true); };
+            mOptionsView->openHelp = []() { URL(TinCan::getApiBase() + "/help").launchInDefaultBrowser(); };
 
             mOptionsView->addComponentListener(this);
             firsttime = true;
         }
 
 
-        auto prefbounds = mOptionsView->getPreferredContentBounds();
-        // in a lesson the page covers this window, so the box floats as a window of its own
-        Component * parentForBox = isCoveredByWebView() ? nullptr : dw;
-
-        defHeight = prefbounds.getHeight();
-
-        defWidth = jmin(defWidth + 8, dw->getWidth() - 30);
-        defHeight = jmin(defHeight + 8, dw->getHeight() - 90); // 24
-
-
-        auto wrap = std::make_unique<Component>();
-
-        wrap->addAndMakeVisible(mOptionsView.get());
-
-        mOptionsView->setBounds(Rectangle<int>(0,0,defWidth,defHeight));
-
-        wrap->setSize(defWidth,defHeight);
-
+        // owner 2026-11-26: all settings in a window of their own (it used to be a bubble that ran off the screen)
+        if (!mSettingsWindow) {
+            auto * w = new SettingsWindow();
+            Component::SafePointer<SonobusAudioProcessorEditor> safeThis(this);
+            w->onClose = [safeThis]() { MessageManager::callAsync([safeThis]() { if (safeThis) safeThis->showSettings(false); }); };
+            mSettingsWindow.reset(w);
+            mSettingsWindow->setContentNonOwned(mOptionsView.get(), false);
+            mSettingsWindow->centreWithSize(760, 680);
+        }
         updateOptionsState();
-        
-       
-        Rectangle<int> bounds =  dw->getLocalArea(nullptr, mTitleLabel->getScreenBounds().reduced(10));
-        if (mLessonView) {
-            // point at the lesson bar's Settings icon, bottom right (screen coordinates)
-            auto sb = getScreenBounds();
-            bounds = Rectangle<int>(sb.getRight() - 150, sb.getBottom() - 70, 40, 10);
-        }
-        else if (isCoveredByWebView()) {
-            // over the start menu (from Set up your sound > All audio settings): near the top, centred
-            auto sb = getScreenBounds();
-            bounds = Rectangle<int>(sb.getCentreX() - 20, sb.getY() + 60, 40, 10);
-        }
-        DBG("callout bounds: " << bounds.toString());
-        settingsCalloutBox = & CallOutBox::launchAsynchronously (std::move(wrap), bounds , parentForBox, false);
-        if (CallOutBox * box = dynamic_cast<CallOutBox*>(settingsCalloutBox.get())) {
-            box->setDismissalMouseClicksAreAlwaysConsumed(true);
-        }
-
+        mSettingsWindow->setVisible(true);
+        mSettingsWindow->toFront(true);
+        settingsCalloutBox = mSettingsWindow.get();
         settingsClosedTimestamp = 0;
 
 
@@ -4511,11 +4503,10 @@ void SonobusAudioProcessorEditor::showSettings(bool flag)
 
     }
     else {
-        // dismiss it
-        if (CallOutBox * box = dynamic_cast<CallOutBox*>(settingsCalloutBox.get())) {
-            box->dismiss();
-            settingsCalloutBox = nullptr;
-        }
+        // hide it (it keeps its place for next time)
+        if (mSettingsWindow) mSettingsWindow->setVisible(false);
+        settingsCalloutBox = nullptr;
+        settingsClosedTimestamp = Time::getMillisecondCounter();
     }
 }
 
