@@ -105,6 +105,7 @@ LessonView::LessonView(SonobusAudioProcessor & p, std::unique_ptr<VideoTilesView
     addAndMakeVisible(page.get());
     loadLayout();
     frame = std::make_unique<DockFrame>();
+    sideFrame = std::make_unique<DockFrame>();
     startTimer(100);
 }
 
@@ -116,7 +117,7 @@ LessonView::~LessonView()
     // before the dock goes, or its WebView2 would go with it
     for (auto id : { "board", "score" }) {
         if (auto * w = windowFor(id, false)) {
-            if (docked == id) w->takeBack();
+            if (dockedSide == id) w->takeBack();
             else if (w->isVisible()) rememberWindow(id);
             w->setVisible(false);
             w->onToggleDock = nullptr;
@@ -131,6 +132,7 @@ LessonView::~LessonView()
     mixerWindow.reset();
     ownWindows.clear();
     frame.reset();
+    sideFrame.reset();
     page.reset();
 }
 
@@ -382,7 +384,7 @@ void LessonView::wireWindow(DockableWindow & w, const String & id)
 
 bool LessonView::isToolOpen(const String & id)
 {
-    if (docked == id) return true;
+    if (isDockedNow(id)) return true;
     auto * w = windowFor(id, false);
     return w != nullptr && w->isVisible();
 }
@@ -393,16 +395,16 @@ void LessonView::openTool(const String & id)
     if (w == nullptr) return;
     const bool dockIt = wantDocked.count(id) ? wantDocked[id] : true;
     if (dockIt) dockTool(id);
-    else if (docked != id) w->showFloating();
+    else if (!isDockedNow(id)) w->showFloating();
     sendState();
 }
 
 void LessonView::closeTool(const String & id)
 {
     if (auto * w = windowFor(id, false)) {
-        if (docked == id) {
+        if (isDockedNow(id)) {
             w->takeBack();
-            docked.clear();
+            slotFor(id).clear();
         }
         else if (w->isVisible()) rememberWindow(id);
         w->setVisible(false);
@@ -415,16 +417,17 @@ void LessonView::closeTool(const String & id)
 
 void LessonView::dockTool(const String & id)
 {
-    // one docked tool at a time; tools in their own windows stay
-    if (docked.isNotEmpty() && docked != id) closeTool(docked);
+    // one docked tool per dock (bottom, right); tools in their own windows stay
+    if (const String prev = slotFor(id); prev.isNotEmpty() && prev != id) closeTool(prev);
     auto * w = windowFor(id, true);
     if (w == nullptr) return;
     if (w->isVisible()) rememberWindow(id);
     // on the main window before the page moves in, so its WebView2 has a window to move to
-    if (auto * top = getTopLevelComponent(); top != nullptr && top->getPeer() != nullptr && !frame->isOnDesktop())
-        frame->addToDesktop(0, top->getPeer()->getNativeHandle());
-    w->dockInto(*frame);
-    docked = id;
+    auto & f = frameFor(id);
+    if (auto * top = getTopLevelComponent(); top != nullptr && top->getPeer() != nullptr && !f.isOnDesktop())
+        f.addToDesktop(0, top->getPeer()->getNativeHandle());
+    w->dockInto(f);
+    slotFor(id) = id;
     sendState();   // the page opens the gap, then tells us where it is
     placeFrame();
 }
@@ -433,11 +436,11 @@ void LessonView::toggleDock(const String & id)
 {
     auto * w = windowFor(id, false);
     if (w == nullptr) return;
-    if (docked == id) {
+    if (isDockedNow(id)) {
         // pop out: its own window, where it was; the people get the whole window again
         wantDocked[id] = false;
         w->takeBack();
-        docked.clear();
+        slotFor(id).clear();
         if (windowStates.count(id)) w->restoreState(windowStates[id]);
         w->showFloating();
         placeFrame();
@@ -488,17 +491,22 @@ void LessonView::showMixerWindow(bool show)
 
 void LessonView::placeFrame()
 {
-    if (!frame) return;
+    if (!frame || !sideFrame) return;
+    placeOne(*frame, dockedBottom, toolsRect);
+    placeOne(*sideFrame, dockedSide, sideRect);
+}
+
+void LessonView::placeOne(DockFrame & f, const String & tool, juce::Rectangle<float> rect)
+{
     auto * top = getTopLevelComponent();
     auto * peer = top ? top->getPeer() : nullptr;
-    const auto rect = docksAtBottom(docked) ? toolsRect : sideRect;
-    if (docked.isEmpty() || peer == nullptr || rect.isEmpty() || asking) {
-        frame->setVisible(false);
+    if (tool.isEmpty() || peer == nullptr || rect.isEmpty() || asking) {
+        f.setVisible(false);
         return;
     }
-    if (!frame->isOnDesktop()) {
+    if (!f.isOnDesktop()) {
         // a child of the main window's native window, created after the web view so it sits above it
-        frame->addToDesktop(0, peer->getNativeHandle());
+        f.addToDesktop(0, peer->getNativeHandle());
     }
 
     auto area = page->getLocalBounds().toFloat();
@@ -507,10 +515,10 @@ void LessonView::placeFrame()
                                  .getSmallestIntegerContainer();
     // child windows are placed in the main window's client coordinates
     auto bounds = top->getLocalArea(page.get(), r);
-    if (frame->getBounds() != bounds) frame->setBounds(bounds);
-    if (!frame->isVisible()) {
-        frame->setVisible(true);
-        frame->toFront(false);   // above the web view's own window
+    if (f.getBounds() != bounds) f.setBounds(bounds);
+    if (!f.isVisible()) {
+        f.setVisible(true);
+        f.toFront(false);   // above the web view's own window
     }
 }
 
@@ -816,7 +824,10 @@ void LessonView::sendState()
     docks->setProperty("mixerShown", mixerWindow != nullptr && mixerWindow->isVisible());
     docks->setProperty("board", isToolOpen("board"));
     docks->setProperty("score", isToolOpen("score"));
-    docks->setProperty("docked", docked);
+    // "docked": one name, for pages from before there were two docks
+    docks->setProperty("docked", dockedSide.isNotEmpty() ? dockedSide : dockedBottom);
+    docks->setProperty("dockedBottom", dockedBottom);
+    docks->setProperty("dockedSide", dockedSide);
 
     DynamicObject::Ptr msg = new DynamicObject();
     msg->setProperty("t", "state");

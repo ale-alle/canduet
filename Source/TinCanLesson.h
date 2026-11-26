@@ -151,13 +151,20 @@ private:
     LessonInfo info;
     Hooks hooks;
 
-    std::unique_ptr<DockFrame> frame;             // the dock: a child window over the page's gap
+    // owner 2026-11-26: two docks, so Metronome/Tuner/Tools at the bottom and Score/Board/Homework at
+    // the right can be docked at the same time
+    std::unique_ptr<DockFrame> frame;             // the bottom dock: a child window over the page's gap
+    std::unique_ptr<DockFrame> sideFrame;         // the right dock
     std::map<String, std::unique_ptr<DockableWindow>> ownWindows;  // Tools, Metronome, Tuner (closing one stops what it runs)
     std::unique_ptr<MixerWindow> mixerWindow;     // the mixer popped out (made when first shown)
     bool mixerOut = false;                        // the mixer opens in its own window
     bool asking = false;                          // the page shows "are you sure": the dock steps aside
     String mixerWindowState;
-    String docked;                                // the tool in the dock, or empty
+    String dockedBottom, dockedSide;              // the tool in each dock, or empty
+    String & slotFor(const String & id) { return docksAtBottom(id) ? dockedBottom : dockedSide; }
+    bool isDockedNow(const String & id) const { return id.isNotEmpty() && (dockedBottom == id || dockedSide == id); }
+    DockFrame & frameFor(const String & id) { return docksAtBottom(id) ? *frame : *sideFrame; }
+    void placeOne(DockFrame & f, const String & tool, juce::Rectangle<float> rect);
     juce::Rectangle<float> toolsRect, sideRect;   // the page's gaps, as fractions; empty: not laid out yet
     std::map<String, bool> wantDocked;            // each tool's last place (docked unless popped out)
     std::map<String, String> windowStates;        // each tool's own window, where it was

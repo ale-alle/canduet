@@ -330,6 +330,21 @@ body:not([data-rec=recording]) .rec-only { display: none; }
 #pop-mixer { left: 12px; bottom: calc(100% + 10px); max-height: calc(100vh - 120px); }
 #dockHole { transition: margin-left .3s cubic-bezier(.2,.8,.2,1); }
 body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
+/* Metronome or Tuner docked (owner 2026-11-26): centred at the bottom; at the left when Score, Board or
+   Homework is docked at the right; right of the mixer while it's open */
+body.mini-on #dockHole { margin-left: auto; margin-right: auto; }
+body.mini-on.side-on #dockHole { margin-left: 12px; margin-right: 0; }
+body.mini-on.mix-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); margin-right: 0; }
+/* a button and its options arrow in one box */
+.split { display: flex; align-items: center; gap: 0; padding: 2px 2px 2px 2px; border-radius: 999px; border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--string) 8%, transparent); flex: none; }
+.split .ib { margin: 0; }
+.sarrow { position: relative; width: 22px; height: 40px; padding: 0 4px 0 2px; border: 0; border-radius: 0 999px 999px 0; background: transparent; color: var(--string-light); display: grid; place-items: center; }
+.sarrow svg.ic { width: 16px; height: 16px; }
+.sarrow:hover { color: #fff; background: color-mix(in srgb, var(--string) 25%, transparent); }
+.sarrow[aria-pressed=true] { color: #fff; background: var(--string-strong); }
+.sarrow[data-tip]:hover::before { content: attr(data-tip); position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--night); padding: 4px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; z-index: 20; pointer-events: none; }
+body.tools-on .sarrow[data-tip]:hover::before { bottom: calc(100% + 18px + var(--dockb)); }
 .mixer .mhead { width: 0; min-width: 100%; display: flex; align-items: center; gap: 10px; }
 .mixer .mhead h3 { flex: none; }
 .mixer .mhead .dev { flex: 1; min-width: 0; font-size: 12.5px; }
@@ -570,11 +585,10 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
 
   <div class="icons cluster c" aria-label="Teaching tools">
     <button class="ib" type="button" id="toolsBtn" data-act="tools" data-tip="Tools: keyboard and fretboards (T)" aria-pressed="false"><span class="disc"><i data-i="music"></i></span><span class="lbl">Tools</span></button>
-    <div class="grp" id="metroGrp">
-      <button class="ib cur" type="button" id="metroBtn" data-tip="Start the metronome" aria-pressed="false"><span class="disc"><i data-i="metronome"></i></span><span class="lbl">Metronome</span></button>
-      <div class="opts">
-        <button class="ib sm" type="button" id="metroSet" data-act="metro" data-tip="Metronome settings: tempo, beats, sound" aria-pressed="false"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Metronome settings</span></button>
-      </div>
+    <!-- owner 2026-11-26: one box, nothing slides: the metronome on/off, and an arrow for its options -->
+    <div class="split" id="metroSplit">
+      <button class="ib" type="button" id="metroBtn" data-tip="Start the metronome" aria-pressed="false"><span class="disc"><i data-i="metronome"></i></span><span class="lbl">Metronome</span></button>
+      <button class="sarrow" type="button" id="metroSet" data-act="metro" data-tip="Metronome options: tempo, beats, sound" aria-label="Metronome options: tempo, beats, sound" aria-pressed="false"><i data-i="down"></i></button>
     </div>
     <button class="ib" type="button" id="tunerBtn" data-act="tuner" data-tip="Tuner" aria-pressed="false"><span class="disc"><i data-i="tuner"></i></span><span class="lbl">Tuner</span></button>
     <button class="ib" type="button" id="scoreBtn" data-act="score" data-tip="Score: write music together, play it at the metronome's tempo (S)" aria-pressed="false"><span class="disc"><i data-i="score"></i></span><span class="lbl">Score</span></button>
@@ -706,6 +720,7 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
     plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',
     send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="M12 14 20 4"/>',
     sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    down: '<path d="m6 9 6 6 6-6"/>',
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     metronome: '<path d="M9.5 3h5l4.5 18H5L9.5 3Z"/><path d="M7 15h10M12 15l5-9"/>',
     tuner: '<path d="M9 2v8a3 3 0 0 0 6 0V2M12 13v9"/><path d="M5 7.5a7 7 0 0 0 0 5M19 7.5a7 7 0 0 1 0 5" opacity=".6"/>',
@@ -1178,8 +1193,11 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
     nameFromTip($("#metroBtn"));
     $("#mixBtn").classList.toggle("on", !!docks.mixerShown);
     // which tool is docked (T-085); an app from before docking only docks Tools
+    // owner 2026-11-26: two docks, the bottom one (Tools, Metronome, Tuner) and the right one (Score, Board, Homework)
     const dk = typeof docks.docked === "string" ? docks.docked : (docks.tools ? "tools" : "");
-    const miniOn = dk === "metro" || dk === "tuner", toolsOn = dk === "tools" || miniOn, sideOn = dk === "board" || dk === "score" || dk === "homework";
+    const dkB = typeof docks.dockedBottom === "string" ? docks.dockedBottom : (["tools", "metro", "tuner"].includes(dk) ? dk : "");
+    const dkS = typeof docks.dockedSide === "string" ? docks.dockedSide : (["board", "score", "homework"].includes(dk) ? dk : "");
+    const miniOn = dkB === "metro" || dkB === "tuner", toolsOn = dkB !== "", sideOn = dkS !== "";
     if (body.classList.contains("tools-on") !== toolsOn || body.classList.contains("side-on") !== sideOn || body.classList.contains("mini-on") !== miniOn) {
       body.classList.toggle("tools-on", toolsOn); body.classList.toggle("side-on", sideOn); body.classList.toggle("mini-on", miniOn);
       sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); sendDock(); });
