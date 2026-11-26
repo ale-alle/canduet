@@ -227,6 +227,11 @@ body[data-right=chat] .dock-r.chat { display: flex; }
 /* the Tools panel's height follows its keyboard: keys sized so 88 fill a full-width window (--dockh, set by sizeDock) */
 body.tools-on #dockHole { height: var(--dockh, 260px); margin-top: 12px; border-radius: var(--r-tile); background: var(--surface); border: 1px solid var(--line); }
 body.tools-on { --dockb: calc(var(--dockh, 260px) + 12px); }
+/* Metronome or Tuner docked (owner 2026-11-25): a smaller panel in the bottom-left corner, where the
+   mixer opens; with the mixer open it moves right of it, as Tools does */
+body.mini-on #dockHole { height: 200px; width: min(700px, calc(100vw - 48px)); }
+body.mini-on.mix-on #dockHole { width: min(700px, calc(100vw - 48px - var(--mixw, 0px))); }
+body.mini-on { --dockb: 212px; }
 /* With Tools open the people get less room: each video shrinks to its camera's own shape and fits
    above, the whole picture, never cropped (--ar is the camera's width/height, set when it starts) */
 body.tools-on .people .tile.fit { aspect-ratio: auto !important; max-height: none !important; flex: none; justify-self: center; align-self: center; margin: auto; }
@@ -460,6 +465,12 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 #endNote { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 39; max-width: min(560px, 90vw); display: flex; align-items: center; gap: 10px;
   background: var(--raised); border: 1px solid var(--line-strong); border-radius: 14px; padding: 8px 8px 8px 16px; color: var(--text); box-shadow: 0 12px 30px rgba(0, 0, 0, .45); }
 #endNote[hidden] { display: none; }
+/* the mixer in a window of its own (owner 2026-11-25): this copy of the page shows the mixer only */
+body.mixer-only .l-main, body.mixer-only #dockHole, body.mixer-only .bar > :not(.pop) { display: none !important; }
+body.mixer-only .bar { position: fixed; inset: 0; margin: 0; padding: 0; border: 0; background: var(--night); display: block; }
+body.mixer-only #pop-mixer { display: flex; position: absolute; inset: 0; width: auto; max-width: none; max-height: none; border: 0; border-radius: 0; box-shadow: none; overflow: auto; }
+body.mixer-only #pop-mixer .mhead { width: auto; }
+.mixer .mhead .ib[data-tip]:hover::before, .mixer .mhead .ib[data-tip]:focus-visible::before { bottom: auto; top: calc(100% + 8px); left: auto; right: 0; transform: none; }
 #endNote span { flex: 1; font-size: 13.5px; }
 /* Board or Score docked at the right: stay over the videos, where the page can draw */
 body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-width: calc(33vw - 24px); }
@@ -557,7 +568,14 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   </div>
 
   <div class="icons cluster c" aria-label="Teaching tools">
-    <button class="ib" type="button" id="toolsBtn" data-act="tools" data-tip="Tools: tuner, metronome, instrument (T)" aria-pressed="false"><span class="disc"><i data-i="music"></i></span><span class="lbl">Tools</span></button>
+    <button class="ib" type="button" id="toolsBtn" data-act="tools" data-tip="Tools: keyboard and fretboards (T)" aria-pressed="false"><span class="disc"><i data-i="music"></i></span><span class="lbl">Tools</span></button>
+    <div class="grp" id="metroGrp">
+      <button class="ib cur" type="button" id="metroBtn" data-tip="Start the metronome" aria-pressed="false"><span class="disc"><i data-i="metronome"></i></span><span class="lbl">Metronome</span></button>
+      <div class="opts">
+        <button class="ib sm" type="button" id="metroSet" data-act="metro" data-tip="Metronome settings: tempo, beats, sound" aria-pressed="false"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Metronome settings</span></button>
+      </div>
+    </div>
+    <button class="ib" type="button" id="tunerBtn" data-act="tuner" data-tip="Tuner" aria-pressed="false"><span class="disc"><i data-i="tuner"></i></span><span class="lbl">Tuner</span></button>
     <button class="ib" type="button" id="scoreBtn" data-act="score" data-tip="Score: write music together, play it at the metronome's tempo (S)" aria-pressed="false"><span class="disc"><i data-i="score"></i></span><span class="lbl">Score</span></button>
     <button class="ib" type="button" id="boardBtn" data-act="board" data-tip="Board: pictures and notes (B)" aria-pressed="false"><span class="disc"><i data-i="board"></i></span><span class="lbl">Board</span></button>
     <button class="ib" type="button" id="chatBtn" data-act="chat" data-tip="Chat (C)" aria-pressed="false"><span class="disc"><i data-i="chat"></i><span class="badge" id="chatBadge" hidden></span></span><span class="lbl">Chat</span></button>
@@ -577,7 +595,8 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     <div class="mhead"><h3 class="hic" title="Mixer"><i data-i="mixer"></i><span class="sr">Mixer</span></h3>
       <span class="dev"><span id="inDev"></span> <button class="ib sm" type="button" data-act="setup" data-tip="Change the audio device" aria-label="Change the audio device"><span class="disc"><i data-i="settings"></i></span></button></span>
       <span class="cpu" id="cpuMeter" title="How busy this computer's audio is (average over the last second), and sound dropouts since the device started">CPU<span class="cn" id="cpuNum">0</span>%<span id="cpuDrops"></span></span>
-      <button class="xbtn" type="button" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
+      <button class="ib sm" type="button" id="mixPop" data-tip="Pop out: the mixer in a window of its own"><span class="disc"><i data-i="popOut"></i></span></button>
+      <button class="xbtn" type="button" id="mixClose" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
     <div class="console" id="inList"></div>
   </div>
   <div class="pop fxwin" id="fxWin" role="dialog" aria-label="Effect settings">
@@ -634,6 +653,8 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   history.replaceState(null, "", location.pathname + location.search);
   const demo = params.get("demo") === "1";
   const practice = params.get("practice") === "1";
+  const mixerOnly = params.get("mixer") === "1";   // the mixer's own window (owner 2026-11-25)
+  if (mixerOnly) body.classList.add("mixer-only");
   if (practice) {
     body.dataset.mode = "practice";
     $("#leaveBtn").dataset.tip = "End practice";
@@ -682,7 +703,11 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     mute: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m16 9 6 6M22 9l-6 6"/>', plus: '<path d="M12 5v14M5 12h14"/>',
     plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',
     send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="M12 14 20 4"/>',
-    sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'
+    sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+    metronome: '<path d="M9.5 3h5l4.5 18H5L9.5 3Z"/><path d="M7 15h10M12 15l5-9"/>',
+    tuner: '<path d="M9 2v8a3 3 0 0 0 6 0V2M12 13v9"/><path d="M5 7.5a7 7 0 0 0 0 5M19 7.5a7 7 0 0 1 0 5" opacity=".6"/>',
+    popOut: '<path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    dockIn: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18M12 6.5v5.5M9 9.5l3 3 3-3"/>'
   };
   const svgIcon = (n) => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (I[n] || "") + "</svg>";
   function icons(root) {
@@ -743,7 +768,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   // ---- what the app tells us ----
   let me = { name: myName, role: "learner", micOff: false, inGain: 1, monitor: false, monitorLevel: 0, recvMute: false, volume: 1, outMute: false, outLevel: 0, level: 0, inDevice: "", outDevice: "" };
   let conn = "connecting", lessonInfo = { title: "", startsAt: 0, endsAt: 0, joinedAt: Date.now() };
-  let audioPeers = [], rec = { phase: "idle", secs: 0 }, docks = { tools: false, board: false };
+  let audioPeers = [], rec = { phase: "idle", secs: 0 }, docks = { tools: false, board: false, metro: false, tuner: false, metroOn: false, mixerOut: false, mixerShown: false };
 
   // ---- people ----
   const tiles = new Map();   // key -> tile
@@ -1142,11 +1167,17 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     $("#toolsBtn").setAttribute("aria-pressed", String(!!docks.tools));
     $("#boardBtn").setAttribute("aria-pressed", String(!!docks.board));
     $("#scoreBtn").setAttribute("aria-pressed", String(!!docks.score));
+    $("#metroSet").setAttribute("aria-pressed", String(!!docks.metro));
+    $("#tunerBtn").setAttribute("aria-pressed", String(!!docks.tuner));
+    $("#metroBtn").setAttribute("aria-pressed", String(!!docks.metroOn));
+    $("#metroBtn").dataset.tip = docks.metroOn ? "Stop the metronome" : "Start the metronome";
+    nameFromTip($("#metroBtn"));
+    $("#mixBtn").classList.toggle("on", !!docks.mixerShown);
     // which tool is docked (T-085); an app from before docking only docks Tools
     const dk = typeof docks.docked === "string" ? docks.docked : (docks.tools ? "tools" : "");
-    const toolsOn = dk === "tools", sideOn = dk === "board" || dk === "score";
-    if (body.classList.contains("tools-on") !== toolsOn || body.classList.contains("side-on") !== sideOn) {
-      body.classList.toggle("tools-on", toolsOn); body.classList.toggle("side-on", sideOn);
+    const miniOn = dk === "metro" || dk === "tuner", toolsOn = dk === "tools" || miniOn, sideOn = dk === "board" || dk === "score";
+    if (body.classList.contains("tools-on") !== toolsOn || body.classList.contains("side-on") !== sideOn || body.classList.contains("mini-on") !== miniOn) {
+      body.classList.toggle("tools-on", toolsOn); body.classList.toggle("side-on", sideOn); body.classList.toggle("mini-on", miniOn);
       sendDock(); requestAnimationFrame(() => { fitTiles(); drawString(); sendDock(); });
     }
     checkLessonEnd(now);
@@ -1204,7 +1235,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     const WARN_MS = 5 * 60000;
     const st = checkLessonEnd.state || (checkLessonEnd.state = { soon: false, ended: false });
     const e = lessonInfo.endsAt;
-    if (practice || demo || !e) return;
+    if (practice || demo || mixerOnly || !e) return;
     if (now >= e) {
       if (!st.ended) { st.ended = st.soon = true; $("#endNote").hidden = false; }
     } else if (now >= e - WARN_MS && !st.soon) {
@@ -1217,6 +1248,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   // where the native Tools panel goes, as fractions of the page
   let lastDock = "";
   function sendDock() {
+    if (mixerOnly) return;
     const W = window.innerWidth || 1, H = window.innerHeight || 1;
     const frac = (el) => { const r = el.getBoundingClientRect(); return [r.left / W, r.top / H, r.width / W, r.height / H].map((v) => Math.round(v * 10000) / 10000); };
     // the gaps the docked tool sits in: Tools along the bottom, Board or Score at the right (T-085)
@@ -1246,9 +1278,9 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   new ResizeObserver(placeMixer).observe($("#pop-mixer"));
   function closePops() {
     const wasOpen = $$(".pop.open").length > 0;
-    if ($("#pop-mixer").classList.contains("open")) { body.classList.remove("mix-on"); followDock(); }
+    if (!mixerOnly && $("#pop-mixer").classList.contains("open")) { body.classList.remove("mix-on"); followDock(); }
     $$(".bar .grp.open").forEach((g) => { if (!g.matches(":hover")) openGrp(g, false); });
-    $$(".pop.open").forEach((p) => p.classList.remove("open"));
+    $$(".pop.open").forEach((p) => { if (!(mixerOnly && p.id === "pop-mixer")) p.classList.remove("open"); });
     fxOpen = null;
     $$("[aria-expanded=true]").forEach((b) => b.setAttribute("aria-expanded", "false"));
     // back to the button that opened it, if focus was inside the popover
@@ -1258,6 +1290,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   }
   function openPop(btn) {
     const id = btn.dataset.pop, pop = $("#pop-" + id), was = pop.classList.contains("open");
+    if (id === "mixer" && docks.mixerOut && !mixerOnly) { closePops(); send({ t: "mixerShow" }); return; }
     closePops(); if (was) return;
     if (id === "share") fillShare();
     if (id === "cam") listCameras();
@@ -1326,6 +1359,8 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     if (t.dataset.pop) return openPop(t);
     switch (t.dataset.act) {
       case "tools": closePops(); send({ t: "tools" }); if (demo) { docks.tools = !docks.tools; renderLesson(); } break;
+      case "metro": closePops(); send({ t: "metro" }); break;
+      case "tuner": closePops(); send({ t: "tuner" }); break;
       case "board": closePops(); send({ t: "board" }); break;
       case "score": closePops(); send({ t: "score" }); break;
       case "chat": toggleChat(body.dataset.right !== "chat"); break;
@@ -1341,12 +1376,15 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     if (t.id === "micBtn") { me.micOff = !me.micOff; renderMe(); renderInputs(); send({ t: "mic", off: me.micOff }); }
     if (t.id === "outBtn") { setOutMute(!me.outMute); }
     if (t.id === "camBtn") toggleCamera();
+    if (t.id === "metroBtn") { docks.metroOn = !docks.metroOn; renderLesson(); send({ t: "metroOn", v: docks.metroOn }); }
+    if (t.id === "mixPop") { if (!mixerOnly) closePops(); send({ t: "mixerOut", v: !mixerOnly }); }
   });
   $("#pop-mark").addEventListener("submit", (e) => { e.preventDefault(); send({ t: "mark", a: "save", label: $("#markIn").value.trim().slice(0, 80) }); closePops(); toast("Highlight saved", 2500); });
 
   // keyboard: Esc closes, letters toggle (never while typing)
   document.addEventListener("keydown", (e) => {
     if (!$("#ask").hidden) return;   // the question answers its own keys
+    if (mixerOnly && e.key !== "Escape") return;
     if (e.key === "Escape") {
       closePops(); if (state.flipped) flip(""); return;
     }
@@ -1809,7 +1847,11 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     if (typeof m.conn === "string") conn = m.conn;
     if (m.lesson && typeof m.lesson === "object") lessonInfo = Object.assign(lessonInfo, m.lesson);
     if (m.rec && typeof m.rec === "object") rec = Object.assign(rec, m.rec);
-    if (m.docks && typeof m.docks === "object") docks = Object.assign(docks, m.docks);
+    if (m.docks && typeof m.docks === "object") {
+      const wasOut = !!docks.mixerOut;
+      docks = Object.assign(docks, m.docks);
+      if (wasOut && !docks.mixerOut && !mixerOnly && !$("#pop-mixer").classList.contains("open")) openPop($("#mixBtn"));
+    }
     renderMe(); renderInputs(); render(); renderLesson();
   }
   if (host) {
@@ -2062,6 +2104,15 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
   }
 
   // ---- connect the video ----
+  if (mixerOnly) {
+    const b = $("#mixPop");
+    b.dataset.tip = "Dock the mixer back in the lesson window"; nameFromTip(b);
+    $("i", b).dataset.i = "dockIn"; $("i", b).innerHTML = ""; icons(b);
+    $("#mixClose").hidden = true;   // the window's own title bar closes it
+    $("#pop-mixer").classList.add("open");
+    if (host) send({ t: "ready" });
+    return;
+  }
   if (host) send({ t: "ready" });
   showCam(); showShare();
   if (practice) {

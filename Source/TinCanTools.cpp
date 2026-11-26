@@ -910,7 +910,7 @@ private:
 };
 
 ToolsPanel::ToolsPanel(SonobusAudioProcessor & processor, std::function<AudioDeviceManager*()> getDeviceManager,
-                       NoteShare & noteShare, std::function<void()> openWorkspace, SummaryHooks summaryHooks)
+                       NoteShare & noteShare, std::function<void()> openWorkspace, SummaryHooks summaryHooks, Set set)
 {
     static_assert(ToolRail::height == DockHolder::railHeight, "the Tools bar and the dock icons line up");
     std::vector<IconPicker::Option> options;
@@ -919,23 +919,28 @@ ToolsPanel::ToolsPanel(SonobusAudioProcessor & processor, std::function<AudioDev
         panels.add(panel);
         addChildComponent(panel);
     };
-    add(new TunerPanel(processor), Icons::tuner(), TRANS("Tuner"));
-    add(new MetronomePanel(processor), Icons::metronome(), TRANS("Metronome"));
-    add(new InstrumentPanel(processor, getDeviceManager, noteShare), Icons::notes(), TRANS("Instrument: piano, guitar, bass"));
-    if (openWorkspace) add(new WorkspacePanel(std::move(openWorkspace)), Icons::board(), TRANS("Workspace"));
-    summaries = new SummariesPanel(std::move(summaryHooks));
-    summariesIndex = panels.size();
-    add(summaries, Icons::summaries(), TRANS("Summaries: your recordings and highlights"));
+    single = set == Set::metronome || set == Set::tuner;
+    if (set == Set::all || set == Set::tuner) add(new TunerPanel(processor), Icons::tuner(), TRANS("Tuner"));
+    if (set == Set::all || set == Set::metronome) add(new MetronomePanel(processor), Icons::metronome(), TRANS("Metronome"));
+    if (set == Set::all || set == Set::instruments) {
+        add(new InstrumentPanel(processor, getDeviceManager, noteShare), Icons::notes(), TRANS("Instrument: piano, guitar, bass"));
+        if (openWorkspace) add(new WorkspacePanel(std::move(openWorkspace)), Icons::board(), TRANS("Workspace"));
+        summaries = new SummariesPanel(std::move(summaryHooks));
+        summariesIndex = panels.size();
+        add(summaries, Icons::summaries(), TRANS("Summaries: your recordings and highlights"));
+    }
 
     // the panels lay their own icons between the picker and the dock icons
     for (auto * p : panels) {
-        p->getProperties().set("railLeft", 8 + toolPicker.getClosedWidth() + 14);
+        p->getProperties().set("railLeft", single ? 8 : 8 + toolPicker.getClosedWidth() + 14);
         p->getProperties().set("railRight", DockHolder::cornerWidth);
     }
+    if (single) { panels[0]->setVisible(true); return; }
     // the instrument first; then whichever was showing last time (this run of the app)
-    static int lastTool = 2;
+    static int lastAll = 2, lastInstruments = 0;
+    int & lastTool = set == Set::instruments ? lastInstruments : lastAll;
     toolPicker.setOptions(std::move(options), jlimit(0, panels.size() - 1, lastTool));
-    toolPicker.onChange = [this](int id) { lastTool = id; showTool(id); };
+    toolPicker.onChange = [this, &lastTool](int id) { lastTool = id; showTool(id); };
     toolPicker.onOpenChanged = [this](bool) { toolPicker.toFront(false); };
     addAndMakeVisible(toolPicker);
     showTool(toolPicker.getSelected());
@@ -969,13 +974,14 @@ void ToolsPanel::resized()
 
 void ToolsPanel::showSummary(const File & summaryFile)
 {
+    if (summaries == nullptr) return;
     showTool(summariesIndex);
     summaries->refresh(summaryFile);
 }
 
 void ToolsPanel::refreshSummaries()
 {
-    summaries->refresh();
+    if (summaries != nullptr) summaries->refresh();
 }
 
 ToolsWindow::ToolsWindow(SonobusAudioProcessor & processor, std::function<AudioDeviceManager*()> getDeviceManager,

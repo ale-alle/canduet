@@ -51,6 +51,30 @@ public:
     void resized() override { for (auto * c : getChildren()) c->setBounds(getLocalBounds()); }
 };
 
+// The mixer popped out (owner 2026-11-25): a window holding a second copy of the lesson page that shows
+// the mixer only ("&mixer=1"). It talks to the lesson window like the main page does; closing it hides it.
+class LessonView::MixerWindow : public DocumentWindow
+{
+public:
+    explicit MixerWindow(std::unique_ptr<VideoTilesView> p)
+        : DocumentWindow(TRANS("Mixer"), TinCanTheme::night, DocumentWindow::closeButton | DocumentWindow::minimiseButton),
+          page(std::move(p))
+    {
+        setUsingNativeTitleBar(true);
+        setResizable(true, false);
+        setResizeLimits(480, 360, 4000, 2000);
+        setContentNonOwned(page.get(), false);
+        centreWithSize(1100, 600);
+    }
+    ~MixerWindow() override { clearContentComponent(); }
+    void closeButtonPressed() override { if (onClose) onClose(); }
+    VideoTilesView & getPage() { return *page; }
+    std::function<void()> onClose;
+
+private:
+    std::unique_ptr<VideoTilesView> page;
+};
+
 std::unique_ptr<LessonView> LessonView::create(SonobusAudioProcessor & processor, const VideoInfo & video,
                                                const LessonInfo & info, Hooks hooks)
 {
@@ -99,9 +123,12 @@ LessonView::~LessonView()
             w->getHolder().setCanDock(false);
         }
     }
-    if (toolsWindow && toolsWindow->isVisible()) rememberWindow("tools");
+    for (auto & [id, w] : ownWindows)
+        if (w && w->isVisible() && !w->isDocked()) windowStates[id] = w->saveState();
+    if (mixerWindow && mixerWindow->isVisible()) mixerWindowState = mixerWindow->getWindowStateAsString();
     saveLayout();
-    toolsWindow.reset();
+    mixerWindow.reset();
+    ownWindows.clear();
     frame.reset();
     page.reset();
 }
@@ -119,7 +146,8 @@ void LessonView::resized()
 
 ToolsPanel * LessonView::getTools() const
 {
-    return toolsWindow ? dynamic_cast<ToolsPanel *>(toolsWindow->getBody()) : nullptr;
+    auto it = ownWindows.find("tools");
+    return it != ownWindows.end() && it->second ? dynamic_cast<ToolsPanel *>(it->second->getBody()) : nullptr;
 }
 
 // an Instrument strip's menu (T-086/T-087): no instrument, the found instruments, its window, find, remove the strip
@@ -259,7 +287,12 @@ void LessonView::showSlotMenu(int g, int s)
 void LessonView::loadLayout()
 {
     const var v = JSON::parse(processor.getDockLayout());
-    for (auto id : { "tools", "board", "score" }) {
+    if (const var m = v.getProperty("mixer", var()); m.isObject()) {
+        mixerOut = (bool) m.getProperty("out", false);
+        const auto state = m.getProperty("window", var()).toString();
+        if (state.length() < 200) mixerWindowState = state;
+    }
+    for (auto id : { "tools", "metro", "tuner", "board", "score" }) {
         const var t = v.getProperty(id, var());
         if (!t.isObject()) continue;
         const var d = t.getProperty("docked", var());
@@ -272,7 +305,13 @@ void LessonView::loadLayout()
 void LessonView::saveLayout()
 {
     DynamicObject::Ptr all = new DynamicObject();
-    for (auto id : { "tools", "board", "score" }) {
+    {
+        DynamicObject::Ptr m = new DynamicObject();
+        m->setProperty("out", mixerOut);
+        if (mixerWindowState.isNotEmpty()) m->setProperty("window", mixerWindowState);
+        all->setProperty("mixer", var(m.get()));
+    }
+    for (auto id : { "tools", "metro", "tuner", "board", "score" }) {
         DynamicObject::Ptr t = new DynamicObject();
         t->setProperty("docked", wantDocked.count(id) ? wantDocked[id] : true);
         if (windowStates.count(id)) t->setProperty("window", windowStates[id]);
@@ -289,15 +328,22 @@ void LessonView::rememberWindow(const String & id)
 
 DockableWindow * LessonView::windowFor(const String & id, bool create)
 {
-    if (id == "tools") {
-        if (!toolsWindow && create && hooks.makeTools) {
-            if (auto panel = hooks.makeTools()) {
-                toolsWindow = std::make_unique<DockableWindow>(TRANS("Tools"), 1100, 400);
-                toolsWindow->setBody(std::move(panel));
+    if (isOwnTool(id)) {
+        auto it = ownWindows.find(id);
+        DockableWindow * w = it != ownWindows.end() ? it->second.get() : nullptr;
+        if (w == nullptr && create && hooks.makeTools) {
+            const auto set = id == "metro" ? ToolsPanel::Set::metronome : id == "tuner" ? ToolsPanel::Set::tuner : ToolsPanel::Set::instruments;
+            if (auto panel = hooks.makeTools(set)) {
+                const bool small = id != "tools";
+                auto made = std::make_unique<DockableWindow>(id == "metro" ? TRANS("Metronome") : id == "tuner" ? TRANS("Tuner") : TRANS("Tools"),
+                                                             small ? 640 : 1100, small ? 260 : 400);
+                made->setBody(std::move(panel));
+                w = made.get();
+                ownWindows[id] = std::move(made);
             }
         }
-        if (toolsWindow && create) wireWindow(*toolsWindow, id);
-        return toolsWindow.get();
+        if (w != nullptr && create) wireWindow(*w, id);
+        return w;
     }
     auto & hook = id == "board" ? hooks.boardWindow : hooks.scoreWindow;
     if (!hook || (id != "board" && id != "score")) return nullptr;
@@ -346,7 +392,7 @@ void LessonView::closeTool(const String & id)
         else if (w->isVisible()) rememberWindow(id);
         w->setVisible(false);
     }
-    if (id == "tools") toolsWindow.reset();   // stops the tuner and the MIDI copy
+    if (isOwnTool(id)) ownWindows.erase(id);   // stops the tuner, the metronome's lights, the MIDI copy
     placeFrame();
     saveLayout();
     sendState();
@@ -389,12 +435,48 @@ void LessonView::toggleDock(const String & id)
     sendState();
 }
 
+void LessonView::setMixerOut(bool out)
+{
+    mixerOut = out;
+    showMixerWindow(out);
+    saveLayout();
+    sendState();
+}
+
+void LessonView::showMixerWindow(bool show)
+{
+    if (!show) {
+        if (mixerWindow && mixerWindow->isVisible()) {
+            mixerWindowState = mixerWindow->getWindowStateAsString();
+            mixerWindow->setVisible(false);
+            saveLayout();
+        }
+        sendState();
+        return;
+    }
+    if (!mixerWindow) {
+        auto address = info.practice ? getPracticePage() : getLessonPage();
+        std::unique_ptr<VideoTilesView> p;
+        if (address.isNotEmpty())
+            p = VideoTilesView::create(address, VideoInfo(), info.myName, String(info.practice ? "&practice=1" : "") + "&mixer=1");
+        if (!p) { mixerOut = false; sendState(); return; }
+        p->onMessage = [this](const var & message) { handleMessage(message); };
+        mixerWindow = std::make_unique<MixerWindow>(std::move(p));
+        Component::SafePointer<LessonView> safeThis(this);
+        mixerWindow->onClose = [safeThis]() { MessageManager::callAsync([safeThis]() { if (safeThis) safeThis->showMixerWindow(false); }); };
+        if (mixerWindowState.isNotEmpty()) mixerWindow->restoreWindowStateFromString(mixerWindowState);
+    }
+    mixerWindow->setVisible(true);
+    mixerWindow->toFront(true);
+    sendState();
+}
+
 void LessonView::placeFrame()
 {
     if (!frame) return;
     auto * top = getTopLevelComponent();
     auto * peer = top ? top->getPeer() : nullptr;
-    const auto rect = docked == "tools" ? toolsRect : sideRect;
+    const auto rect = isOwnTool(docked) ? toolsRect : sideRect;
     if (docked.isEmpty() || peer == nullptr || rect.isEmpty()) {
         frame->setVisible(false);
         return;
@@ -711,6 +793,11 @@ void LessonView::sendState()
 
     DynamicObject::Ptr docks = new DynamicObject();
     docks->setProperty("tools", isToolOpen("tools"));
+    docks->setProperty("metro", isToolOpen("metro"));
+    docks->setProperty("tuner", isToolOpen("tuner"));
+    docks->setProperty("metroOn", getParam(SonobusAudioProcessor::paramMetEnabled) > 0.5f);
+    docks->setProperty("mixerOut", mixerOut);
+    docks->setProperty("mixerShown", mixerWindow != nullptr && mixerWindow->isVisible());
     docks->setProperty("board", isToolOpen("board"));
     docks->setProperty("score", isToolOpen("score"));
     docks->setProperty("docked", docked);
@@ -756,6 +843,7 @@ void LessonView::sendState()
     msg->setProperty("rec", var(rec.get()));
     msg->setProperty("docks", var(docks.get()));
     page->send(var(msg.get()));
+    if (mixerWindow && mixerWindow->isVisible()) mixerWindow->getPage().send(var(msg.get()));
 }
 
 void LessonView::notesArrived(const std::vector<NoteEvent> & events)
@@ -1020,7 +1108,19 @@ void LessonView::handleMessage(const var & message)
     else if (type == "recvMute") {
         setParam(SonobusAudioProcessor::paramMainRecvMute, (bool) value ? 1.0f : 0.0f);
     }
-    else if (type == "tools" || type == "board" || type == "score") {
+    else if (type == "metroOn") {
+        setParam(SonobusAudioProcessor::paramMetEnabled, (bool) value ? 1.0f : 0.0f);
+        sendState();
+    }
+    else if (type == "mixerOut") {
+        // the mixer's pop out / dock icon, in either page
+        setMixerOut((bool) value);
+    }
+    else if (type == "mixerShow") {
+        // the Mixer button while the mixer has its own window: show or hide that window
+        showMixerWindow(!(mixerWindow && mixerWindow->isVisible()));
+    }
+    else if (type == "tools" || type == "metro" || type == "tuner" || type == "board" || type == "score") {
         // the lesson bar's buttons: open (docked or in its own window, as last left) or close
         if (isToolOpen(type)) closeTool(type); else openTool(type);
     }
@@ -1111,6 +1211,7 @@ void LessonView::handlePeerMessage(int i, const String & kind, const var & value
 #else
 
 class LessonView::DockFrame : public Component {};
+class LessonView::MixerWindow : public Component {};
 
 std::unique_ptr<LessonView> LessonView::create(SonobusAudioProcessor &, const VideoInfo &, const LessonInfo &, Hooks) { return nullptr; }
 LessonView::~LessonView() = default;

@@ -78,7 +78,7 @@ public:
         std::function<void(String & in, String & out)> deviceNames;
         // the audio interface's inputs that are on, in order: device channel numbers (0-based) and names
         std::function<void(Array<int> & numbers, StringArray & names)> inputChannels;
-        std::function<std::unique_ptr<ToolsPanel>()> makeTools;
+        std::function<std::unique_ptr<ToolsPanel>(ToolsPanel::Set)> makeTools;
         NoteShare * noteShare = nullptr;   // MIDI notes go to the page too, for lesson modules (T-075)
     };
 
@@ -96,7 +96,7 @@ public:
     void showToast(const String & text, int timeoutMs = 5000);
 
     bool isPractice() const { return info.practice; }
-    // "tools", "board" or "score": opened docked or in its own window, as it was last left
+    // "tools", "metro", "tuner", "board" or "score": opened docked or in its own window, as it was last left
     void openTool(const String & id);
     void closeTool(const String & id);
     bool isToolOpen(const String & id);
@@ -106,6 +106,12 @@ public:
 
 private:
     class DockFrame;
+    class MixerWindow;
+    // the tools the lesson window makes itself (the rest are the editor's Board and Score windows)
+    static bool isOwnTool(const String & id) { return id == "tools" || id == "metro" || id == "tuner"; }
+    // owner 2026-11-25: the mixer in a window of its own (a second copy of the page, mixer only), or back in the page
+    void setMixerOut(bool out);
+    void showMixerWindow(bool show);
 
     LessonView(SonobusAudioProcessor & processor, std::unique_ptr<VideoTilesView> page, const LessonInfo & info, Hooks hooks);
 
@@ -140,7 +146,10 @@ private:
     Hooks hooks;
 
     std::unique_ptr<DockFrame> frame;             // the dock: a child window over the page's gap
-    std::unique_ptr<DockableWindow> toolsWindow;  // Tools (closing it stops the tuner and the MIDI copy)
+    std::map<String, std::unique_ptr<DockableWindow>> ownWindows;  // Tools, Metronome, Tuner (closing one stops what it runs)
+    std::unique_ptr<MixerWindow> mixerWindow;     // the mixer popped out (made when first shown)
+    bool mixerOut = false;                        // the mixer opens in its own window
+    String mixerWindowState;
     String docked;                                // the tool in the dock, or empty
     juce::Rectangle<float> toolsRect, sideRect;   // the page's gaps, as fractions; empty: not laid out yet
     std::map<String, bool> wantDocked;            // each tool's last place (docked unless popped out)

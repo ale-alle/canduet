@@ -3774,11 +3774,11 @@ TinCan::LessonView::Hooks SonobusAudioProcessorEditor::makeLessonHooks()
         }
     };
     h.noteShare = &getNoteShare();
-    h.makeTools = [safeThis]() -> std::unique_ptr<TinCan::ToolsPanel> {
+    h.makeTools = [safeThis](TinCan::ToolsPanel::Set set) -> std::unique_ptr<TinCan::ToolsPanel> {
         if (!safeThis) return nullptr;
         // no Workspace tab: the lesson bar has its own Board button
         return std::make_unique<TinCan::ToolsPanel>(safeThis->processor, safeThis->getAudioDeviceManager, safeThis->getNoteShare(),
-                                                    nullptr, safeThis->makeSummaryHooks());
+                                                    nullptr, safeThis->makeSummaryHooks(), set);
     };
     return h;
 }

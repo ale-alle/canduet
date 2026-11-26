@@ -179,8 +179,12 @@ private:
 class ToolsPanel : public Component
 {
 public:
+    // which tools it holds: all of them (outside a lesson), or in a lesson (owner 2026-11-25) the
+    // instruments (keyboard, fretboards, and Summaries for now), the metronome alone, or the tuner alone
+    enum class Set { all, instruments, metronome, tuner };
+
     ToolsPanel(SonobusAudioProcessor & processor, std::function<AudioDeviceManager*()> getDeviceManager,
-               NoteShare & noteShare, std::function<void()> openWorkspace, SummaryHooks summaryHooks);
+               NoteShare & noteShare, std::function<void()> openWorkspace, SummaryHooks summaryHooks, Set set = Set::all);
     ~ToolsPanel() override;
 
     void resized() override;
@@ -197,6 +201,7 @@ private:
     OwnedArray<Component> panels;
     SummariesPanel * summaries = nullptr;
     int summariesIndex = 0;
+    bool single = false;   // one tool: no picker
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ToolsPanel)
 };
