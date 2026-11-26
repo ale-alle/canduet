@@ -423,7 +423,10 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 .addinst { width: 26px; height: 26px; border-radius: 50%; border: 1px dashed var(--line-strong); background: transparent; color: var(--muted);
   font: 700 15px/1 var(--font-sans); padding: 0; }
 .addinst:hover { color: var(--text); border-color: var(--string); }
-.addgap { flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; }
+/* any Instrument strip can go while there are two or more (owner 2026-11-25): a small x on top of it */
+.delinst { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong); background: transparent; color: var(--muted); display: grid; place-items: center; padding: 0; }
+.delinst:hover { color: var(--text); border-color: var(--string); background: color-mix(in srgb, var(--string) 25%, transparent); }
+.delinst svg.ic { width: 11px; height: 11px; }
 .cpu { flex: none; font: 600 11.5px/1 var(--font-sans); color: var(--subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cpu.warn { color: var(--warn, #c77700); }
 .cpu .cn { display: inline-block; min-width: 2ch; margin-left: .35em; text-align: right; }
@@ -1431,6 +1434,8 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     el.querySelector(".mb").title = bus ? bus.muteTip : "Mute " + label;
     el.querySelector(".mb").setAttribute("aria-label", el.querySelector(".mb").title);
     if (r.stereo) el.querySelector(".lk").append(linkBtn(r.i, true, label));
+    if (bus && typeof bus.n === "number" && insts.length > 1)
+      el.querySelector(".lk").innerHTML = `<button class="delinst" type="button" title="Remove ${label}" aria-label="Remove ${label}">${svgIcon("x")}</button>`;
     el.querySelectorAll(".fxr").forEach((row) => {
       const f = fxById(row.dataset.e);
       row.querySelector(".kn").setAttribute("aria-label", label + " " + f.knob);
@@ -1471,12 +1476,10 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
       BUSES.forEach((b, k) => {
         if (k) {
           const g = document.createElement("div");
-          // after the last Instrument strip: add another (up to four) or remove the last (at least one)
-          if (k === insts.length && (insts.length < maxInsts || insts.length > 1)) {
+          // after the last Instrument strip: add another (up to four)
+          if (k === insts.length && insts.length < maxInsts) {
             g.className = "addgap";
-            const last = insts.length > 1 ? "Instrument " + insts.length : "";
-            g.innerHTML = (insts.length < maxInsts ? '<button class="addinst" type="button" title="Add an Instrument strip for another MIDI keyboard (up to ' + maxInsts + ')" aria-label="Add an Instrument strip">+</button>' : "")
-              + (insts.length > 1 ? '<button class="addinst delinst" type="button" title="Remove the ' + last + ' strip" aria-label="Remove the ' + last + ' strip">−</button>' : "");
+            g.innerHTML = '<button class="addinst" type="button" title="Add an Instrument strip for another MIDI keyboard (up to ' + maxInsts + ')" aria-label="Add an Instrument strip">+</button>';
           }
           else g.className = "lkgap";
           list.append(g);
@@ -1522,7 +1525,7 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
         const ib = el.querySelector(".instb");
         if (it.name) ib.textContent = it.name; else if (!ib.querySelector("svg")) ib.innerHTML = svgIcon("plus") + svgIcon("music");
         ib.classList.toggle("on", !!it.name);
-        ib.title = it.name ? it.name + ": its window, another instrument" + (b.n ? " or remove the strip" : "") + ". Everyone hears it" : "Choose a VST3 instrument to play with your MIDI keyboard. Everyone hears it";
+        ib.title = it.name ? it.name + ": its window, another instrument" + (insts.length > 1 ? " or remove the strip" : "") + ". Everyone hears it" : "Choose a VST3 instrument to play with your MIDI keyboard. Everyone hears it";
         ib.setAttribute("aria-label", ib.title);
         const db = el.querySelector(".devb");
         const devName = it.device ? it.device + (it.connected ? "" : " (not connected)") : "All keyboards";
@@ -1779,7 +1782,8 @@ body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
     else if (e.target.closest(".devb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "device" }); }
     else if (e.target.closest(".delinst")) {
       e.stopPropagation();
-      const n = insts.length - 1, it = insts[n] || {}, go = () => send({ t: "instrument", n, k: "remove" });
+      if (typeof n !== "number") return;
+      const it = insts[n] || {}, go = () => send({ t: "instrument", n, k: "remove" });
       if (!it.name) go();
       else ask({ title: "Remove Instrument " + (n + 1) + "?", text: it.name + " and its settings will be removed from the mixer.", yes: "Remove", no: "Keep", onYes: go });
     }
