@@ -292,6 +292,7 @@ void IconPicker::layout(bool animate)
 
 void IconPicker::setOpen(bool shouldBeOpen)
 {
+    pendingOpen = false;
     if (open == shouldBeOpen) return;
     open = shouldBeOpen;
     if (open) toFront(false);
@@ -313,11 +314,13 @@ void IconPicker::pick(int id)
 void IconPicker::mouseEnter(const MouseEvent &)
 {
     stopTimer();
-    if (!open) setOpen(true);
+    // owner 2026-11-25: wait a second on hover before the other choices open (a click opens at once)
+    if (!open) { pendingOpen = true; startTimer(1000); }
 }
 
 void IconPicker::mouseExit(const MouseEvent &)
 {
+    if (!open) { pendingOpen = false; stopTimer(); return; }
     // close a moment after the pointer leaves (moving between circles crosses small gaps)
     startTimer(280);
 }
@@ -325,6 +328,7 @@ void IconPicker::mouseExit(const MouseEvent &)
 void IconPicker::timerCallback()
 {
     stopTimer();
+    if (pendingOpen) { pendingOpen = false; if (!open && isMouseOver(true)) setOpen(true); return; }
     if (open && !isMouseOver(true)) setOpen(false);
 }
 

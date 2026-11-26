@@ -222,7 +222,7 @@
       const o = g.querySelector(".opts"), cur = g.querySelector(".cur");
       [...o.children].forEach((c, i) => c.style.setProperty("--i", i));
       let t = 0;
-      g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(t); t = setTimeout(() => open(g, true), 90); });
+      g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(t); t = setTimeout(() => open(g, true), 1000); });
       g.addEventListener("pointerleave", (e) => {
         if (e.pointerType === "touch") return;
         clearTimeout(t);

@@ -17,7 +17,7 @@
      other person's shared keys; keys clicked on the screen aren't sent). Practice mode only, for now. The
      page passes them on as a "canduet-notes" event for lesson modules.
      #demo=1 shows made-up people without the app or a video server, for design checks:
-       &people=0..4  &role=teacher|learner  &state=live|waiting|problem|drop  &open=mic|cam|share|rec|set|leave|conn
+       &people=0..4  &role=teacher|learner  &state=live|waiting|problem|drop  &open=mic|cam|share|rec|set|conn
        &flip=1  &chat=1  &tools=1  &rec=1  &hover=1
      Video only: the microphone is never requested. -->
 <html lang="en">
@@ -107,7 +107,6 @@ body[data-mode=practice] .tile.self { aspect-ratio: auto; max-height: none; heig
 .tile.flipped .flipper { transform: rotateY(180deg); }
 .face { position: absolute; inset: 0; border-radius: var(--r-tile); overflow: hidden; backface-visibility: hidden; border: 1px solid var(--line); background: var(--surface); }
 .face.back { transform: rotateY(180deg); display: flex; flex-direction: column; }
-.tile.speaking .face.front { border-color: var(--string); box-shadow: 0 0 0 2px color-mix(in srgb, var(--string) 55%, transparent); }
 .tile:focus-visible .face { border-color: var(--string-light); }
 .face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
 .face video.share { object-fit: contain; }
@@ -426,6 +425,7 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 .addinst:hover { color: var(--text); border-color: var(--string); }
 .cpu { flex: none; font: 600 11.5px/1 var(--font-sans); color: var(--subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cpu.warn { color: var(--warn, #c77700); }
+.cpu .cn { display: inline-block; min-width: 2ch; margin-left: .35em; text-align: right; }
 /* an effect's settings: a small window over the mixer, next to its strip */
 .pop.fxwin { z-index: 16; width: 286px; gap: 10px; padding: 14px 16px; }
 .fxwin .fh { display: flex; align-items: center; gap: 8px; }
@@ -551,19 +551,14 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
       <button class="ib sm rec-only" type="button" id="markBtn" data-pop="mark" data-anchor="recT" data-tip="Mark this moment (H)"><span class="disc"><i data-i="flag"></i></span><span class="lbl">Mark</span></button>
       <button class="ib sm on" type="button" data-act="recstop" id="recStop" data-tip="Stop recording"><span class="disc"><i data-i="stop"></i></span><span class="lbl">Stop</span></button></span>
     <button class="ib" type="button" id="setBtn" data-pop="set" data-tip="Settings" aria-expanded="false"><span class="disc"><i data-i="settings"></i></span><span class="lbl">Settings</span></button>
-    <div class="grp rev" id="leaveGrp">
-      <button class="ib leave cur" type="button" id="leaveBtn" data-tip="Leave the lesson"><span class="disc"><i data-i="leave"></i></span><span class="lbl">Leave</span></button>
-      <div class="opts">
-        <button class="ib sm on" type="button" id="leaveYes" data-act="leave" data-tip="Yes, leave. You can come back until 15 minutes after the end"><span class="disc"><i data-i="check"></i></span><span class="lbl">Yes, leave</span></button>
-      </div>
-    </div>
+    <button class="ib leave" type="button" id="leaveBtn" data-act="leave" data-tip="Leave the lesson"><span class="disc"><i data-i="leave"></i></span><span class="lbl">Leave</span></button>
   </div>
 
   <!-- popovers -->
   <div class="pop mixer" id="pop-mixer" role="dialog" aria-label="Mixer">
     <div class="mhead"><h3 class="hic" title="Mixer"><i data-i="mixer"></i><span class="sr">Mixer</span></h3>
       <span class="dev"><span id="inDev"></span> <button class="ib sm" type="button" data-act="setup" data-tip="Change the audio device" aria-label="Change the audio device"><span class="disc"><i data-i="settings"></i></span></button></span>
-      <span class="cpu" id="cpuMeter" title="How busy this computer's audio is, and sound dropouts since the device started"></span>
+      <span class="cpu" id="cpuMeter" title="How busy this computer's audio is (average over the last second), and sound dropouts since the device started">CPU<span class="cn" id="cpuNum">0</span>%<span id="cpuDrops"></span></span>
       <button class="xbtn" type="button" data-act="closepop" aria-label="Close the mixer"><i data-i="x"></i></button></div>
     <div class="console" id="inList"></div>
   </div>
@@ -619,7 +614,6 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
   if (practice) {
     body.dataset.mode = "practice";
     $("#leaveBtn").dataset.tip = "End practice";
-    $("#leaveYes").dataset.tip = "Yes, end practice. A recording still going stops and is saved";
     $("#pop-rec h3").textContent = "Record your practice?";
     $("#recAskP").textContent = "It's saved on this computer only. Mark the good moments as you go; everything shows up in Tools › Summaries.";
     $("#pop-rec [data-act=recask]").textContent = "Start recording";
@@ -693,7 +687,7 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     let timer = 0;
     // stays open while one of its pop-ups is
     const busy = () => !!g.querySelector("[aria-expanded=true]");
-    g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(timer); timer = setTimeout(() => openGrp(g, true), 90); });
+    g.addEventListener("pointerenter", (e) => { if (e.pointerType === "touch") return; clearTimeout(timer); timer = setTimeout(() => openGrp(g, true), 1000); });
     g.addEventListener("pointerleave", (e) => { if (e.pointerType === "touch") return; clearTimeout(timer); timer = setTimeout(() => { if (!busy()) openGrp(g, false); }, 420); });
     g.addEventListener("focusin", () => openGrp(g, true));
     g.addEventListener("focusout", (e) => { if (!g.contains(e.relatedTarget) && !busy()) openGrp(g, false); });
@@ -943,7 +937,6 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     } else tile.note.hidden = true;
 
     tile.off.hidden = !p.muted;
-    tile.el.classList.toggle("speaking", p.level > 0.45 && !p.muted && p.connected !== false);
     tile.meter.style.transform = tile.bmeter.style.transform = `scaleX(${Math.max(0, Math.min(1, p.level || 0))})`;
     if (performance.now() > tile.busyUntil) {
       tile.vol.value = tile.bvol.value = gainToPos(p.gain);
@@ -1092,10 +1085,6 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     $$("[data-meter=me]").forEach((el) => { el.style.transform = `scaleX(${lvl})`; });
     if (performance.now() > meBusyUntil) $("#recvMute").checked = !!me.recvMute;
     $("#inDev").textContent = me.inDevice ? "Audio Device: " + me.inDevice : "Audio Device";
-    // T-087: how busy the audio is (a strip's instruments and effects all run on this computer)
-    const load = Math.round((+cpu.load || 0) * 100), drops = Math.max(0, +cpu.dropouts || 0);
-    $("#cpuMeter").textContent = "CPU " + load + "%" + (drops ? " · " + drops + (drops === 1 ? " dropout" : " dropouts") : "");
-    $("#cpuMeter").classList.toggle("warn", load >= 70 || drops > 0);
     $("#outDev").textContent = me.outDevice ? "Sound out: " + me.outDevice : "Headphones or speakers";
   }
   let meBusyUntil = 0;
@@ -1138,6 +1127,20 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     checkLessonEnd(now);
   }
   setInterval(renderLesson, 1000);
+
+  // T-087: how busy the audio is (a strip's instruments and effects all run on this computer).
+  // Shown once a second as the average of that second, so it doesn't flicker (owner 2026-11-25).
+  const cpuSamples = [];
+  function noteCpu() { cpuSamples.push(Math.max(0, +cpu.load || 0)); if (cpuSamples.length > 200) cpuSamples.shift(); }
+  function renderCpu() {
+    const avg = cpuSamples.length ? cpuSamples.reduce((a, b) => a + b, 0) / cpuSamples.length : Math.max(0, +cpu.load || 0);
+    cpuSamples.length = 0;
+    const load = Math.round(avg * 100), drops = Math.max(0, +cpu.dropouts || 0);
+    $("#cpuNum").textContent = load;
+    $("#cpuDrops").textContent = drops ? " · " + drops + (drops === 1 ? " dropout" : " dropouts") : "";
+    $("#cpuMeter").classList.toggle("warn", load >= 70 || drops > 0);
+  }
+  setInterval(renderCpu, 1000);
 
   // T-081: the room closes 15 minutes after the end (rooms-worker, D-008). Both people are told
   // 5 minutes before the end and 5 minutes before the room closes; at the close everyone leaves.
@@ -1292,7 +1295,6 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     if (t.id === "micBtn") { me.micOff = !me.micOff; renderMe(); renderInputs(); send({ t: "mic", off: me.micOff }); }
     if (t.id === "outBtn") { setOutMute(!me.outMute); }
     if (t.id === "camBtn") toggleCamera();
-    if (t.id === "leaveBtn") { const g = $("#leaveGrp"); openGrp(g, !g.classList.contains("open") || performance.now() - g._at < 500); }
   });
   $("#pop-mark").addEventListener("submit", (e) => { e.preventDefault(); send({ t: "mark", a: "save", label: $("#markIn").value.trim().slice(0, 80) }); closePops(); toast("Highlight saved", 2500); });
 
@@ -1747,7 +1749,7 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
     if (m.fxBus && typeof m.fxBus === "object") fxBus = Object.assign(fxBus, m.fxBus);
     if (Array.isArray(m.instruments) && m.instruments.length) insts = m.instruments.filter((x) => x && typeof x === "object").slice(0, 4);
     if (typeof m.maxInstruments === "number") maxInsts = Math.max(1, Math.min(4, m.maxInstruments));
-    if (m.cpu && typeof m.cpu === "object") cpu = Object.assign(cpu, m.cpu);
+    if (m.cpu && typeof m.cpu === "object") { cpu = Object.assign(cpu, m.cpu); noteCpu(); }
     if (typeof m.conn === "string") conn = m.conn;
     if (m.lesson && typeof m.lesson === "object") lessonInfo = Object.assign(lessonInfo, m.lesson);
     if (m.rec && typeof m.rec === "object") rec = Object.assign(rec, m.rec);

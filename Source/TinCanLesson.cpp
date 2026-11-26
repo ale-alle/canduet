@@ -1064,7 +1064,26 @@ void LessonView::handleMessage(const var & message)
     else if (type == "settings") { if (hooks.openSettings) hooks.openSettings(); }
     else if (type == "effects")  { if (info.teacher && hooks.openEffects) hooks.openEffects(); }
     else if (type == "help")     { if (hooks.openHelp) hooks.openHelp(); }
-    else if (type == "leave")    { if (hooks.leave) hooks.leave(); }
+    else if (type == "leave") {
+        // owner 2026-11-25: one plain Leave button, then a standard "are you sure" (a native window, so a
+        // docked Score or Board can never hide it). The page's own end-of-room leave ("why") goes straight out.
+        if (!hooks.leave) return;
+        if (message.getProperty("why", var()).toString().isNotEmpty()) { hooks.leave(); return; }
+        const bool practice = info.practice;
+        auto opts = MessageBoxOptions()
+            .withIconType(MessageBoxIconType::QuestionIcon)
+            .withTitle(practice ? TRANS("End this practice session?") : TRANS("Leave this lesson?"))
+            .withMessage(practice
+                ? TRANS("Any whiteboards or notation you haven't saved will be lost. Save your work before ending.\n\nA recording still going stops and is saved.")
+                : TRANS("You're about to leave this lesson. Any whiteboards or notation you haven't saved will be lost, so save your work before leaving."))
+            .withButton(practice ? TRANS("End practice") : TRANS("Leave"))
+            .withButton(TRANS("Stay"))
+            .withAssociatedComponent(this);
+        Component::SafePointer<LessonView> safe(this);
+        AlertWindow::showAsync(opts, [safe](int result) {
+            if (result == 1 && safe && safe->hooks.leave) safe->hooks.leave();
+        });
+    }
 }
 
 void LessonView::handlePeerMessage(int i, const String & kind, const var & value)

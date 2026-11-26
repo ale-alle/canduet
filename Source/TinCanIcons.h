@@ -138,6 +138,7 @@ private:
     std::vector<Option> options;
     OwnedArray<IconCircle> circles;   // same order as options
     int selected = 0;
+    bool pendingOpen = false;   // hovering: opens when the second is up
     bool open = false;
 };
 
