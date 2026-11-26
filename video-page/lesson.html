@@ -423,6 +423,7 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 .addinst { width: 26px; height: 26px; border-radius: 50%; border: 1px dashed var(--line-strong); background: transparent; color: var(--muted);
   font: 700 15px/1 var(--font-sans); padding: 0; }
 .addinst:hover { color: var(--text); border-color: var(--string); }
+.addgap { flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; }
 .cpu { flex: none; font: 600 11.5px/1 var(--font-sans); color: var(--subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cpu.warn { color: var(--warn, #c77700); }
 .cpu .cn { display: inline-block; min-width: 2ch; margin-left: .35em; text-align: right; }
@@ -1431,10 +1432,12 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
       BUSES.forEach((b, k) => {
         if (k) {
           const g = document.createElement("div");
-          // after the last Instrument strip: add another (up to four)
-          if (k === insts.length && insts.length < maxInsts) {
+          // after the last Instrument strip: add another (up to four) or remove the last (at least one)
+          if (k === insts.length && (insts.length < maxInsts || insts.length > 1)) {
             g.className = "addgap";
-            g.innerHTML = '<button class="addinst" type="button" title="Add an Instrument strip for another MIDI keyboard (up to ' + maxInsts + ')" aria-label="Add an Instrument strip">+</button>';
+            const last = insts.length > 1 ? "Instrument " + insts.length : "";
+            g.innerHTML = (insts.length < maxInsts ? '<button class="addinst" type="button" title="Add an Instrument strip for another MIDI keyboard (up to ' + maxInsts + ')" aria-label="Add an Instrument strip">+</button>' : "")
+              + (insts.length > 1 ? '<button class="addinst delinst" type="button" title="Remove the ' + last + ' strip" aria-label="Remove the ' + last + ' strip">−</button>' : "");
           }
           else g.className = "lkgap";
           list.append(g);
@@ -1735,6 +1738,7 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
     const n = strip ? (busById(strip.dataset.bus) || {}).n : undefined;
     if (e.target.closest(".instb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "menu" }); }
     else if (e.target.closest(".devb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "device" }); }
+    else if (e.target.closest(".delinst")) { e.stopPropagation(); send({ t: "instrument", n: insts.length - 1, k: "remove" }); }
     else if (e.target.closest(".addinst")) { e.stopPropagation(); send({ t: "instrument", k: "add" }); }
   });
   // a VST3 effect slot (T-086): the app shows the choices as its own menu, where the mouse is

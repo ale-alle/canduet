@@ -144,7 +144,7 @@ void LessonView::showInstrumentMenu(int track)
                      true, instruments[k].name == current);
     menu.addSeparator();
     menu.addItem(4, TRANS("Find plugins..."));
-    if (track > 0) {
+    if (processor.getNumLiveInstruments() > 1) {
         menu.addSeparator();
         menu.addItem(6, TRANS("Remove this strip"));
     }
@@ -912,6 +912,28 @@ void LessonView::handleMessage(const var & message)
         const var nv = message.getProperty("n", var(0));
         const int n = (nv.isInt() || nv.isInt64() || nv.isDouble()) ? (int) nv : -1;
         if (k == "add") processor.addLiveInstrumentTrack();
+        else if (k == "remove") {
+            // owner 2026-11-25: remove a strip like adding one; at least one stays
+            if (n < 0 || n >= processor.getNumLiveInstruments() || processor.getNumLiveInstruments() <= 1) return;
+            if (processor.getLiveInstrument(n).getPlugin() == nullptr) processor.removeLiveInstrumentTrack(n);
+            else {
+                auto opts = MessageBoxOptions()
+                    .withIconType(MessageBoxIconType::QuestionIcon)
+                    .withTitle(TRANS("Remove this Instrument strip?"))
+                    .withMessage(TRANS("Instrument") + " " + String(n + 1) + " (" + processor.getLiveInstrumentName(n) + ") " + TRANS("and its settings will be removed."))
+                    .withButton(TRANS("Remove"))
+                    .withButton(TRANS("Keep"))
+                    .withAssociatedComponent(this);
+                Component::SafePointer<LessonView> safe(this);
+                AlertWindow::showAsync(opts, [safe, n](int result) {
+                    if (result != 1 || !safe) return;
+                    auto & proc = safe->processor;
+                    if (n < proc.getNumLiveInstruments() && proc.getNumLiveInstruments() > 1) proc.removeLiveInstrumentTrack(n);
+                    safe->sendState();
+                });
+                return;
+            }
+        }
         else if (n >= 0 && n < processor.getNumLiveInstruments()) {
             auto & li = processor.getLiveInstrument(n);
             if (k == "gain" && isNumber) li.gain = jlimit(0.0f, 4.0f, (float) value);
