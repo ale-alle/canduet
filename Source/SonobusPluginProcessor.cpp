@@ -921,6 +921,10 @@ mState (*this, &mUndoManager, "SonoBusAoO",
     
     moveOldMisplacedFiles();
 
+#if TINCAN_PERF_LOG
+    mPerfLog = std::make_unique<TinCan::PerfLog>(*this);   // T-091
+#endif
+
     mFreshInit = true;
 }
 
@@ -928,6 +932,9 @@ mState (*this, &mUndoManager, "SonoBusAoO",
 
 SonobusAudioProcessor::~SonobusAudioProcessor()
 {
+#if TINCAN_PERF_LOG
+    mPerfLog.reset();   // T-091: stop logging before anything it reads goes away
+#endif
     // T-086: plugin windows and the score's instrument go before the plugin host
     if (mPluginHost) mPluginHost->closeAllEditors();
     if (mScorePlayer) mScorePlayer->setInstrument(nullptr);
@@ -7537,6 +7544,9 @@ void SonobusAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     mMidiRouter.prepare(sampleRate);
     mLiveMidi.ensureSize(4096);
     mAudioLoad.reset(sampleRate, samplesPerBlock);
+#if TINCAN_PERF_LOG
+    mPeakLoad.prepare(sampleRate);   // T-091
+#endif
     mDeviceXrunBase = -1;
     if (mMidiDeviceManager)
         if (auto * dev = mMidiDeviceManager->getCurrentAudioDevice()) mDeviceXrunBase = dev->getXRunCount();
@@ -7968,6 +7978,9 @@ void SonobusAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer
 #endif
     ScopedNoDenormals noDenormals;
     AudioProcessLoadMeasurer::ScopedTimer loadTimer(mAudioLoad, buffer.getNumSamples());   // T-087
+#if TINCAN_PERF_LOG
+    TinCan::PeakLoad::ScopedTimer peakTimer(mPeakLoad, buffer.getNumSamples());           // T-091
+#endif
 
     if (mNoteTapEnabled.load(std::memory_order_relaxed) && !midiMessages.isEmpty()) {
         TinCan::NoteEvent nev;

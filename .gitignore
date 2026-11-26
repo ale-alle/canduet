@@ -16,4 +16,5 @@ release/instoutput/
 build*.log
 build-staging
 build-score
+build-perf
 release/instoutput-staging/

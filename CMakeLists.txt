@@ -13,6 +13,7 @@ set(TINCAN_API_BASE "https://tincanstudios.ca" CACHE STRING "Tin Can app server 
 set(TINCAN_SERVER_HOST "" CACHE STRING "Default connection server host (empty keeps aoo.sonobus.net until T-023)")
 set(TINCAN_SERVER_PORT "" CACHE STRING "Default connection server port (empty keeps 10998)")
 set(TINCAN_DATA_FOLDER "CanDuet" CACHE STRING "Folder under %APPDATA% for settings and logs; give test builds their own (e.g. CanDuet-Tiles)")
+option(TINCAN_PERF_LOG "Test builds: write a once-a-second performance log to %APPDATA%/<data folder>/perf (T-091, doc/PERF-TEST.md)" OFF)
 option(TINCAN_ALLOW_DEV_CONNECT "Development builds: TINCAN_DEV_CONNECT=1 restores manual server/group connects" OFF)
 set(TINCAN_SERVER_DEFS "")
 if (NOT "${TINCAN_SERVER_HOST}" STREQUAL "")
@@ -450,6 +451,9 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanSummaries.h
         Source/TinCanHomework.cpp
         Source/TinCanHomework.h
+        Source/TinCanPerfLog.cpp
+        Source/TinCanPerfLog.h
+        Source/TinCanPerfPeak.h
         Source/VDONinjaView.h
         Source/VersionInfo.cpp
         Source/VersionInfo.h
@@ -592,6 +596,7 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         TINCAN_API_BASE="${TINCAN_API_BASE}"
         TINCAN_DATA_FOLDER="${TINCAN_DATA_FOLDER}"
         TINCAN_ALLOW_DEV_CONNECT=$<BOOL:${TINCAN_ALLOW_DEV_CONNECT}>
+        TINCAN_PERF_LOG=$<BOOL:${TINCAN_PERF_LOG}>
         ${TINCAN_SERVER_DEFS}
         ${PLAT_COMPILE_DEFS} )
 
@@ -843,6 +848,7 @@ target_sources(TinCanAudioTests PRIVATE
     tests/TinCanDelayTest.cpp
     tests/TinCanVstTest.cpp
     tests/TinCanInsertsTest.cpp
+    tests/TinCanPerfPeakTest.cpp
     Source/TinCanInserts.cpp
     Source/TinCanLiveInstrument.cpp
     Source/TinCanScorePlayer.cpp

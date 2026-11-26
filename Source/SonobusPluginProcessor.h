@@ -29,6 +29,8 @@
 #include "TinCanPlugins.h"
 #include "TinCanInserts.h"
 #include "TinCanLiveInstrument.h"
+#include "TinCanPerfPeak.h"
+#include "TinCanPerfLog.h"
 
 typedef MVerb<float> MVerbFloat;
 
@@ -390,6 +392,10 @@ public:
     // T-087: how busy the audio thread is (0..1+) and blocks that were too late since the device started
     float getAudioLoad() const { return (float) mAudioLoad.getLoadAsProportion(); }
     int getAudioDropouts() const;
+#if TINCAN_PERF_LOG
+    // T-091: slowest block since the last call (0..1+), resets; test builds only
+    float takePeakAudioLoad() { return mPeakLoad.takePeak(); }
+#endif
     bool disconnectFromServer();
     // Tin Can: one line in connection-log.txt (no names, addresses or keys)
     static void logConnectionStep(const String & text);
@@ -1392,6 +1398,10 @@ private:
     AudioDeviceManager * mMidiDeviceManager = nullptr;
     AudioProcessLoadMeasurer mAudioLoad;                                      // T-087: CPU meter
     int mDeviceXrunBase = -1;
+#if TINCAN_PERF_LOG
+    TinCan::PeakLoad mPeakLoad;                                               // T-091: perf kit
+    std::unique_ptr<TinCan::PerfLog> mPerfLog;
+#endif
     String mLiveDeviceNames[TinCan::MidiRouter::maxTracks];                   // message thread
     String saveLiveInstruments();
     void restoreLiveInstruments(const String & json);
