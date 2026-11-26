@@ -7,6 +7,7 @@
 
 #include <JuceHeader.h>
 #include "../Source/Metronome.h"
+#include "../Source/TinCanPluginScan.h"
 
 #include <cstdio>
 #include <vector>
@@ -33,6 +34,7 @@ int runDelayTests();      // TinCanDelayTest.cpp
 int runVstTests();        // TinCanVstTest.cpp
 int runInsertsTests();    // TinCanInsertsTest.cpp
 int runPerfPeakTests();   // TinCanPerfPeakTest.cpp
+int runPluginScanTests(); // TinCanPluginScanTest.cpp
 
 struct Expected { int64 sample; const AudioBuffer<float> * sound; float gain; };
 
@@ -63,9 +65,14 @@ static float maxDiff(const std::vector<float> & a, const std::vector<float> & b)
     return worst;
 }
 
-int main()
+int main(int argc, char * argv[])
 {
     ScopedJuceInitialiser_GUI init;  // message manager not needed, but harmless; keeps JUCE happy
+
+    // T-092: the plugin-scan tests start this exe as the scan helper, like CanDuet.exe is started
+    StringArray args;
+    for (int i = 0; i < argc; ++i) args.add(String::fromUTF8(argv[i]));
+    if (TinCan::PluginScan::isHelper(args)) return TinCan::PluginScan::runHelper(args);
 
     File images(TINCAN_TEST_IMAGES);
     MemoryBlock barRaw, beatRaw;
@@ -158,6 +165,7 @@ int main()
     failures += runVstTests();
     failures += runInsertsTests();
     failures += runPerfPeakTests();
+    failures += runPluginScanTests();
 
     if (failures == 0) {
         std::printf("TinCanAudioTests: all checks passed\n");

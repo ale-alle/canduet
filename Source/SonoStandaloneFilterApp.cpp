@@ -33,6 +33,7 @@
 
 #include "JuceHeader.h"
 #include "TinCanPaths.h"
+#include "TinCanPluginScan.h"
 
 #include "juce_core/system/juce_TargetPlatform.h"
 #include "juce_audio_plugin_client/detail/juce_CheckSettingMacros.h"
@@ -117,7 +118,9 @@ public:
     const String getApplicationVersion() override           { return JucePlugin_VersionString; }
     // Tin Can: one instance, so a canduet:// link clicked in the browser goes to the
     // running app (anotherInstanceStarted). --multi-instance allows more for testing.
-    bool moreThanOneInstanceAllowed() override              { return getCommandLineParameters().contains("--multi-instance"); }
+    // T-092: the plugin-scan helper runs next to the app, so it must be let through too
+    bool moreThanOneInstanceAllowed() override              { return getCommandLineParameters().contains("--multi-instance")
+                                                                    || TinCan::PluginScan::isHelper(getCommandLineParameterArray()); }
 
     SonoLookAndFeel  sonoLNF;
 
@@ -466,6 +469,12 @@ public:
     //==============================================================================
     void initialise (const String&) override
     {
+        // T-092: started only to check one plugin? Do that, write the result, and go (no window, no audio)
+        if (TinCan::PluginScan::isHelper(getCommandLineParameterArray())) {
+            setApplicationReturnValue(TinCan::PluginScan::runHelper(getCommandLineParameterArray()));
+            quit();
+            return;
+        }
 
         handleCommandLine();
 

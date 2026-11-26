@@ -3,11 +3,104 @@
 
 #include "TinCanPlugins.h"
 #include "TinCanPaths.h"
+#include "TinCanPluginScan.h"
 #include "TinCanTheme.h"
 
 namespace TinCan {
 
-// what was found, with JUCE's own scanning (search folders, dead-man's pedal, progress)
+// T-092: finding plugins goes through a helper per plugin (TinCanPluginScan), so a plugin that
+// crashes or hangs while it's checked is put on the failed list instead of closing CanDuet
+class PluginHost::Scanner : public KnownPluginList::CustomScanner
+{
+public:
+    explicit Scanner(PluginHost & h) : host(h) {}
+
+    bool findPluginTypesFor(AudioPluginFormat & format, OwnedArray<PluginDescription> & result,
+                            const String & fileOrIdentifier) override
+    {
+        const auto r = PluginScan::scanInHelper(format.getName(), fileOrIdentifier, result,
+                                                [this] { return shouldExit(); });
+        if (r == PluginScan::Result::ok || r == PluginScan::Result::cancelled) return true;
+        if (r == PluginScan::Result::couldNotStart) {
+            // the helper couldn't start at all (blocked by security software?): check it here, as before
+            format.findAllTypesForFile(result, fileOrIdentifier);
+            return true;
+        }
+        host.noteFailure(fileOrIdentifier, PluginScan::describe(r));
+        return false;   // JUCE puts it on the failed list
+    }
+
+private:
+    PluginHost & host;
+};
+
+// what was found, with JUCE's own scanning (search folders, progress), and below it the plugins
+// that didn't work, why, and a button to try them again (owner 2026-11-26)
+class PluginHost::ListPanel : public Component, private ChangeListener
+{
+public:
+    explicit ListPanel(PluginHost & h)
+        : list(h.formats, h.known, getDataFolder().getChildFile("plugin-scan-crashed.txt"), h.settings.get(), false),
+          host(h)
+    {
+        // checks run on a background thread, so the window and Cancel keep working while a helper is busy
+        list.setNumberOfThreadsForScanning(1);
+        addAndMakeVisible(list);
+
+        note.setColour(Label::textColourId, TinCanTheme::muted);
+        note.setJustificationType(Justification::centredLeft);
+        note.setMinimumHorizontalScale(1.0f);
+        addAndMakeVisible(note);
+
+        retry.setButtonText(TRANS("Try failed plugins again"));
+        retry.onClick = [this] { host.retryFailed(); };
+        addAndMakeVisible(retry);
+
+        host.known.addChangeListener(this);
+        refresh();
+    }
+    ~ListPanel() override { host.known.removeChangeListener(this); }
+
+    void paint(Graphics & g) override { g.fillAll(TinCanTheme::night); }
+    void resized() override
+    {
+        auto r = getLocalBounds();
+        auto foot = r.removeFromBottom(76).reduced(12, 8);
+        list.setBounds(r);
+        retry.setBounds(foot.removeFromRight(220).withSizeKeepingCentre(220, 32));
+        foot.removeFromRight(12);
+        note.setBounds(foot);
+    }
+
+    PluginListComponent list;
+
+private:
+    void changeListenerCallback(ChangeBroadcaster *) override { refresh(); }
+
+    void refresh()
+    {
+        const StringArray failed = host.known.getBlacklistedFiles();
+        retry.setEnabled(!failed.isEmpty());
+        if (failed.isEmpty()) {
+            note.setText(TRANS("Each plugin is checked in a separate helper, so a broken plugin can't close CanDuet."),
+                         dontSendNotification);
+            return;
+        }
+        StringArray lines;
+        for (auto & f : failed) {
+            auto why = host.getFailReason(f);
+            if (why.isEmpty()) why = TRANS("didn't work last time");
+            lines.add(File::createFileWithoutCheckingPath(f).getFileNameWithoutExtension() + ": " + why);
+        }
+        note.setText(TRANS("Didn't work") + " (" + String(failed.size()) + ")  " + lines.joinIntoString("   |   "),
+                     dontSendNotification);
+    }
+
+    PluginHost & host;
+    Label note;
+    TextButton retry;
+};
+
 class PluginHost::ListWindow : public DocumentWindow
 {
 public:
@@ -16,14 +109,14 @@ public:
     {
         setUsingNativeTitleBar(true);
         setResizable(true, false);
-        setResizeLimits(520, 320, 4000, 4000);
-        auto * list = new PluginListComponent(host.formats, host.known,
-                                              getDataFolder().getChildFile("plugin-scan-crashed.txt"),
-                                              host.settings.get(), false);
-        setContentOwned(list, false);
-        centreWithSize(760, 520);
+        setResizeLimits(520, 360, 4000, 4000);
+        panel = new ListPanel(host);
+        setContentOwned(panel, false);
+        centreWithSize(760, 560);
     }
     void closeButtonPressed() override { setVisible(false); }
+
+    ListPanel * panel = nullptr;   // owned by the window
 };
 
 // the plugin's own window; closing it deletes the editor (the plugin keeps playing)
@@ -72,6 +165,10 @@ PluginHost::PluginHost()
     settings = std::make_unique<PropertiesFile>(getDataFolder().getChildFile("plugin-folders.settings"), opts);
 
     if (auto xml = parseXML(getListFile())) known.recreateFromXml(*xml);
+    if (auto reasons = settings->getXmlValue("scanFailures"))           // T-092
+        for (auto * e : reasons->getChildIterator())
+            failReasons[e->getStringAttribute("file")] = e->getStringAttribute("reason");
+    known.setCustomScanner(std::make_unique<Scanner>(*this));
     known.addChangeListener(this);
 }
 
@@ -94,6 +191,48 @@ void PluginHost::changeListenerCallback(ChangeBroadcaster *)
         getDataFolder().createDirectory();
         xml->writeTo(getListFile());
     }
+    saveFailReasons();
+}
+
+void PluginHost::noteFailure(const String & fileOrIdentifier, const String & reason)
+{
+    const std::lock_guard<std::mutex> lock(failLock);
+    failReasons[fileOrIdentifier] = reason;
+}
+
+String PluginHost::getFailReason(const String & fileOrIdentifier) const
+{
+    const std::lock_guard<std::mutex> lock(failLock);
+    auto it = failReasons.find(fileOrIdentifier);
+    return it != failReasons.end() ? it->second : String();
+}
+
+void PluginHost::saveFailReasons()
+{
+    // message thread: save the reasons of plugins on the failed list (a reason is only shown for those,
+    // so older ones are just left in memory; a new check overwrites them)
+    const StringArray failed = known.getBlacklistedFiles();
+    XmlElement xml("FAILURES");
+    {
+        const std::lock_guard<std::mutex> lock(failLock);
+        for (auto & [file, reason] : failReasons) {
+            if (!failed.contains(file)) continue;
+            auto * e = xml.createNewChildElement("PLUGIN");
+            e->setAttribute("file", file);
+            e->setAttribute("reason", reason);
+        }
+    }
+    settings->setValue("scanFailures", &xml);
+    settings->saveIfNeeded();
+}
+
+void PluginHost::retryFailed()
+{
+    const StringArray failed = known.getBlacklistedFiles();
+    if (failed.isEmpty() || listWindow == nullptr || listWindow->panel->list.isScanning()) return;
+    known.clearBlacklistedFiles();   // off the list; one that fails again gets its new reason
+    for (auto * f : formats.getFormats())
+        listWindow->panel->list.scanFor(*f, failed);
 }
 
 static Array<PluginDescription> sortedByName(Array<PluginDescription> list)

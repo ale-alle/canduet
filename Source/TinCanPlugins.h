@@ -6,11 +6,12 @@
 #include "JuceHeader.h"
 
 #include <map>
+#include <mutex>
 #include <memory>
 
 // VST3 plugins (T-086). Teachers and students load VST3 instruments (for the score now) and effects
-// (on the mixer's strips, next). Plugins run inside CanDuet: a broken plugin can take the app down,
-// so finding plugins uses JUCE's dead-man's-pedal file to skip one that crashed the last search.
+// (on the mixer's strips, next). Plugins run inside CanDuet, but finding them doesn't (T-092): each one is
+// checked in a helper (TinCanPluginScan), so a plugin that crashes or hangs there is just marked as failed.
 // VST3 only: Steinberg no longer licenses VST2 to new hosts.
 namespace TinCan {
 
@@ -45,18 +46,29 @@ public:
     static String saveState(AudioPluginInstance & instance);
     static void restoreState(AudioPluginInstance & instance, const String & state);
 
+    // T-092: why a plugin is on the failed list ("crashed while being checked"), or empty if not known
+    String getFailReason(const String & fileOrIdentifier) const;
+    // the failed plugins are taken off the failed list and checked again
+    void retryFailed();
+
 private:
     class ListWindow;
     class EditorWindow;
+    class Scanner;
+    class ListPanel;
 
     void changeListenerCallback(ChangeBroadcaster *) override;
     File getListFile() const;
+    void noteFailure(const String & fileOrIdentifier, const String & reason);   // any thread
+    void saveFailReasons();
 
     AudioPluginFormatManager formats;
     KnownPluginList known;
     std::unique_ptr<PropertiesFile> settings;   // search folders for the Plugins window
     std::unique_ptr<ListWindow> listWindow;
     std::map<AudioPluginInstance *, std::unique_ptr<EditorWindow>> editors;
+    mutable std::mutex failLock;
+    std::map<String, String> failReasons;        // file -> reason (T-092), kept in plugin-folders.settings
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginHost)
 };

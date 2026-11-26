@@ -454,6 +454,8 @@ function(sono_add_custom_plugin_target target_name product_name formats is_instr
         Source/TinCanPerfLog.cpp
         Source/TinCanPerfLog.h
         Source/TinCanPerfPeak.h
+        Source/TinCanPluginScan.cpp
+        Source/TinCanPluginScan.h
         Source/VDONinjaView.h
         Source/VersionInfo.cpp
         Source/VersionInfo.h
@@ -849,6 +851,8 @@ target_sources(TinCanAudioTests PRIVATE
     tests/TinCanVstTest.cpp
     tests/TinCanInsertsTest.cpp
     tests/TinCanPerfPeakTest.cpp
+    tests/TinCanPluginScanTest.cpp
+    Source/TinCanPluginScan.cpp
     Source/TinCanInserts.cpp
     Source/TinCanLiveInstrument.cpp
     Source/TinCanScorePlayer.cpp
