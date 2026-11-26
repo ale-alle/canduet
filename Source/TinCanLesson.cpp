@@ -913,26 +913,10 @@ void LessonView::handleMessage(const var & message)
         const int n = (nv.isInt() || nv.isInt64() || nv.isDouble()) ? (int) nv : -1;
         if (k == "add") processor.addLiveInstrumentTrack();
         else if (k == "remove") {
-            // owner 2026-11-25: remove a strip like adding one; at least one stays
-            if (n < 0 || n >= processor.getNumLiveInstruments() || processor.getNumLiveInstruments() <= 1) return;
-            if (processor.getLiveInstrument(n).getPlugin() == nullptr) processor.removeLiveInstrumentTrack(n);
-            else {
-                auto opts = MessageBoxOptions()
-                    .withIconType(MessageBoxIconType::QuestionIcon)
-                    .withTitle(TRANS("Remove this Instrument strip?"))
-                    .withMessage(TRANS("Instrument") + " " + String(n + 1) + " (" + processor.getLiveInstrumentName(n) + ") " + TRANS("and its settings will be removed."))
-                    .withButton(TRANS("Remove"))
-                    .withButton(TRANS("Keep"))
-                    .withAssociatedComponent(this);
-                Component::SafePointer<LessonView> safe(this);
-                AlertWindow::showAsync(opts, [safe, n](int result) {
-                    if (result != 1 || !safe) return;
-                    auto & proc = safe->processor;
-                    if (n < proc.getNumLiveInstruments() && proc.getNumLiveInstruments() > 1) proc.removeLiveInstrumentTrack(n);
-                    safe->sendState();
-                });
-                return;
-            }
+            // owner 2026-11-25: remove a strip like adding one; at least one stays (the page asks first
+            // when an instrument is loaded)
+            if (n >= 0 && n < processor.getNumLiveInstruments() && processor.getNumLiveInstruments() > 1)
+                processor.removeLiveInstrumentTrack(n);
         }
         else if (n >= 0 && n < processor.getNumLiveInstruments()) {
             auto & li = processor.getLiveInstrument(n);
@@ -1089,22 +1073,8 @@ void LessonView::handleMessage(const var & message)
     else if (type == "leave") {
         // owner 2026-11-25: one plain Leave button, then a standard "are you sure" (a native window, so a
         // docked Score or Board can never hide it). The page's own end-of-room leave ("why") goes straight out.
-        if (!hooks.leave) return;
-        if (message.getProperty("why", var()).toString().isNotEmpty()) { hooks.leave(); return; }
-        const bool practice = info.practice;
-        auto opts = MessageBoxOptions()
-            .withIconType(MessageBoxIconType::QuestionIcon)
-            .withTitle(practice ? TRANS("End this practice session?") : TRANS("Leave this lesson?"))
-            .withMessage(practice
-                ? TRANS("Any whiteboards or notation you haven't saved will be lost. Save your work before ending.\n\nA recording still going stops and is saved.")
-                : TRANS("You're about to leave this lesson. Any whiteboards or notation you haven't saved will be lost, so save your work before leaving."))
-            .withButton(practice ? TRANS("End practice") : TRANS("Leave"))
-            .withButton(TRANS("Stay"))
-            .withAssociatedComponent(this);
-        Component::SafePointer<LessonView> safe(this);
-        AlertWindow::showAsync(opts, [safe](int result) {
-            if (result == 1 && safe && safe->hooks.leave) safe->hooks.leave();
-        });
+        // the page has already asked "are you sure" in its own pop-up (owner 2026-11-25)
+        if (hooks.leave) hooks.leave();
     }
 }
 

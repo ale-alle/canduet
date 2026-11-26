@@ -461,6 +461,12 @@ body.mix-on.tools-on #dockHole { margin-left: calc(24px + var(--mixw, 0px)); }
 /* Board or Score docked at the right: stay over the videos, where the page can draw */
 body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-width: calc(33vw - 24px); }
 #ltime.over { color: var(--warn, #c77700); }
+/* "are you sure" (owner 2026-11-25): the app's own pop-up look, over a dimmed page */
+#ask { position: fixed; inset: 0; z-index: 45; background: rgba(0, 0, 0, .45); display: flex; justify-content: center; align-items: flex-start; padding-top: 16vh; }
+#ask[hidden] { display: none; }
+#ask .pop { position: static; display: flex; width: min(380px, calc(100vw - 32px)); max-height: none; }
+body.side-on #ask { justify-content: flex-start; padding-left: 12px; }
+body.side-on #ask .pop { width: min(380px, calc(33vw - 24px)); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
@@ -610,6 +616,9 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
   </div>
 </div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
+<div id="ask" hidden><div class="pop" role="alertdialog" aria-modal="true" aria-labelledby="askH" aria-describedby="askP">
+  <h3 id="askH"></h3><p id="askP"></p>
+  <div class="acts"><button class="pill" type="button" id="askNo"></button><button class="btn sm" type="button" id="askYes"></button></div></div></div>
 <div id="endNote" role="status" hidden><span id="endNoteT">Lesson time has ended. You can stay as long as you need.</span>
   <button class="xbtn" type="button" id="endNoteX" aria-label="Dismiss"><i data-i="x"></i></button></div>
 
@@ -1141,6 +1150,35 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
   }
   setInterval(renderLesson, 1000);
 
+  // ---- "are you sure" in the page's own style; Esc or the first button says no ----
+  let askYes = null, askBack = null;
+  function ask(o) {
+    $("#askH").textContent = o.title; $("#askP").textContent = o.text;
+    $("#askYes").textContent = o.yes; $("#askNo").textContent = o.no;
+    askYes = o.onYes; askBack = document.activeElement;
+    $("#ask").hidden = false; $("#askNo").focus({ preventScroll: true });
+  }
+  function closeAsk(yes) {
+    if ($("#ask").hidden) return;
+    $("#ask").hidden = true;
+    const f = askYes; askYes = null;
+    if (askBack && askBack.focus) askBack.focus({ preventScroll: true });
+    if (yes && f) f();
+  }
+  $("#askYes").addEventListener("click", () => closeAsk(true));
+  $("#askNo").addEventListener("click", () => closeAsk(false));
+  $("#ask").addEventListener("click", (e) => { if (e.target.id === "ask") closeAsk(false); });
+  $("#ask").addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeAsk(false); }
+    else if (e.key === "Tab") { e.preventDefault(); (document.activeElement === $("#askNo") ? $("#askYes") : $("#askNo")).focus(); }
+  });
+  function askLeave() {
+    ask(practice
+      ? { title: "End this practice session?", text: "Any whiteboards or notation you haven't saved will be lost. Save your work before ending. A recording still going stops and is saved.", yes: "End practice", no: "Stay" }
+      : { title: "Leave this lesson?", text: "You're about to leave this lesson. Any whiteboards or notation you haven't saved will be lost, so save your work before leaving.", yes: "Leave", no: "Stay" });
+    askYes = () => send({ t: "leave" });
+  }
+
   // T-087: how busy the audio is (a strip's instruments and effects all run on this computer).
   // Shown once a second as the average of that second, so it doesn't flicker (owner 2026-11-25).
   const cpuSamples = [];
@@ -1295,7 +1333,7 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
       case "settings": closePops(); send({ t: "settings" }); break;
       case "effects": closePops(); send({ t: "effects" }); break;
       case "help": closePops(); send({ t: "help" }); break;
-      case "leave": closePops(); send({ t: "leave" }); break;
+      case "leave": closePops(); askLeave(); break;
     }
     if (t.id === "micBtn") { me.micOff = !me.micOff; renderMe(); renderInputs(); send({ t: "mic", off: me.micOff }); }
     if (t.id === "outBtn") { setOutMute(!me.outMute); }
@@ -1305,6 +1343,7 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
 
   // keyboard: Esc closes, letters toggle (never while typing)
   document.addEventListener("keydown", (e) => {
+    if (!$("#ask").hidden) return;   // the question answers its own keys
     if (e.key === "Escape") {
       closePops(); if (state.flipped) flip(""); return;
     }
@@ -1738,7 +1777,12 @@ body.side-on #endNote, body.side-on #toast { left: 12px; transform: none; max-wi
     const n = strip ? (busById(strip.dataset.bus) || {}).n : undefined;
     if (e.target.closest(".instb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "menu" }); }
     else if (e.target.closest(".devb") && typeof n === "number") { e.stopPropagation(); send({ t: "instrument", n, k: "device" }); }
-    else if (e.target.closest(".delinst")) { e.stopPropagation(); send({ t: "instrument", n: insts.length - 1, k: "remove" }); }
+    else if (e.target.closest(".delinst")) {
+      e.stopPropagation();
+      const n = insts.length - 1, it = insts[n] || {}, go = () => send({ t: "instrument", n, k: "remove" });
+      if (!it.name) go();
+      else ask({ title: "Remove Instrument " + (n + 1) + "?", text: it.name + " and its settings will be removed from the mixer.", yes: "Remove", no: "Keep", onYes: go });
+    }
     else if (e.target.closest(".addinst")) { e.stopPropagation(); send({ t: "instrument", k: "add" }); }
   });
   // a VST3 effect slot (T-086): the app shows the choices as its own menu, where the mouse is
